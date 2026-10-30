@@ -65,29 +65,16 @@ go build -o own-code ./cmd/own-code
 
 ### Windows
 
-Prebuilt binary (no Go toolchain needed). Downloads
-`own-code-windows-amd64.exe` from the `v0.1.0` release into
-`%USERPROFILE%\.local\bin\own-code.exe`. From CMD:
+Prebuilt binaries live in `windows-release/` (no Go toolchain needed):
+`own-code-windows-amd64.exe` for most PCs, `own-code-windows-arm64.exe`
+for ARM laptops, `own-code-windows-386.exe` for old 32-bit machines.
+From CMD (amd64 example):
 
 ```cmd
-curl -fSL -o install.bat https://raw.githubusercontent.com/chinmay-sawant/own-code/master/install.bat && install.bat
+mkdir "%USERPROFILE%\.local\bin" 2>nul & curl -fSL -o "%USERPROFILE%\.local\bin\own-code.exe" https://raw.githubusercontent.com/chinmay-sawant/own-code/master/windows-release/own-code-windows-amd64.exe
 ```
 
-Build from source instead (needs `git`; the script installs Go 1.26.10 itself if missing, an admin prompt is expected). From PowerShell:
-
-```powershell
-irm https://raw.githubusercontent.com/chinmay-sawant/own-code/master/install.ps1 | iex
-```
-
-With a custom prefix (the binary goes to `$PREFIX\bin\own-code.exe`):
-
-```powershell
-$env:PREFIX = "C:\tools"; irm https://raw.githubusercontent.com/chinmay-sawant/own-code/master/install.ps1 | iex
-```
-
-The Windows exe is built on demand via the Actions tab:
-`build-windows` workflow, `Run workflow`, then the artifact is attached
-to the release by hand.
+Then add `%USERPROFILE%\.local\bin` to your `PATH` and run `own-code`.
 
 ## Features
 
