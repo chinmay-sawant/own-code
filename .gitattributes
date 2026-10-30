@@ -6,3 +6,5 @@
 *.bat text eol=crlf linguist-vendored
 *.ps1 text eol=crlf linguist-vendored
 windows-release/*.exe binary linguist-vendored
+linux-release/* binary linguist-vendored
+macos-release/* binary linguist-vendored

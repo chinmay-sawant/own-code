@@ -41,19 +41,29 @@ On Windows, a workspace under a WSL network path (`\\wsl$\...`) hands off into W
 
 ## Install
 
+One command installs the matching prebuilt binary (Linux, WSL2, Ubuntu, or
+macOS; amd64, arm64, or 386, detected automatically) to
+`$HOME/.local/bin/own-code`:
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/chinmay-sawant/own-code/master/install.sh | sh
 ```
 
-This builds from source and installs the binary to `$HOME/.local/bin/own-code`. To choose another prefix (the binary goes to `$PREFIX/bin`):
+Binaries live in `linux-release/` and `macos-release/`. To choose another
+prefix (the binary goes to `$PREFIX/bin`):
 
 ```sh
 PREFIX=/usr/local curl -fsSL https://raw.githubusercontent.com/chinmay-sawant/own-code/master/install.sh | sh
 ```
 
-Manual alternative (run it next to an `ownframe` checkout, since `go.mod`
-points at `../ownframe`; only its Go sources are needed, so a sparse
-checkout keeps it small):
+Prefer `wget`? `wget -qO- <url> | sh` works the same.
+
+Manual alternative: grab your OS/arch file from the release folders above,
+save it as `own-code` somewhere on your `PATH`, and `chmod +x` it.
+
+Build from source instead (run it next to an `ownframe` checkout, since
+`go.mod` points at `../ownframe`; only its Go sources are needed, so a
+sparse checkout keeps it small):
 
 ```sh
 git clone https://github.com/chinmay-sawant/own-code.git

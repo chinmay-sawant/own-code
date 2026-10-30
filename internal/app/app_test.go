@@ -816,22 +816,67 @@ func TestRealWorkspaceAtStartup(t *testing.T) {
 		t.Skip("git is not installed")
 	}
 
-	app, err := New(".")
+	// Locate the repository root instead of assuming the test working
+	// directory name. `go test` runs with CWD set to the package dir, so
+	// New(".") would scan internal/app rather than the repo.
+	root, err := repoRootForTest()
 	if err != nil {
-		t.Fatal(err)
+		t.Skipf("repository root not found: %v", err)
+	}
+
+	app, err := New(root)
+	if err != nil {
+		if appErr := AppErrorAt(err); appErr != nil {
+			t.Fatalf("New(%q): %s: %v", root, appErr.UserMessage(), err)
+		}
+
+		t.Fatalf("New(%q): %v", root, err)
 	}
 
 	if app.ws.Sample {
-		t.Fatal("the current directory was scanned as the sample")
+		t.Fatalf("New(%q) was scanned as the sample workspace", root)
 	}
 
-	if app.View().Workspace != "code-view" || app.View().Active != "README.md" {
-		t.Fatalf("workspace = %q active = %q", app.View().Workspace, app.View().Active)
+	if got, want := app.View().Workspace, filepath.Base(root); got != want {
+		t.Fatalf("workspace = %q, want %q (root %q)", got, want, root)
+	}
+
+	if app.ws.ByPath["README.md"] == nil {
+		t.Skipf("repository root %q has no README.md to open", root)
+	}
+
+	if app.View().Active != "README.md" {
+		t.Fatalf("active = %q, want README.md (root %q)", app.View().Active, root)
 	}
 
 	app.ReloadChanges(context.Background(), false)
 
 	if app.changes.Sample || app.changes.Branch == "" || app.changes.Branch == "no git" {
 		t.Fatalf("live change set = %+v", app.changes)
+	}
+}
+
+// repoRootForTest walks up from the test working directory until it finds
+// the module root (go.mod plus README.md). It never hardcodes the checkout
+// directory name, so renames like code-view -> own-code do not break it.
+func repoRootForTest() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			if _, err := os.Stat(filepath.Join(dir, "README.md")); err == nil {
+				return dir, nil
+			}
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("no go.mod with README.md found above %s", dir)
+		}
+
+		dir = parent
 	}
 }

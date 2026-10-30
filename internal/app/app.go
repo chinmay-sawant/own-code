@@ -309,6 +309,7 @@ type App struct {
 	watchCancel  context.CancelFunc
 	watchUpdates chan watchUpdate
 	watchNote    string
+	watchErr     *AppError
 
 	sessionPath     string
 	sessionLast     string
@@ -663,7 +664,7 @@ func (a *App) reloadWindow(ctx context.Context) error {
 	a.refresh()
 
 	if err := a.StartWatcher(ctx); err != nil {
-		a.watchNote = "watcher unavailable"
+		a.setWatchError(err)
 		a.refresh()
 	}
 
@@ -771,7 +772,7 @@ func (a *App) switchProject(ctx context.Context, root string) error {
 	a.refresh()
 
 	if err := a.StartWatcher(ctx); err != nil {
-		a.watchNote = "watcher unavailable"
+		a.setWatchError(err)
 		a.refresh()
 	}
 

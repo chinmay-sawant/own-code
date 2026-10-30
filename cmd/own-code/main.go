@@ -70,7 +70,11 @@ func main() {
 	a.SetWindowControl(*windowControl)
 
 	if err := a.StartWatcher(ctx); err != nil {
-		log.Printf("code-view: watcher unavailable: %v", err)
+		if appErr := app.AppErrorAt(err); appErr != nil {
+			log.Printf("own-code: watcher degraded (%s): %v", appErr.UserMessage(), err)
+		} else {
+			log.Printf("own-code: watcher unavailable: %v", err)
+		}
 	}
 	options := ownframe.WindowOptions{CustomChrome: a.WindowControl(), PlacementID: "own-code"}
 	if a.WindowControl() {
