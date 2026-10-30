@@ -74,6 +74,20 @@ go build -o own-code ./cmd/own-code
 - Highlighting for Go, Python, JavaScript/TypeScript, Markdown, CSS, JSON, HTML, YAML, and shell.
 - Details drawer with outline, status bar, persisted sessions, soft wrap (`Z`), desktop file watcher.
 
+## Versus VS Code
+
+VS Code is a general IDE and plugin host on Electron. own-code is a single-purpose reader and review tool.
+
+| | VS Code | own-code |
+|---|---|---|
+| **Runtime** | Electron shell with 15+ helper processes | One static Go binary, no runtime to install |
+| **Idle memory** | ~1,166–1,440 MB RSS across those processes | ~200 MB RSS, one process |
+| **Startup work** | Background indexing over seconds | One scan up to the file budget, then it idles |
+| **Account and extensions** | Account, settings sync, extension host | None. No login, no plugins |
+| **Scope** | Authoring, debugging, extensions | Reading, review, diff, Markdown preview |
+
+The VS Code figures are px0's published head-to-head measurements, included for scale. own-code's ~200 MB idle RSS was measured on this machine under Xvfb on a small workspace. The shipped binary is ~43 MB.
+
 ## Keys
 
 | Key | Action |
