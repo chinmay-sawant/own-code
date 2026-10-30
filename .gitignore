@@ -5,6 +5,8 @@ own-code.exe
 *.test
 *.out
 /dist/
+# Prebuilt Windows release binaries are committed deliberately.
+!/windows-release/*.exe
 /bin/
 
 # Dependencies resolve through the module proxy plus the ../ownframe
