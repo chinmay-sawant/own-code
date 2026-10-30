@@ -1,6 +1,6 @@
 package app
 
-// The browse-head constants mirror components/chrome.css: the 560 px panel
+// The browse-head constants mirror components/css/chrome.css: the 560 px panel
 // keeps 10 px side padding and a 1 px border on each side, the Up button
 // carries its label plus 10 px side padding (reserved with slack for wider
 // faces), the row keeps a 6 px gap, and the path keeps 4 px side padding.

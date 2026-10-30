@@ -153,7 +153,7 @@ App rows below are under `internal/app/`, except the entry point. `edit_buffer.g
 | **`commits.go`** | Commit metadata and one file patches |
 | **`commit_loader.go`** | Background patch worker |
 | **`commit_graph.go`** | Commit lane graph layout |
-| **`components/`** | HTML fragments and stylesheets (embedded via root `owncode.Components`) |
+| **`components/html/` + `components/css/`** | HTML fragments and stylesheets (embedded via root `owncode.Components`) |
 | **`docs/code-view.png`** | Screenshot used at the top of this file |
 | **`testdata/sample`** | Deterministic 17 file fixture for tests (embedded via root `owncode.SampleFiles`) |
 | **`fixtures/sample.diff`** | Checked in diff for the sample workspace (embedded via root `owncode.SampleDiff`) |

@@ -646,7 +646,7 @@ func TestUnifiedLineRevertButtons(t *testing.T) {
 	// The reveal stays hover (plus keyboard focus) driven: hidden by
 	// default, shown on row hover or button focus, pinned to the left
 	// gutter without covering the +/- sign or the line text.
-	cssBytes, err := os.ReadFile(filepath.Join("..", "..", "components", "diff.css"))
+	cssBytes, err := os.ReadFile(filepath.Join("..", "..", "components", "css", "diff.css"))
 	if err != nil {
 		t.Fatalf("read diff.css: %v", err)
 	}
@@ -801,7 +801,7 @@ func TestUnifiedLineRevertButtons(t *testing.T) {
 // the :hover row in documentation/compatibility-matrix.md), so it could
 // never fire for a hover on a row child.
 func TestLineRevertStaticDisplay(t *testing.T) {
-	css, err := os.ReadFile(filepath.Join("..", "..", "components", "diff.css"))
+	css, err := os.ReadFile(filepath.Join("..", "..", "components", "css", "diff.css"))
 	if err != nil {
 		t.Fatal(err)
 	}

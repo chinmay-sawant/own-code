@@ -142,7 +142,7 @@ func clipDiffRows(rows []diffRow, unified, split int) {
 // clipDiffPath clips the diff header name and directory to the crumbs width.
 // The engine wraps the name and directory onto two lines instead of
 // truncating them, so the header clips the strings in Go and marks the cut
-// with an ellipsis. The budget mirrors components/editor.css: the crumbs bar
+// with an ellipsis. The budget mirrors components/css/editor.css: the crumbs bar
 // keeps 13 px left and 10 px right padding, and the right control group
 // (status, counts, Unified/Split, hunk arrows, Wrap, Refresh, hunks) takes
 // about 360 px. Below 1120 px the directory and hunks meta hide, so the
@@ -244,8 +244,8 @@ func clipSecondCrumbPath(paneWidth, windowWidth int, name, dir string) (string, 
 	return clipCrumbPath(paneWidth, windowWidth, name, dir, secondCrumbRightWidePx, secondCrumbRightNarrowPx, false)
 }
 
-// The cmdbar constants mirror components/chrome.css and
-// components/editor.css: the bar keeps 8 px side padding on each side, a
+// The cmdbar constants mirror components/css/chrome.css and
+// components/css/editor.css: the bar keeps 8 px side padding on each side, a
 // 12 px search icon, two 7 px gaps, and the "Ctrl P" pill (about 42 px
 // with its own padding and border). The flex basis is 430 px above the
 // 1300 px breakpoint and 300 px below it, so the text budget follows the
@@ -288,7 +288,7 @@ func clipCmdbarText(windowWidth int, text string) string {
 	return string(runes[:budget-1]) + "…"
 }
 
-// The tree constants mirror components/sidebar.css: the 268 px sidebar keeps
+// The tree constants mirror components/css/sidebar.css: the 268 px sidebar keeps
 // 10 px right padding and a 2 px left border, each row adds its indent as
 // left padding, an 18 px icon (a 10 px chevron with an 8 px margin, or an
 // 18 px badge), 7 px gaps, a 16 px status mark on files, and a ~44 px

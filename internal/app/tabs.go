@@ -4,7 +4,7 @@ package app
 // filename shows, which means a narrow window cannot hold every tab. Go
 // decides which tabs render: the strip shows a window of full-width tabs
 // with ‹ › arrows to move it, instead of squeezing tabs behind the strip
-// tools. Widths mirror components/editor.css; tabMonoPx stays conservative
+// tools. Widths mirror components/css/editor.css; tabMonoPx stays conservative
 // (the painted 9.5 px mono advance measures ~5.7 px) so a visible tab can
 // never reach its neighbour.
 const (

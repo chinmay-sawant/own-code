@@ -9,7 +9,7 @@ import "embed"
 // Components is the HTML fragment and stylesheet set the app renders.
 // Templates stay at the repository root; application code lives in internal/.
 
-//go:embed components/*.html components/*.css
+//go:embed components/html/*.html components/css/*.css
 var Components embed.FS
 
 // SampleDiff is the checked-in unified diff for the bundled workspace.

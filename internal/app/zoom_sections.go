@@ -3,13 +3,13 @@ package app
 import "strings"
 
 // This file holds the per-component zoom rules. Every rule mirrors a fixed
-// pixel value in components/*.css or a Go geometry constant, scaled by the
+// pixel value in components/css/*.css or a Go geometry constant, scaled by the
 // layout zoom. Heights that Go scroll math depends on must match the a.zx()
 // values or rows desync from hit testing.
 
 // zoomRule scales one CSS rule: parts are the literal declaration chunks
 // around each scaled pixel, and bases holds the 1x pixels in order. The
-// bases mirror components/*.css 1:1; keeping them beside the selector
+// bases mirror components/css/*.css 1:1; keeping them beside the selector
 // preserves that mapping.
 type zoomRule struct {
 	sel   string

@@ -249,7 +249,7 @@ func TestSplitDividerRevertButtons(t *testing.T) {
 	// The split template carries exactly one divider emission site, a
 	// zero-width slot between the cells, and the old gutter-side split
 	// buttons are gone.
-	htmlBytes, err := os.ReadFile(filepath.Join("..", "..", "components", "editor.html"))
+	htmlBytes, err := os.ReadFile(filepath.Join("..", "..", "components", "html", "editor.html"))
 	if err != nil {
 		t.Fatalf("read editor.html: %v", err)
 	}
@@ -269,7 +269,7 @@ func TestSplitDividerRevertButtons(t *testing.T) {
 
 	// The zero-width slot sits exactly between the cells without taking
 	// space, and the arrow centers on it with a fixed half-width offset.
-	cssBytes, err := os.ReadFile(filepath.Join("..", "..", "components", "diff.css"))
+	cssBytes, err := os.ReadFile(filepath.Join("..", "..", "components", "css", "diff.css"))
 	if err != nil {
 		t.Fatalf("read diff.css: %v", err)
 	}
