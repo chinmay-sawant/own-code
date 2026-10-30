@@ -65,16 +65,18 @@ go build -o own-code ./cmd/own-code
 
 ### Windows
 
-Prebuilt binaries live in `windows-release/` (no Go toolchain needed):
-`own-code-windows-amd64.exe` for most PCs, `own-code-windows-arm64.exe`
-for ARM laptops, `own-code-windows-386.exe` for old 32-bit machines.
-From CMD (amd64 example):
+One command installs the matching prebuilt binary from `windows-release/`
+(amd64, arm64, or 386, detected automatically) into
+`%USERPROFILE%\.local\bin` and adds it to your user `PATH`, so `own-code`
+runs from anywhere. From CMD:
 
 ```cmd
-mkdir "%USERPROFILE%\.local\bin" 2>nul & curl -fSL -o "%USERPROFILE%\.local\bin\own-code.exe" https://raw.githubusercontent.com/chinmay-sawant/own-code/master/windows-release/own-code-windows-amd64.exe
+curl -fSL -o "%TEMP%\own-code-install.bat" https://raw.githubusercontent.com/chinmay-sawant/own-code/master/install.bat && "%TEMP%\own-code-install.bat"
 ```
 
-Then add `%USERPROFILE%\.local\bin` to your `PATH` and run `own-code`.
+Prefer a manual download instead? Grab your architecture's exe from the
+`windows-release/` folder above, save it as `own-code.exe` somewhere on
+your `PATH`, and run `own-code`.
 
 ## Features
 
