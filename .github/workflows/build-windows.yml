@@ -1,0 +1,46 @@
+name: build-windows
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Checkout ownframe sibling at pinned commit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          # Pinned master commit from go.mod pseudo-version
+          # v0.0.3-0.20261030080535-f2f079065cfa. Keep in sync with
+          # go.mod, install.sh, and install.ps1.
+          $Pin = "f2f079065cfa8e63a6a572fca9a4403e5f975e16"
+          if (Test-Path ..\ownframe) { Remove-Item -Recurse -Force ..\ownframe }
+          git clone --depth 1 --branch master --filter=blob:none --sparse https://github.com/chinmay-sawant/ownframe.git ..\ownframe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git -C ..\ownframe sparse-checkout set --no-cone '/*.go' '/go.mod' '/internal/'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $Head = (git -C ..\ownframe rev-parse HEAD).Trim()
+          if ($Head -ne $Pin) {
+            git -C ..\ownframe fetch --depth 1 origin $Pin
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            git -C ..\ownframe checkout $Pin
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Build Windows binary
+        shell: pwsh
+        run: go build -o own-code-windows-amd64.exe ./cmd/own-code
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: own-code-windows-amd64.exe
+          path: own-code-windows-amd64.exe
+          if-no-files-found: error

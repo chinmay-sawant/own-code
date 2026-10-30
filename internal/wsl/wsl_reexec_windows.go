@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // wslEnabled backs the -wsl flag: allow the automatic handoff into WSL when
@@ -102,7 +103,10 @@ func MaybeReexecInWSL() bool {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	hideConsoleWindow(cmd)
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.HideWindow = true
 
 	// Start separates launch failure (fall back to native) from a child
 	// that ran: once started, propagate its exit code and never return, so

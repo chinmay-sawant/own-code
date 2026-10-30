@@ -3,3 +3,5 @@
 # linguist-vendored keeps the one installer script out of the repo's
 # language stats (it would otherwise show as Shell 0.1%).
 *.sh text eol=lf linguist-vendored
+*.bat text eol=crlf linguist-vendored
+*.ps1 text eol=crlf linguist-vendored
