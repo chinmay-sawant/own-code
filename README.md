@@ -73,7 +73,7 @@ Prebuilt binary (no Go toolchain needed). Downloads
 curl -fSL -o install.bat https://raw.githubusercontent.com/chinmay-sawant/own-code/master/install.bat && install.bat
 ```
 
-Build from source instead (needs `git` and Go >= 1.26). From PowerShell:
+Build from source instead (needs `git`; the script installs Go 1.26.10 itself if missing, an admin prompt is expected). From PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/chinmay-sawant/own-code/master/install.ps1 | iex

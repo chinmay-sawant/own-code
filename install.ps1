@@ -14,9 +14,26 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
   Write-Error "own-code: git not found; install git first"
   exit 1
 }
+# Go version installed when none is found. Keep in sync with go.mod.
+$GoVersion = "1.26.10"
 if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
-  Write-Error "own-code: go not found; install Go >= 1.26 first"
-  exit 1
+  Write-Host "own-code: go not found; installing Go $GoVersion now (an admin prompt is expected)..."
+  if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") {
+    $GoArch = "arm64"
+  } else {
+    $GoArch = "amd64"
+  }
+  $Msi = Join-Path ([System.IO.Path]::GetTempPath()) "go$GoVersion.windows-$GoArch.msi"
+  Invoke-WebRequest -Uri "https://go.dev/dl/go$GoVersion.windows-$GoArch.msi" -OutFile $Msi
+  $msiRun = Start-Process msiexec.exe -ArgumentList "/i `"$Msi`" /qn /norestart" -Wait -PassThru
+  Remove-Item -Force $Msi -ErrorAction SilentlyContinue
+  if ($msiRun.ExitCode -ne 0 -and $msiRun.ExitCode -ne 1641 -and $msiRun.ExitCode -ne 3010) { exit $msiRun.ExitCode }
+  $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
+  if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
+    Write-Error "own-code: Go $GoVersion installed but not on PATH yet; close and reopen PowerShell, then re-run this script"
+    exit 1
+  }
+  Write-Host "own-code: $((go version) -join ' ') installed."
 }
 
 $goVersion = (go version) -join " "
