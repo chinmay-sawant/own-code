@@ -65,16 +65,18 @@ func (w *workspace) createFile(path string, data []byte) error {
 	return nil
 }
 
-// writeFile saves one scanned file under the root and refreshes its meta. It
-// refuses the sample, paths outside the root, and files the scan never
-// listed. It does not stage or commit anything in git.
+// writeFile saves one opened file and refreshes its meta. It refuses the
+// sample workspace, relative paths outside the root, and files the scan never
+// listed. Absolute paths are explicit external files and save in place. It
+// does not stage or commit anything in git.
 func (w *workspace) writeFile(path string, data []byte) error {
-	if !w.writable() {
+	clean := filepath.Clean(filepath.FromSlash(path))
+	external := filepath.IsAbs(clean)
+	if !external && !w.writable() {
 		return errSampleReadOnly()
 	}
 
-	clean := filepath.Clean(filepath.FromSlash(path))
-	if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+	if !external && (clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator))) {
 		return fmt.Errorf("path escapes workspace: %s", path)
 	}
 
@@ -83,7 +85,10 @@ func (w *workspace) writeFile(path string, data []byte) error {
 		return fmt.Errorf("no file %s", path)
 	}
 
-	target := filepath.Join(w.Root, clean)
+	target, err := w.diskPath(path)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(target), workspaceDirMode); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
@@ -93,7 +98,9 @@ func (w *workspace) writeFile(path string, data []byte) error {
 	}
 
 	size := int64(len(data))
-	w.Bytes += size - meta.Size
+	if !external {
+		w.Bytes += size - meta.Size
+	}
 	meta.Size = size
 	meta.Big = size > maxFileBytes
 
