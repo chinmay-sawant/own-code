@@ -52,11 +52,13 @@ PREFIX=/usr/local curl -fsSL https://raw.githubusercontent.com/chinmay-sawant/ow
 ```
 
 Manual alternative (run it next to an `ownframe` checkout, since `go.mod`
-points at `../ownframe`):
+points at `../ownframe`; only its Go sources are needed, so a sparse
+checkout keeps it small):
 
 ```sh
 git clone https://github.com/chinmay-sawant/own-code.git
-git clone https://github.com/chinmay-sawant/ownframe.git
+git clone --depth 1 --branch master --filter=blob:none --sparse https://github.com/chinmay-sawant/ownframe.git
+git -C ownframe sparse-checkout set --no-cone '/*.go' '/go.mod' '/internal/'
 cd own-code
 go build -o own-code ./cmd/own-code
 ```

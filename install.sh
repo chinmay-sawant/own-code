@@ -1,8 +1,9 @@
 #!/bin/sh
 # Install own-code from source: shallow-clone own-code and the ownframe
-# checkout it builds against, then build the binary into $PREFIX/bin.
-# A sibling checkout is required because go.mod points at ../ownframe and
-# the upstream module zip at the pinned commit is too large to download.
+# sources it builds against, then build the binary into $PREFIX/bin.
+# A sibling checkout is required because go.mod points at ../ownframe, but
+# only its Go sources are checked out: the full ownframe tree is over a
+# gigabyte of demo bundles, while the build needs just a few megabytes.
 set -eu
 
 REPO="https://github.com/chinmay-sawant/own-code.git"
@@ -55,7 +56,8 @@ tmp=$(mktemp -d 2>/dev/null || mktemp -d -t own-code)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 git clone --depth 1 --branch "$BRANCH" "$REPO" "$tmp/own-code"
-git clone --depth 1 --branch master "$OWNFRAME_REPO" "$tmp/ownframe"
+git clone --depth 1 --branch master --filter=blob:none --sparse "$OWNFRAME_REPO" "$tmp/ownframe"
+git -C "$tmp/ownframe" sparse-checkout set --no-cone '/*.go' '/go.mod' '/internal/'
 if [ "$(git -C "$tmp/ownframe" rev-parse HEAD)" != "$OWNFRAME_PIN" ]; then
   git -C "$tmp/ownframe" fetch --depth 1 origin "$OWNFRAME_PIN"
   git -C "$tmp/ownframe" checkout "$OWNFRAME_PIN"
