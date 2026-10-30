@@ -88,6 +88,23 @@ VS Code is a general IDE and plugin host on Electron. own-code is a single-purpo
 
 The VS Code figures are px0's published head-to-head measurements, included for scale. own-code's ~200 MB idle RSS was measured on this machine under Xvfb on a small workspace. The shipped binary is ~43 MB.
 
+### Same-kernel cost: ownframe vs px0
+
+own-code runs on ownframe, so the engine numbers below apply to it directly. Measured on one kernel with PSS on both sides, px0 v0.1.20 serving and Chrome open on its tab, sampled 40 seconds each.
+
+| Component | ownframe | px0 v0.1.20 |
+|---|---|---|
+| **Window or tab renderer** | 231–257 MB whole process | 145–164 MB tab renderer |
+| **px0 server** | In-process | 41–44 MB |
+| **Browser process** | 0 | 142 MB |
+| **GPU process** | 0 | 205 MB |
+| **Zygotes and utilities** | 0 | 84 MB |
+| **Total local PSS** | 231–257 MB | 621–660 MB |
+| **Summed RSS, for reference** | Same as PSS | 1,071–1,104 MB, double counts shared pages |
+| **Process count** | 1 | 11 |
+
+Chrome's browser and GPU processes alone, 347 MB PSS, are larger than the entire ownframe app. For total local memory, ownframe wins by about 2.6x. For a remote or headless host, px0 is slightly ahead: its server was 24 MB idle and 41–44 MB while navigating, against 52 MB for ownframe's `-web` server on the same workspace. For the tab alone, px0's renderer is lighter, but the browser takes that back once its processes are counted. About 89 MB of the ownframe figure is WSL2 graphics driver code, so on a host with a hardware driver the gap grows, not shrinks.
+
 ## Keys
 
 | Key | Action |
