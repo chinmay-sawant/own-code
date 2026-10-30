@@ -1,0 +1,477 @@
+package fonts
+
+import (
+	"bytes"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+
+	"github.com/chinmay-sawant/blinkless/internal/line"
+	"github.com/chinmay-sawant/blinkless/internal/settings"
+)
+
+// Registry indexes discoverable TTF faces by CSS family name (lowercased).
+// Liberation defaults stay available via FaceSet; this holds opt-in folder fonts.
+type Registry struct {
+	mu            sync.RWMutex
+	byFamily      map[string][]*Font // family → faces (any weight/style)
+	exactByFamily map[string][]*Font // exact family tokens only (bundled aliases)
+	faces         []*Font            // stable registration order for fallback scans
+}
+
+// NewRegistry returns an empty font registry.
+func NewRegistry() *Registry {
+	return &Registry{ //nolint:exhaustruct // intentional zero-value mu field
+		byFamily: map[string][]*Font{},
+	}
+}
+
+// LogFontRegistryScan emits the shared font-path scan notice after a registry
+// has been built by a PDF or image request.
+func LogFontRegistryScan(global settings.PdfGlobal, log io.Writer) {
+	if log == nil || log == io.Discard || global.Quiet {
+		return
+	}
+
+	if len(global.FontPaths) == 0 && !global.UseSystemFonts {
+		return
+	}
+
+	count := len(global.FontPaths)
+	if global.UseSystemFonts {
+		count += len(DefaultSystemFontDirs())
+	}
+
+	line.Emit(log, line.Info, "scanned %d font path(s)", count)
+}
+
+func (r *Registry) registerFaceLocked(fnt *Font) {
+	for _, existing := range r.faces {
+		if existing == fnt {
+			return
+		}
+	}
+
+	r.faces = append(r.faces, fnt)
+}
+
+// AddFont registers a parsed face under its family name (and PostScript name).
+//
+//nolint:wsl // lock initialization and registration must remain one critical section.
+func (r *Registry) AddFont(fnt *Font) {
+	if r == nil || fnt == nil {
+		return
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.byFamily == nil {
+		r.byFamily = map[string][]*Font{}
+	}
+	r.registerFaceLocked(fnt)
+
+	names := fnt.LoadNames()
+	if len(names) == 0 && fnt.PostScriptName != "" {
+		names = []string{fnt.PostScriptName}
+	}
+
+	for _, n := range names {
+		key := strings.ToLower(strings.TrimSpace(n))
+		if key == "" {
+			continue
+		}
+
+		r.byFamily[key] = append(r.byFamily[key], fnt)
+	}
+}
+
+// normalizeFamilyKey lowercases and strips quotes from one CSS family name,
+// matching the keys AddFamilyAlias and Lookup use.
+func normalizeFamilyKey(family string) string {
+	key := strings.ToLower(strings.TrimSpace(family))
+
+	return strings.Trim(key, `"'`)
+}
+
+// AddFamilyAlias registers f under an explicit CSS family name.
+//
+//nolint:wsl // lock initialization and registration must remain one critical section.
+func (r *Registry) AddFamilyAlias(family string, font *Font) {
+	if r == nil || font == nil {
+		return
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.byFamily == nil {
+		r.byFamily = map[string][]*Font{}
+	}
+	r.registerFaceLocked(font)
+
+	key := normalizeFamilyKey(family)
+	if key == "" {
+		return
+	}
+
+	r.byFamily[key] = append(r.byFamily[key], font)
+}
+
+// AddExactFamilyAlias registers font under an explicit CSS family name for
+// exact family tokens only. Unlike AddFamilyAlias, the generic serif /
+// sans-serif / monospace expansions do not see the alias. The bundled DejaVu
+// fallback faces use it: an exact font-family:'DejaVu Sans' must resolve them,
+// while the sans-serif expansion (which lists "dejavu sans" as a fallback
+// candidate) must keep preferring Liberation. The face is not added to the
+// fallback scan order because the FaceSet already covers it.
+//
+//nolint:wsl // lock initialization and registration must remain one critical section.
+func (r *Registry) AddExactFamilyAlias(family string, font *Font) {
+	if r == nil || font == nil {
+		return
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.exactByFamily == nil {
+		r.exactByFamily = map[string][]*Font{}
+	}
+
+	key := normalizeFamilyKey(family)
+	if key == "" {
+		return
+	}
+
+	r.exactByFamily[key] = append(r.exactByFamily[key], font)
+}
+
+// Lookup returns a face matching family list + weight/italic, or nil.
+// Each CSS family token is tried as its exact registry key first. Only the
+// CSS generics serif / sans-serif / monospace expand to Liberation (and
+// similar libre) faces — named families like Georgia are never rewritten.
+func (r *Registry) Lookup(families []string, weight int, italic bool) *Font {
+	if r == nil {
+		return nil
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, fam := range families {
+		keys := fontFamilyKeys(fam)
+		for _, key := range keys {
+			faces := r.byFamily[key]
+			if len(faces) == 0 && len(keys) == 1 {
+				// A single key means the token is a named family, not one of
+				// the generic expansions: bundled exact aliases are visible.
+				faces = r.exactByFamily[key]
+			}
+
+			if len(faces) == 0 {
+				continue
+			}
+
+			if f := pickFace(faces, weight, italic); f != nil {
+				return f
+			}
+		}
+	}
+
+	return nil
+}
+
+// fontFamilyKeys returns lowercase registry keys to try for one CSS family
+// token. Named families stay as-is; only CSS generics expand to Liberation.
+func fontFamilyKeys(fam string) []string {
+	key := normalizeFamilyKey(fam)
+	if key == "" {
+		return nil
+	}
+
+	switch key {
+	case "serif":
+		return []string{"liberation serif", "dejavu serif", "noto serif"}
+	case "sans-serif":
+		return []string{"liberation sans", "dejavu sans", "noto sans"}
+	case "monospace":
+		return []string{"liberation mono", "dejavu sans mono", "noto sans mono"}
+	default:
+		return []string{key}
+	}
+}
+
+// FindWithGlyph returns any registered face that has a glyph for ch, preferring
+// weight/italic match. Used as a last-resort Unicode fallback when CSS
+// font-family faces (and Liberation) lack the codepoint (e.g. IPA ˈ/ɾ).
+func (r *Registry) FindWithGlyph(codePoint rune, weight int, italic bool) *Font {
+	if r == nil {
+		return nil
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	bold := weight >= fontWeightBoldMin
+
+	var best *Font
+
+	bestScore := -1
+
+	for _, fnt := range r.faces {
+		score := glyphFaceScore(fnt, codePoint, bold, italic)
+		if score < 0 {
+			continue
+		}
+
+		if score > bestScore || (score == bestScore && fontIdentityLess(fnt, best)) {
+			bestScore = score
+			best = fnt
+		}
+	}
+
+	return best
+}
+
+// fontIdentityLess provides a stable tie-breaker independent of map iteration
+// or alias registration order. The parsed fingerprint distinguishes different
+// files that happen to share a PostScript name; the name is a readable
+// fallback for synthetic/test faces without a fingerprint.
+//
+//nolint:wsl // tie-break fields are intentionally checked in priority order.
+func fontIdentityLess(left, right *Font) bool {
+	if left == nil {
+		return false
+	}
+	if right == nil {
+		return true
+	}
+	if cmp := bytes.Compare(left.fingerprint[:], right.fingerprint[:]); cmp != 0 {
+		return cmp < 0
+	}
+
+	return strings.ToLower(left.PostScriptName) < strings.ToLower(right.PostScriptName)
+}
+
+// glyphFaceScore scores a face for ch: -1 when it lacks the glyph, plus
+// weight/italic match bonuses and a premium for known Unicode-capable
+// families (DejaVu/Noto/FreeSans).
+//
+//nolint:cyclop // glyph scoring logic
+func glyphFaceScore(fnt *Font, codePoint rune, bold, italic bool) int {
+	if fnt == nil || fnt.GlyphID(codePoint) == 0 {
+		return -1
+	}
+
+	score := 1
+	if fnt.Bold() == bold {
+		score += 2
+	}
+
+	if fnt.Italic() == italic {
+		score += 2
+	}
+
+	psLow := strings.ToLower(fnt.PostScriptName)
+	if strings.Contains(psLow, "dejavu") || strings.Contains(psLow, "noto") || strings.Contains(psLow, "freesans") {
+		score += 3
+	} else {
+		for _, n := range fnt.FamilyNames() {
+			low := strings.ToLower(n)
+			if strings.Contains(low, "dejavu") || strings.Contains(low, "noto") || strings.Contains(low, "freesans") {
+				score += 3
+
+				break
+			}
+		}
+	}
+
+	return score
+}
+
+func pickFace(faces []*Font, weight int, italic bool) *Font {
+	bold := weight >= fontWeightBoldMin
+
+	var best *Font
+
+	bestScore := -1
+
+	for _, fnt := range faces {
+		score := 0
+		if fnt.Bold() == bold {
+			score += 2
+		}
+
+		if fnt.Italic() == italic {
+			score += 2
+		}
+
+		if score > bestScore {
+			bestScore = score
+			best = fnt
+		}
+	}
+
+	return best
+}
+
+// HasVariationAxes reports whether the face carries an fvar table, that is,
+// whether it is a variable font. The bundled Liberation and DejaVu faces are
+// static, so this is false for every default face. Instanced faces produced
+// by Instance drop fvar, so this is false for them too.
+func (f *Font) HasVariationAxes() bool {
+	if f == nil {
+		return false
+	}
+
+	f.ensureParsed()
+
+	_, ok := f.tables["fvar"]
+
+	return ok
+}
+
+// HasColorPalette reports whether the face carries both COLR and CPAL, the
+// tables font-palette needs to select a color palette. Layout uses CPAL for a
+// documented lite solid fill (first color of the selected palette). Layered
+// COLR glyph paint is still out of scope.
+func (f *Font) HasColorPalette() bool {
+	if f == nil {
+		return false
+	}
+
+	f.ensureParsed()
+
+	_, hasCOLR := f.tables["COLR"]
+	_, hasCPAL := f.tables["CPAL"]
+
+	return hasCOLR && hasCPAL
+}
+
+// DefaultSystemFontDirs returns common system font directories for the current OS.
+// Callers must opt in via --use-system-fonts; nothing is scanned by default.
+// Proprietary Windows/corefont trees are omitted — use Liberation (bundled)
+// plus libre faces under /usr/share/fonts (DejaVu/Noto for IPA fallback).
+func DefaultSystemFontDirs() []string {
+	dirs := []string{
+		"/usr/share/fonts",
+		"/usr/local/share/fonts",
+		"/usr/share/fonts/truetype",
+		"/usr/share/fonts/truetype/droid",
+		"/usr/share/fonts/opentype",
+	}
+
+	if home, err := os.UserHomeDir(); err == nil {
+		for _, rel := range []string{".fonts", ".local/share/fonts"} {
+			d := filepath.Join(home, rel)
+			if st, err := os.Stat(d); err == nil && st.IsDir() {
+				dirs = append(dirs, d)
+			}
+		}
+	}
+
+	return dirs
+}
+
+// ScanFontDirs walks each directory non-recursively (and one level of
+// subdirectories under /usr/share/fonts style trees) collecting .ttf faces.
+func ScanFontDirs(dirs []string) *Registry {
+	out := NewRegistry()
+	seen := map[string]bool{}
+
+	var scan func(string, int)
+
+	scan = func(dir string, depth int) {
+		if dir == "" || seen[dir] {
+			return
+		}
+
+		seen[dir] = true
+
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return
+		}
+
+		for _, entry := range entries {
+			path := filepath.Join(dir, entry.Name())
+
+			if entry.IsDir() {
+				if depth > 0 {
+					scan(path, depth-1)
+				}
+
+				continue
+			}
+
+			scanFontFile(out, path, entry)
+		}
+	}
+	for _, d := range dirs {
+		scan(d, fontScanMaxDepth)
+	}
+
+	return out
+}
+
+// RegistryFromPaths builds an opt-in font registry from explicit font paths
+// and optional system font directories. Returns nil when nothing was configured.
+func RegistryFromPaths(fontPaths []string, useSystemFonts bool) *Registry {
+	var dirs []string
+
+	dirs = append(dirs, fontPaths...)
+
+	if useSystemFonts {
+		dirs = append(dirs, DefaultSystemFontDirs()...)
+	}
+
+	if len(dirs) == 0 {
+		return nil
+	}
+
+	return ScanFontDirs(dirs)
+}
+
+// RegistryFromGlobal builds the font registry for one conversion from
+// PdfGlobal font settings. It always returns a registry: even when no font
+// paths are configured, the bundled DejaVu Sans fallback faces are registered
+// as exact family aliases so font-family:'DejaVu Sans' resolves without opt-in
+// discovery. Callers own logging.
+func RegistryFromGlobal(global settings.PdfGlobal) *Registry {
+	registry := RegistryFromPaths(global.FontPaths, global.UseSystemFonts)
+	if registry == nil {
+		registry = NewRegistry()
+	}
+
+	// Exact aliases only: the generic sans-serif expansion lists "dejavu sans"
+	// as a fallback candidate, and registering the bundled faces there would
+	// switch every generic sans-serif run from Liberation to DejaVu.
+	if faces, err := LoadDefaultFaces(); err == nil {
+		registry.AddExactFamilyAlias(dejaVuSansFamily, faces.UnicodeFallback)
+		registry.AddExactFamilyAlias(dejaVuSansFamily, faces.UnicodeFallbackBold)
+	}
+
+	return registry
+}
+
+// scanFontFile parses a font file into the registry, skipping anything that
+// is not a TTF/OTF or fails to parse. Parses are memoized across conversions
+// by loadFontFile (see font_file_cache.go).
+func scanFontFile(out *Registry, path string, entry os.DirEntry) {
+	low := strings.ToLower(entry.Name())
+	if !strings.HasSuffix(low, ".ttf") && !strings.HasSuffix(low, ".otf") {
+		return
+	}
+
+	// A FIFO named .ttf blocks in os.Open. Skip anything Info says is not
+	// a regular file before that open.
+	info, infoErr := entry.Info()
+	if infoErr == nil && (info == nil || !info.Mode().IsRegular()) {
+		return
+	}
+
+	fnt := loadFontFile(path, entry)
+	if fnt != nil {
+		out.AddFont(fnt)
+	}
+}

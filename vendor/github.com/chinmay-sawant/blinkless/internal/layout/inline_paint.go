@@ -1,0 +1,1954 @@
+package layout
+
+import (
+	"strconv"
+	"strings"
+
+	pdf "github.com/chinmay-sawant/blinkless/internal/fonts"
+)
+
+const (
+	textOverflowEllipsis = "ellipsis"
+	emphasisStyleFilled  = "filled"
+	inlineStyleNone      = "none"
+
+	fallbackAscentRatio  = 0.8
+	fallbackDescentRatio = 0.2
+
+	emptyRunEpsilon = 0.01
+
+	lineThroughOffsetRatio = 0.3
+
+	underlineWidthRatio = 0.05
+	underlineMinWidth   = 0.25
+	underlineMaxWidth   = 0.45
+	underlineYTolerance = 0.5
+	skipInkGapPadRatio  = 1.5
+
+	dashLenRatio = 4
+	dashGapRatio = 2.8
+	dotGapRatio  = 2.5
+	minDotGap    = 2.5
+	wavyAmpRatio = 1.2
+	minWavyAmp   = 0.8
+	maxWavyAmp   = 1.8
+	wavySegRatio = 2.6
+
+	minVisibleSeg = 0.2
+
+	// maxDecorationSteps caps dash, dot, and wave pieces on one decoration.
+	// letter-spacing and tab-size can stretch a run far past the page, and
+	// each step emits an op. 1024 matches the background tile cap.
+	maxDecorationSteps = 1024
+
+	emphasisDotRatio = 0.18
+	minEmphasisDot   = 1.1
+	maxEmphasisDot   = 2.4
+	emphasisUnderGap = 1.2
+
+	emphasisOpenStrokeWidth = 0.4
+
+	minEllipsisAvail = 10
+
+	tabSpaceRatio = 0.25
+
+	shadowBlurRatio    = 0.3
+	shadowOpacityFloor = 0.2
+
+	fallbackAdvanceRatio = 0.5
+	fallbackMinAdvance   = 6.0
+)
+
+// undRun accumulates one continuous underline stroke across adjacent
+// same-href (or same-decoration) runs on a line. Multi-face items already
+// share one span; this also merges bold/italic/nested chunks and skips
+// whitespace-only runs so dense reference lists (wrapped archive.org URLs) do
+// not paint a forest of short double-rules.
+type undRun struct {
+	active    bool
+	x, y, w   float64
+	uw        float64
+	r, g, b   float64
+	href      string
+	hasHref   bool
+	style     string
+	blendMode string
+	group     *BlendGroup
+}
+
+// flush emits the accumulated underline stroke, if any.
+//
+//nolint:varnamelen,wsl,goconst // underline variants share the existing engine helpers
+func (u *undRun) flush(e *engine) {
+	if u.active && u.w > 0.01 {
+		col := [3]float64{u.r, u.g, u.b}
+		prevBlend, prevGroup := e.blendMode, e.blendGroup
+		e.blendMode, e.blendGroup = u.blendMode, u.group
+		switch strings.ToLower(strings.TrimSpace(u.style)) {
+		case "dashed":
+			e.emitDashedLine(u.x, u.y, u.w, u.uw, col)
+		case "dotted":
+			e.emitDottedLine(u.x, u.y, u.w, u.uw, col)
+		case "wavy":
+			e.emitWavyLine(u.x, u.y, u.w, u.uw, col)
+		case "double":
+			e.emitDoubleLine(u.x, u.y, u.w, u.uw, col)
+		default:
+			e.add(Op{ //nolint:exhaustruct // intentional zero fields
+				Kind: OpLine, X: u.x, Y: u.y, W: u.w, H: 0,
+				Width: u.uw, R: u.r, G: u.g, B: u.b,
+			})
+		}
+		e.blendMode = prevBlend
+		e.blendGroup = prevGroup
+	}
+
+	*u = undRun{} //nolint:exhaustruct // intentional zero fields
+}
+
+// emitInlineBlock relocates a block-in-inline box onto the current line and
+// returns the updated x cursor.
+func (e *engine) emitInlineBlock(
+	boxNode *box, item *inlineItem, leftX, lineY, lineH, baseline, justifyGap float64,
+	gapAfter bool, und *undRun,
+) float64 {
+	und.flush(e)
+
+	dx := leftX - item.blockBox.x
+	dy := e.alignedInlineTop(item, lineY, lineH, baseline) - item.blockBox.y
+	e.shiftBoxOps(item.blockBox, dx, dy)
+	item.blockBox.x += dx
+	item.blockBox.y += dy
+	// Attach to parent so paint-time transforms/opacity stamp the subtree.
+	if boxNode != nil {
+		boxNode.children = append(boxNode.children, item.blockBox)
+	}
+
+	leftX += item.blockBox.w + item.marginR
+	if gapAfter && isJustifyGapAfter(*item) {
+		leftX += justifyGap
+	}
+
+	return leftX
+}
+
+// emitInlineText paints the face runs of one text item and returns the
+// updated x cursor.
+func (e *engine) emitInlineText(
+	item *inlineItem, leftX, baseline, justifyGap float64,
+	gapAfter bool, und *undRun,
+) float64 {
+	child := item.style.Color
+	size := usedFontSize(item.style, e.faceFor(item.style)) * e.scale
+	ascent, descent := e.inlineFontMetrics(item.text, item.style)
+
+	if ascent+descent < size*0.5 {
+		// Fallback when font metrics are missing — keep hit targets usable.
+		ascent = size * fallbackAscentRatio
+		descent = size * fallbackDescentRatio
+	}
+
+	chromeLeft, chromeRight := 0.0, 0.0
+	if item.chrome {
+		chromeLeft = e.inlineChromeLeft(item.style)
+		chromeRight = e.inlineChromeRight(item.style)
+	}
+
+	contentWidth := item.w - chromeLeft - chromeRight
+	if contentWidth < 0 {
+		contentWidth = 0
+	}
+
+	if item.chrome {
+		e.paintInlineChrome(item.style, leftX, baseline, ascent, descent, contentWidth)
+	}
+
+	leftX += chromeLeft
+
+	if item.style.TextOverflow == textOverflowEllipsis {
+		e.applyEllipsis(item)
+	}
+
+	runStart := leftX
+
+	// Apply vertical-align <length> for text spans: positive raises.
+	shiftedBaseline := baseline
+	if item.style != nil {
+		shiftedBaseline -= e.scalePt(e.effectiveVerticalAlignShift(item.style))
+	}
+
+	textBaseline := shiftedBaseline
+
+	if isVerticalWritingMode(item.style.WritingMode) {
+		// A rotated run uses the baseline as its vertical start. The normal
+		// horizontal baseline already includes ascent, which would otherwise
+		// push vertical labels down by one ascent before rotation.
+		textBaseline -= ascent
+	}
+
+	var runSpan float64
+
+	leftX, runSpan = e.emitTextRuns(item, leftX, textBaseline, shiftedBaseline, size, ascent, descent)
+
+	// Decorations: one stroke per logical link run on this line (not per
+	// face-run / nested style chunk). Thin stroke ~5% em, clamped for
+	// dense reference print (min 0.25pt, max 0.45pt). Cascade wins:
+	// text-decoration:none stays none; --print-link-underline sets
+	// underline after cascade when operators want a visible link underline.
+	e.paintDecoration(item, runStart, runSpan, size, ascent, descent, shiftedBaseline, child, und)
+	e.paintEmphasis(item, runStart, runSpan, shiftedBaseline, ascent, descent, size)
+
+	leftX += chromeRight + item.marginR
+	if gapAfter && isJustifyGapAfter(*item) {
+		leftX += justifyGap
+	}
+
+	return leftX
+}
+
+// emitInlineFaceRuns paints the primary face run (or the per-face fallback
+// runs) of one text item and returns the updated x cursor and total span.
+func (e *engine) emitInlineFaceRuns(
+	item *inlineItem, leftX, textBaseline, size, ascent, descent float64,
+) (float64, float64) {
+	var runSpan float64
+
+	if run, ok := e.primaryFaceRun(item.text, item.style); ok {
+		e.emitInlineTextRun(item, run, leftX, textBaseline, size, ascent, descent)
+		leftX += run.w
+		runSpan = run.w
+
+		return leftX, runSpan
+	}
+
+	for _, run := range e.splitTextByFace(item.text, item.style) {
+		e.emitInlineTextRun(item, run, leftX, textBaseline, size, ascent, descent)
+		leftX += run.w
+		runSpan += run.w
+	}
+
+	return leftX, runSpan
+}
+
+func (e *engine) paintInlineChrome(style *ResolvedStyle, leftX, baseline, ascent, descent, contentWidth float64) {
+	top := e.inlineChromeTop(style)
+	bottom := e.inlineChromeBottom(style)
+	lh := e.lineHeightOf(style) * e.scale
+	extra := (lh - ascent - descent) / two
+	boxY := baseline - ascent - extra - top
+	boxH := ascent + extra + top + descent + extra + bottom
+	boxW := contentWidth + e.inlineChromeLeft(style) + e.inlineChromeRight(style)
+
+	if boxW <= 0 || boxH <= 0 {
+		return
+	}
+
+	if style.BGColor[3] > 0 && e.backgroundPaintEnabled(style) {
+		radii, radiiY := usedBorderRadiiXY(*style, boxW, boxH)
+		fill := Op{ //nolint:exhaustruct // intentional zero fields
+			Kind: OpFillRect, X: leftX, Y: boxY, W: boxW, H: boxH,
+			R: style.BGColor[0], G: style.BGColor[1], B: style.BGColor[2], Alpha: style.BGColor[3],
+			Radius: uniformRadius(radii), RadiusTopLeft: radii[0], RadiusTopRight: radii[1],
+			RadiusBottomRight: radii[2], RadiusBottomLeft: radii[3],
+		}
+		stampOneOpRadiiY(&fill, radiiY)
+		e.add(fill)
+	}
+
+	if !inlineHasBorder(*style) {
+		return
+	}
+
+	radii, radiiY := usedBorderRadiiXY(*style, boxW, boxH)
+	radius := uniformRadius(radii)
+
+	if hasRoundedRadii(radii) && uniformRoundedBorder(*style) {
+		b := style.BorderTop
+		stroke := Op{ //nolint:exhaustruct // intentional zero fields
+			Kind: OpStrokeRect, X: leftX, Y: boxY, W: boxW, H: boxH,
+			R: b.Color[0], G: b.Color[1], B: b.Color[2], Width: e.scalePt(borderPaint(b)), Radius: radius,
+			RadiusTopLeft: radii[0], RadiusTopRight: radii[1], RadiusBottomRight: radii[2], RadiusBottomLeft: radii[3],
+		}
+		stampOneOpRadiiY(&stroke, radiiY)
+		e.add(stroke)
+
+		return
+	}
+
+	for _, op := range e.borderOps(*style, leftX, boxY, boxW, boxH) {
+		e.add(op)
+	}
+}
+
+func inlineHasBorder(st ResolvedStyle) bool {
+	return inlineBorderVisible(st.BorderTop) || inlineBorderVisible(st.BorderRight) ||
+		inlineBorderVisible(st.BorderBottom) || inlineBorderVisible(st.BorderLeft)
+}
+
+func writingModeRotate(mode string) float64 {
+	if isVerticalWritingMode(mode) {
+		return -90
+	}
+
+	return 0
+}
+
+// inlineRunRotation returns the text matrix rotation for one run. Horizontal
+// writing modes never rotate. In vertical writing modes:
+//   - text-orientation:upright draws glyphs upright (0 degrees)
+//   - text-combine-upright combines a whole digit run into one upright cell
+//   - mixed and sideways keep the existing rotated run (-90 degrees)
+//
+// Subset: there is no per-character orientation pass and no scaled combine
+// cell, so a combined run is painted upright at its normal font size.
+func inlineRunRotation(sty *ResolvedStyle, text string) float32 {
+	if sty == nil || !isVerticalWritingMode(sty.WritingMode) {
+		return 0
+	}
+
+	switch strings.ToLower(strings.TrimSpace(sty.TextOrientation)) {
+	case textOrientationUpright:
+		return 0
+	case textOrientationSideways:
+		return float32(writingModeRotate(sty.WritingMode))
+	default:
+		if combinesUpright(sty.TextCombineUpright, text) {
+			return 0
+		}
+
+		return float32(writingModeRotate(sty.WritingMode))
+	}
+}
+
+// combinesUpright reports whether text-combine-upright combines this run.
+// Subset: the engine paints one op per run, so the whole run combines when
+// "all" is set or when it is all digits within the "digits N" cap. Mixed
+// digit/letter runs and over-cap digit runs stay rotated.
+func combinesUpright(mode, text string) bool {
+	low := strings.ToLower(strings.TrimSpace(mode))
+	if low == columnSpanAll {
+		return text != ""
+	}
+
+	if !strings.HasPrefix(low, "digits ") {
+		return false
+	}
+
+	limit, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(low, "digits ")))
+	if err != nil || limit < 1 {
+		return false
+	}
+
+	digits := 0
+
+	for _, r := range text {
+		if r < '0' || r > '9' {
+			return false
+		}
+
+		digits++
+	}
+
+	return digits > 0 && digits <= limit
+}
+
+func inlineBorderVisible(side border) bool {
+	return side.Width > 0 && side.Style != cssDisplayNone && !side.Transparent
+}
+
+//nolint:cyclop,wsl // transform width and alignment are one geometry decision
+func (e *engine) emitInlineTextRun(
+	item *inlineItem,
+	run faceRun,
+	leftX, baseline, size, ascent, descent float64,
+) {
+	child := item.style.Color
+	// Op.Text stays source text (soft hyphens stripped). CSS text-transform is
+	// carried on opExtra and applied at paint/measure time, matching pre-87.4.
+	raw := stripSoftHyphens(run.text)
+	shaped := transformInlineText(raw, item.style.TextTransform)
+	paintSize := size
+	paintBaseline := baseline
+	if scText, sc := synthesizeSmallCapsText(item.style, shaped); sc != 1 {
+		shaped = scText
+		raw = scText
+		paintSize = size * sc
+	}
+	if posScale, posShift := synthesizePositionAdjust(item.style, paintSize); posScale != 1 || posShift != 0 {
+		paintSize *= posScale
+		paintBaseline += posShift
+	}
+	widthScale := fontWidthScale(item.style)
+	textWidth := run.w
+	if shaped != run.text || paintSize != size || widthScale != 1 {
+		textWidth = e.measureTextFace(shaped, item.style) * (paintSize / size) * widthScale
+	}
+
+	textX := leftX
+	textDelta := textWidth - run.w
+	switch item.style.TextAlign {
+	case floatRight:
+		textX -= textDelta
+	case fxCenter:
+		textX -= textDelta / two
+	}
+
+	if item.style.TextShadowSet {
+		e.emitTextShadowRuns(item, run, textX, paintBaseline, textWidth, paintSize, descent)
+	}
+
+	e.add(decorateTextOp(Op{ //nolint:exhaustruct // intentional zero fields
+		Kind: OpText, X: textX, Y: paintBaseline, W: textWidth, H: item.h,
+		Text: raw, Font: run.face, Size: paintSize,
+		InkDescent:    descent,
+		LetterSpacing: item.style.LetterSpacing * e.scale * widthScale,
+		Bold:          item.style.FontWeight >= fontWeightBoldValue,
+		R:             child[0], G: child[1], B: child[2],
+		RotateDeg: e.noteRotatedRun(item, run, textWidth),
+	}, item.style))
+
+	if item.href != "" {
+		e.add((Op{ //nolint:exhaustruct // intentional zero fields
+			Kind: OpLinkURI, X: textX, Y: baseline - ascent, W: textWidth,
+			H: ascent + descent,
+		}).withURI(item.href))
+	}
+}
+
+// emitTextShadowRuns paints one soft text-shadow copy per collected shadow.
+func (e *engine) emitTextShadowRuns(
+	item *inlineItem, run faceRun, textX, baseline, textWidth, size, descent float64,
+) {
+	shadows := e.collectTextShadows(item.style)
+
+	for _, shadow := range shadows {
+		opacity := shadowOpacity(shadow.blur)
+
+		shadowOp := decorateTextOp(Op{ //nolint:exhaustruct // intentional zero fields
+			Kind: OpText, X: textX + shadow.x, Y: baseline + shadow.y, W: textWidth, H: item.h,
+			Text: run.text, Font: run.face, Size: size,
+			InkDescent:    descent,
+			LetterSpacing: item.style.LetterSpacing * e.scale,
+			Bold:          item.style.FontWeight >= fontWeightBoldValue,
+			R:             shadow.color[0], G: shadow.color[1], B: shadow.color[2],
+			RotateDeg: inlineRunRotation(item.style, run.text),
+		}, item.style)
+		if opacity > 0 && opacity < 1 {
+			shadowOp.setPaintOpacity(opacity)
+		}
+
+		e.add(shadowOp)
+	}
+}
+
+// shadowOpacity fades a text shadow with its blur radius: sharp shadows stay
+// opaque and wide ones fade toward the floor so dense print stays legible.
+func shadowOpacity(blur float64) float64 {
+	if blur <= 0 {
+		return 0
+	}
+
+	opacity := 1.0 / (1.0 + blur*shadowBlurRatio)
+	if opacity < shadowOpacityFloor {
+		opacity = shadowOpacityFloor
+	}
+
+	if opacity > 1 {
+		opacity = 1
+	}
+
+	return opacity
+}
+
+// textDecorationSkipPolicy is the paint-time view of the text-decoration-skip
+// longhands. Initial values resolve per CSS Text Decoration 4 even when the
+// plumbing still stores the legacy "objects" keyword: skip-spaces "objects"
+// resolves to "start end", skip-self/box to auto/none.
+type textDecorationSkipPolicy struct {
+	skipSpacesStart bool
+	skipSpacesEnd   bool
+	skipSpacesAll   bool
+	skipSelfAll     bool
+	noSkipSelf      bool
+	skipBoxAll      bool
+}
+
+// resolveTextDecorationSkipPolicy reads TextDecorationSkipSelf, -Box, and
+// -Spaces. Subset notes:
+//   - skip-self controls ancestor decorations in the spec; this engine paints
+//     decorations per item and does not propagate ancestor decorations, so
+//     skip-all suppresses the item's own decoration and no-skip disables
+//     space and ink skipping for it.
+//   - skip-box:all breaks a continuous stroke at an item with inline chrome
+//     (padding/border) instead of drawing across it; there are no ink bounds
+//     to compute the full margin-box skip geometry.
+//
+//nolint:cyclop // skip longhands resolve into one flat policy
+func resolveTextDecorationSkipPolicy(sty *ResolvedStyle) textDecorationSkipPolicy {
+	var policy textDecorationSkipPolicy
+
+	if sty == nil {
+		return policy
+	}
+
+	switch strings.ToLower(strings.TrimSpace(sty.TextDecorationSkipSelf)) {
+	case "skip-all":
+		policy.skipSelfAll = true
+	case textDecorationSkipNoSkip:
+		policy.noSkipSelf = true
+	}
+
+	if strings.EqualFold(strings.TrimSpace(sty.TextDecorationSkipBox), columnSpanAll) {
+		policy.skipBoxAll = true
+	}
+
+	spaces := strings.ToLower(strings.TrimSpace(sty.TextDecorationSkipSpaces))
+	if spaces == "" || spaces == "objects" {
+		spaces = textDecorationSkipStartEnd
+	}
+
+	// Allocation-free token scan: strings.Fields allocated a slice per
+	// decorated text item, which showed up as ~15 percent of 500-page
+	// benchmark allocations. The field holds at most two keywords.
+	for spaces != "" {
+		spaces = strings.TrimLeft(spaces, " \t\r\n")
+		if spaces == "" {
+			break
+		}
+
+		tok := spaces
+		if idx := strings.IndexAny(spaces, " \t\r\n"); idx >= 0 {
+			tok, spaces = spaces[:idx], spaces[idx:]
+		} else {
+			spaces = ""
+		}
+
+		switch tok {
+		case cssDisplayNone:
+			return policy
+		case columnSpanAll:
+			policy.skipSpacesAll = true
+		case fxStart:
+			policy.skipSpacesStart = true
+		case fxEnd:
+			policy.skipSpacesEnd = true
+		}
+	}
+
+	if policy.noSkipSelf {
+		policy.skipSpacesAll = false
+		policy.skipSpacesStart = false
+		policy.skipSpacesEnd = false
+	}
+
+	if policy.skipSpacesAll {
+		policy.skipSpacesStart = false
+		policy.skipSpacesEnd = false
+	}
+
+	return policy
+}
+
+// decoSeg is one paintable decoration span on a text item, in canvas X.
+type decoSeg struct {
+	start, end float64
+}
+
+func (s decoSeg) width() float64 { return s.end - s.start }
+
+// maxDecoSegs caps the per-item decoration segments held inline. A nowrap or
+// pre run with more words than this keeps a continuous stroke across the
+// overflow instead of allocating; decoration space skipping is best-effort
+// for those runs.
+const maxDecoSegs = 8
+
+// decoSegSet is a fixed-capacity segment list returned by value so the paint
+// hot path does not allocate per decorated text item.
+type decoSegSet struct {
+	segs [maxDecoSegs]decoSeg
+	n    int
+}
+
+func (s *decoSegSet) add(start, end float64) {
+	if s.n >= len(s.segs) {
+		s.segs[len(s.segs)-1].end = end
+
+		return
+	}
+
+	s.segs[s.n] = decoSeg{start: start, end: end}
+	s.n++
+}
+
+func (s *decoSegSet) count() int { return s.n }
+
+func (s *decoSegSet) get(i int) decoSeg { return s.segs[i] }
+
+// decorationSegments maps an item's text onto the spans its decoration lines
+// cover after text-decoration-skip-spaces and text-decoration-inset. Spaces
+// are skipped per the policy; inset trims the outer endpoints of the whole
+// span (positive) or extends them (negative). Advances come from rune
+// measurement, not glyph ink.
+//
+//nolint:cyclop,funlen // per-rune spacer skip and segment accumulation in one pass
+func (e *engine) decorationSegments(
+	item *inlineItem, runStart, runSpan float64, policy textDecorationSkipPolicy, inset float64,
+) decoSegSet {
+	var segs decoSegSet
+
+	if item.text == "" || runSpan <= emptyRunEpsilon {
+		return segs
+	}
+
+	firstInk, lastInk := -1, -1
+
+	idx := 0
+
+	for _, r := range item.text {
+		if !isDecorationSpacer(r) {
+			if firstInk < 0 {
+				firstInk = idx
+			}
+
+			lastInk = idx
+		}
+
+		idx++
+	}
+
+	if firstInk < 0 {
+		return segs
+	}
+
+	spanEnd := runStart + runSpan
+
+	cur := runStart
+	segStart := -1.0
+
+	flush := func() {
+		if segStart < 0 {
+			return
+		}
+
+		end := cur
+		if end > spanEnd {
+			end = spanEnd
+		}
+
+		if end > segStart {
+			segs.add(segStart, end)
+		}
+
+		segStart = -1
+	}
+
+	idx = 0
+
+	for _, char := range item.text {
+		adv := e.skipInkAdvance(char, item.style)
+		if cur+adv > spanEnd {
+			adv = spanEnd - cur
+		}
+
+		if adv < 0 {
+			adv = 0
+		}
+
+		if isDecorationSpacer(char) && skipDecorationSpacer(idx, firstInk, lastInk, policy) {
+			flush()
+
+			cur += adv
+			idx++
+
+			continue
+		}
+
+		if segStart < 0 {
+			segStart = cur
+		}
+
+		cur += adv
+		idx++
+	}
+
+	flush()
+
+	if segs.n == 0 {
+		return segs
+	}
+
+	// Inset applies to the decoration as a whole: trim the first segment's
+	// start and the last segment's end.
+	segs.segs[0].start += inset
+	segs.segs[segs.n-1].end -= inset
+
+	var out decoSegSet
+
+	for i := range segs.n {
+		if segs.segs[i].end-segs.segs[i].start > emptyRunEpsilon {
+			out.add(segs.segs[i].start, segs.segs[i].end)
+		}
+	}
+
+	return out
+}
+
+// skipDecorationSpacer reports whether the spacer at rune index idx is
+// skipped under the resolved policy.
+func skipDecorationSpacer(idx, firstInk, lastInk int, policy textDecorationSkipPolicy) bool {
+	switch {
+	case policy.skipSpacesAll:
+		return true
+	case idx < firstInk:
+		return policy.skipSpacesStart
+	case idx > lastInk:
+		return policy.skipSpacesEnd
+	default:
+		return false
+	}
+}
+
+// isDecorationSpacer reports a CSS spacer for text-decoration-skip-spaces:
+// Unicode Zs except U+202F NARROW NO-BREAK SPACE, plus the ASCII whitespace
+// inline layout already treats as a run separator.
+func isDecorationSpacer(r rune) bool {
+	switch r {
+	case ' ', '\t', '\n', '\r', '\u00A0':
+		return true
+	default:
+		return false
+	}
+}
+
+// paintDecoration draws the underline / line-through / overline strokes for one text
+// item, extending the active underline run when the styling continues.
+//
+//nolint:cyclop,funlen,gocognit // decoration painting
+func (e *engine) paintDecoration(
+	item *inlineItem, runStart, runSpan, size, ascent, descent, baseline float64,
+	child [3]float64, und *undRun,
+) {
+	policy := resolveTextDecorationSkipPolicy(item.style)
+	if policy.skipSelfAll {
+		und.flush(e)
+
+		return
+	}
+
+	// A visible border-bottom is already a link affordance (wiki
+	// `.mw-body a:not(.image){border-bottom:1px solid #aaa}`). Skip the
+	// CSS underline when a bottom border is already painted.
+	hasBottomBorder := inlineBorderVisible(item.style.BorderBottom)
+	wantUnderline := !hasBottomBorder && hasUnderline(item.style)
+	wsOnly := strings.TrimSpace(item.text) == ""
+	wantLineThrough := hasLineThrough(item.style)
+	wantOverline := hasOverline(item.style)
+
+	if runSpan <= emptyRunEpsilon {
+		if !wantUnderline {
+			und.flush(e)
+		}
+
+		return
+	}
+
+	if !wantUnderline && !wantLineThrough && !wantOverline {
+		und.flush(e)
+
+		return
+	}
+
+	decColor := child
+	if item.style.TextDecorationColorSet {
+		decColor = item.style.TextDecorationColor
+	}
+
+	uWidth := underlineStrokeWidth(size)
+	if item.style.TextDecorationThickness > 0 {
+		uWidth = item.style.TextDecorationThickness
+	}
+
+	underY := baseline + descent + size*0.22 + item.style.TextUnderlineOffset +
+		underlinePositionShift(item.style, size, descent)
+
+	if wsOnly {
+		// Do not start a decoration on whitespace-only, but extend an active
+		// same-href underline across inter-word spaces.
+		if wantUnderline {
+			e.paintUnderline(item, runStart, runSpan, underY, uWidth, size, true, decColor, und)
+		} else {
+			und.flush(e)
+		}
+
+		return
+	}
+
+	// skip-box:all subset: an item with inline padding/border breaks the
+	// continuous stroke instead of drawing across its box chrome.
+	if policy.skipBoxAll && item.chrome {
+		und.flush(e)
+	}
+
+	inset := e.scalePt(item.style.TextDecorationInset)
+	segs := e.decorationSegments(item, runStart, runSpan, policy, inset)
+
+	if segs.count() == 0 {
+		// Every rune was a skipped spacer: nothing to paint.
+		if !wantUnderline {
+			und.flush(e)
+		}
+
+		return
+	}
+
+	if wantUnderline {
+		skipInk := strings.ToLower(strings.TrimSpace(item.style.TextDecorationSkipInk))
+		if policy.noSkipSelf {
+			skipInk = cssDisplayNone
+		}
+
+		switch {
+		case segs.count() > 1:
+			// Spaces split the decoration; paint each word segment directly.
+			und.flush(e)
+
+			for i := range segs.count() {
+				seg := segs.get(i)
+				e.emitDecorationLineStyled(item.style, seg.start, underY, seg.width(), uWidth, decColor)
+			}
+		case skipInk == overflowAuto || skipInk == columnSpanAll:
+			und.flush(e)
+			e.paintUnderlineSkipInk(item, runStart, segs.get(0).start, segs.get(0).end, underY, uWidth, decColor)
+		default:
+			e.paintUnderline(item, segs.get(0).start, segs.get(0).width(), underY, uWidth, size, false, decColor, und)
+		}
+	} else {
+		und.flush(e)
+	}
+
+	// Line-through and overline have no accumulator: per-item start/end space
+	// trims would leave a gap at every word boundary, so those decorations
+	// keep full spans unless the policy skips all spaces. Underlines heal
+	// interior trims in the undRun accumulator, so they use the edge policy.
+	bodyPolicy := policy
+	bodyPolicy.skipSpacesStart = false
+	bodyPolicy.skipSpacesEnd = false
+
+	bodySegs := segs
+	if !policy.skipSpacesAll {
+		bodySegs = e.decorationSegments(item, runStart, runSpan, bodyPolicy, inset)
+	}
+
+	if wantLineThrough {
+		strikeY := baseline - ascent*lineThroughOffsetRatio
+		e.paintDecorationSegments(item.style, bodySegs, strikeY, uWidth, decColor)
+	}
+
+	if wantOverline {
+		overlineY := baseline - ascent
+		e.paintDecorationSegments(item.style, bodySegs, overlineY, uWidth, decColor)
+	}
+}
+
+// hasUnderline reports whether cascade resolved an underline decoration.
+// Struck-through / overlined links keep only those decorations; author
+// text-decoration:none is honored (use --print-link-underline to force).
+func hasUnderline(style *ResolvedStyle) bool {
+	if style == nil {
+		return false
+	}
+
+	if style.TextDecoration == cssTextDecorationLineThrough {
+		return false
+	}
+
+	if style.TextDecoration == cssTextDecorationOverline || hasOverline(style) {
+		return false
+	}
+
+	if style.TextDecoration == cssTextDecorationUnderline {
+		return true
+	}
+
+	return strings.Contains(strings.ToLower(style.TextDecorationLine), "underline")
+}
+
+func hasOverline(style *ResolvedStyle) bool {
+	if style == nil {
+		return false
+	}
+
+	if style.TextDecoration == cssTextDecorationOverline {
+		return true
+	}
+
+	return strings.Contains(strings.ToLower(style.TextDecorationLine), "overline")
+}
+
+func hasLineThrough(style *ResolvedStyle) bool {
+	if style == nil {
+		return false
+	}
+
+	if style.TextDecoration == cssTextDecorationLineThrough {
+		return true
+	}
+
+	return strings.Contains(strings.ToLower(style.TextDecorationLine), "line-through")
+}
+
+// paintDecorationSegments strokes each segment of one decoration line at lineY
+// using the item's text-decoration-style.
+func (e *engine) paintDecorationSegments(
+	sty *ResolvedStyle, segs decoSegSet, lineY, uWidth float64, col [3]float64,
+) {
+	for i := range segs.count() {
+		seg := segs.get(i)
+		e.emitDecorationLineStyled(sty, seg.start, lineY, seg.width(), uWidth, col)
+	}
+}
+
+// emitDecorationLineStyled strokes one decoration line span with the item's
+// text-decoration-style.
+func (e *engine) emitDecorationLineStyled(
+	sty *ResolvedStyle, startX, lineY, lineW, width float64, col [3]float64,
+) {
+	switch strings.ToLower(strings.TrimSpace(sty.TextDecorationStyle)) {
+	case "dashed":
+		e.emitDashedLine(startX, lineY, lineW, width, col)
+	case "dotted":
+		e.emitDottedLine(startX, lineY, lineW, width, col)
+	case "wavy":
+		e.emitWavyLine(startX, lineY, lineW, width, col)
+	case "double":
+		e.emitDoubleLine(startX, lineY, lineW, width, col)
+	default:
+		e.add(Op{ //nolint:exhaustruct // intentional zero fields
+			Kind: OpLine, X: startX, Y: lineY, W: lineW, H: 0,
+			Width: width, R: col[0], G: col[1], B: col[2],
+		})
+	}
+}
+
+// descenderRune reports Latin letters whose ink typically crosses an underline.
+func descenderRune(r rune) bool {
+	switch r {
+	case 'g', 'j', 'p', 'q', 'y', 'Q':
+		return true
+	default:
+		return false
+	}
+}
+
+// skipInkGap tracks the active underline segment while skipping descenders.
+type skipInkGap struct {
+	segStart float64
+	inGap    bool
+}
+
+// startSkipInkGap ends the active segment before a descender glyph.
+func startSkipInkGap(gap *skipInkGap, curX, gapPad float64, flush func(float64)) {
+	if gap.inGap {
+		return
+	}
+
+	end := curX - gapPad
+	if end < gap.segStart {
+		end = gap.segStart
+	}
+
+	flush(end)
+
+	gap.inGap = true
+}
+
+// endSkipInkGap resumes the segment after a descender glyph.
+func endSkipInkGap(gap *skipInkGap, curX, adv, gapPad float64) {
+	if !gap.inGap {
+		return
+	}
+
+	gap.segStart = curX + gapPad
+	if gap.segStart > curX+adv {
+		gap.segStart = curX + adv
+	}
+
+	gap.inGap = false
+}
+
+// skipInkAdvance measures one rune for skip-ink gaps with fallback widths.
+func (e *engine) skipInkAdvance(runic rune, style *ResolvedStyle) float64 {
+	adv := e.measureRuneFace(runic, style)
+	if adv > 0 {
+		return adv
+	}
+
+	adv = style.FontSize * fallbackAdvanceRatio
+	if adv > 0 {
+		return adv
+	}
+
+	return fallbackMinAdvance
+}
+
+// paintUnderlineSkipInk draws per-glyph underline segments, omitting strokes
+// under descender letters so skip-ink:auto/all is visible in print. The
+// painted span is clipped to [spanStart, spanEnd], which carries the
+// text-decoration-skip-spaces edge trims and text-decoration-inset.
+func (e *engine) paintUnderlineSkipInk(
+	item *inlineItem, runStart, spanStart, spanEnd, underY, uWidth float64, col [3]float64,
+) {
+	if spanEnd <= spanStart {
+		return
+	}
+
+	curX := runStart
+
+	gap := skipInkGap{segStart: spanStart, inGap: false}
+
+	// Nudge the gap a little past the glyph box so the break reads in print.
+	gapPad := uWidth * skipInkGapPadRatio
+
+	flushSeg := func(endX float64) {
+		if endX > spanEnd {
+			endX = spanEnd
+		}
+
+		segStart := gap.segStart
+		if segStart < spanStart {
+			segStart = spanStart
+		}
+
+		w := endX - segStart
+		if w > emptyRunEpsilon {
+			e.add(Op{ //nolint:exhaustruct // intentional zero fields
+				Kind: OpLine, X: segStart, Y: underY, W: w, H: 0,
+				Width: uWidth, R: col[0], G: col[1], B: col[2],
+			})
+		}
+	}
+
+	for _, runic := range item.text {
+		adv := e.skipInkAdvance(runic, item.style)
+
+		if descenderRune(runic) {
+			startSkipInkGap(&gap, curX, gapPad, flushSeg)
+		} else {
+			endSkipInkGap(&gap, curX, adv, gapPad)
+		}
+
+		curX += adv
+	}
+
+	if !gap.inGap {
+		flushSeg(curX)
+	}
+}
+
+// paintUnderline extends or starts the active underline run for one text item.
+func (e *engine) paintUnderline(
+	item *inlineItem, runStart, runSpan, underY, uWidth, size float64,
+	wsOnly bool, child [3]float64, und *undRun,
+) {
+	if wsOnly {
+		// Do not start an underline on whitespace-only, but extend
+		// an active same-href run across inter-word spaces.
+		if und.active && item.href != "" && und.hasHref && item.href == und.href {
+			extendUnder(und, runStart, runSpan, uWidth)
+		}
+
+		return
+	}
+
+	if startsActiveUnder(item, und, runStart, underY, size) {
+		extendUnder(und, runStart, runSpan, uWidth)
+
+		return
+	}
+	// Prefer first chunk's color (title) when styles mix.
+	und.flush(e)
+	und.active = true
+	und.x = runStart
+	und.y = underY
+	und.w = runSpan
+	und.uw = uWidth
+	und.r, und.g, und.b = child[0], child[1], child[2]
+	und.href = item.href
+	und.hasHref = item.href != ""
+	und.style = item.style.TextDecorationStyle
+	und.blendMode = e.blendMode
+	und.group = e.blendGroup
+}
+
+// startsActiveUnder reports that the item continues an active underline run:
+// same href (or both href-less), same Y, same decoration style, and near
+// enough in X — justify rivers / margins between nested chunks (up to ~2em)
+// do not split it.
+func startsActiveUnder(item *inlineItem, und *undRun, runStart, underY, size float64) bool {
+	if !und.active || !nearUndY(und.y, underY) {
+		return false
+	}
+
+	undStyle := strings.ToLower(strings.TrimSpace(und.style))
+	itemStyle := strings.ToLower(strings.TrimSpace(item.style.TextDecorationStyle))
+
+	if undStyle != itemStyle {
+		return false
+	}
+
+	if (item.href != "" && und.hasHref && item.href == und.href) ||
+		(item.href == "" && !und.hasHref) {
+		return runStart <= und.x+und.w+size*2+0.5
+	}
+
+	return false
+}
+
+// extendUnder widens the active underline run over this text span and keeps
+// the thinner of the two stroke widths.
+func extendUnder(und *undRun, runStart, runSpan, uWidth float64) {
+	end := runStart + runSpan
+	if end > und.x+und.w {
+		und.w = end - und.x
+	}
+
+	if uWidth < und.uw {
+		und.uw = uWidth
+	}
+}
+
+// underlineStrokeWidth returns a light print-friendly underline thickness.
+// ~5% em, clamped so small ref text stays visible without dense double-rules.
+func underlineStrokeWidth(em float64) float64 {
+	uWidth := em * underlineWidthRatio
+	if uWidth < underlineMinWidth {
+		uWidth = underlineMinWidth
+	}
+
+	if uWidth > underlineMaxWidth {
+		uWidth = underlineMaxWidth
+	}
+
+	return uWidth
+}
+
+func nearUndY(a, b float64) bool {
+	d := a - b
+	if d < 0 {
+		d = -d
+	}
+
+	return d < underlineYTolerance
+}
+
+func (e *engine) emitDashedLine(startX, lineY, lineW, width float64, col [3]float64) {
+	dash := width * dashLenRatio
+	if dash < three {
+		dash = three
+	}
+
+	gap := width * dashGapRatio
+	if gap < two {
+		gap = two
+	}
+
+	for cur, n := startX, 0; cur < startX+lineW && n < maxDecorationSteps; n++ {
+		seg := dash
+		if cur+seg > startX+lineW {
+			seg = startX + lineW - cur
+		}
+
+		if seg > minVisibleSeg {
+			e.add(Op{ //nolint:exhaustruct // intentional zero fields
+				Kind: OpLine, X: cur, Y: lineY, W: seg, H: 0,
+				Width: width, R: col[0], G: col[1], B: col[2],
+			})
+		}
+
+		cur += dash + gap
+	}
+}
+
+func (e *engine) emitDottedLine(startX, lineY, lineW, width float64, col [3]float64) {
+	dot := width
+	if dot < 1 {
+		dot = 1
+	}
+
+	gap := width * dotGapRatio
+	if gap < minDotGap {
+		gap = minDotGap
+	}
+
+	for cur, n := startX, 0; cur < startX+lineW && n < maxDecorationSteps; n++ {
+		seg := dot
+		if cur+seg > startX+lineW {
+			seg = startX + lineW - cur
+		}
+
+		if seg > minVisibleSeg {
+			e.add(Op{ //nolint:exhaustruct // intentional zero fields
+				Kind: OpLine, X: cur, Y: lineY, W: seg, H: 0,
+				Width: width, R: col[0], G: col[1], B: col[2],
+			})
+		}
+
+		cur += dot + gap
+	}
+}
+
+func wavyStepCount(lineW, segW float64) int {
+	steps := maxDecorationSteps
+	if segW > 0 && lineW > 0 && lineW/segW < float64(maxDecorationSteps) {
+		steps = int(lineW / segW)
+	}
+
+	if steps < 1 {
+		return 1
+	}
+
+	return steps
+}
+
+func (e *engine) emitWavyLine(startX, lineY, lineW, width float64, col [3]float64) {
+	amp := width * wavyAmpRatio
+	if amp < minWavyAmp {
+		amp = minWavyAmp
+	}
+
+	if amp > maxWavyAmp {
+		amp = maxWavyAmp
+	}
+
+	segW := width * wavySegRatio
+	if segW < three {
+		segW = three
+	}
+
+	steps := wavyStepCount(lineW, segW)
+
+	step := lineW / float64(steps)
+
+	for segIdx := range steps {
+		segStart := startX + float64(segIdx)*step
+		segEnd := segStart + step
+
+		if segEnd > startX+lineW {
+			segEnd = startX + lineW
+		}
+
+		segStartY := lineY
+		segEndY := lineY
+
+		if segIdx%2 == 0 {
+			segStartY -= amp
+			segEndY += amp
+		} else {
+			segStartY += amp
+			segEndY -= amp
+		}
+
+		segWidth := segEnd - segStart
+		if segWidth < minVisibleSeg {
+			continue
+		}
+
+		// approximate wave with two diagonals
+		segMid := (segStart + segEnd) / two
+
+		e.add(Op{ //nolint:exhaustruct // intentional zero fields
+			Kind: OpLine, X: segStart, Y: segStartY, W: segMid - segStart, H: lineY - segStartY,
+			Width: width, R: col[0], G: col[1], B: col[2],
+		})
+
+		e.add(Op{ //nolint:exhaustruct // intentional zero fields
+			Kind: OpLine, X: segMid, Y: lineY, W: segEnd - segMid, H: segEndY - lineY,
+			Width: width, R: col[0], G: col[1], B: col[2],
+		})
+	}
+}
+
+func (e *engine) emitDoubleLine(startX, lineY, lineW, width float64, col [3]float64) {
+	gap := width + 1.0
+
+	e.add(Op{ //nolint:exhaustruct // intentional zero fields
+		Kind: OpLine, X: startX, Y: lineY - gap/2, W: lineW, H: 0,
+		Width: width, R: col[0], G: col[1], B: col[2],
+	})
+
+	e.add(Op{ //nolint:exhaustruct // intentional zero fields
+		Kind: OpLine, X: startX, Y: lineY + gap/2, W: lineW, H: 0,
+		Width: width, R: col[0], G: col[1], B: col[2],
+	})
+}
+
+// emphasisMark is one resolved text-emphasis dot style: geometry plus color.
+type emphasisMark struct {
+	dotD, dotY                   float64
+	isCircle, isTriangle, isOpen bool
+	red, green, blue             float64
+}
+
+func (e *engine) paintEmphasis(item *inlineItem, runStart, runSpan, baseline, ascent, descent, size float64) {
+	mark, ok := resolveEmphasisMark(item, baseline, ascent, descent, size)
+	if !ok {
+		return
+	}
+
+	skipSpaces, skipPunct, skipSymbols, skipNarrow := emphasisSkipModes(item.style)
+	curX := runStart
+
+	for _, runic := range item.text {
+		if skipEmphasisRune(runic, skipSpaces, skipPunct, skipSymbols, skipNarrow) {
+			curX += e.measureRuneFace(runic, item.style)
+
+			continue
+		}
+
+		adv := e.measureRuneFace(runic, item.style)
+		if adv <= 0 {
+			adv = size * fallbackAdvanceRatio
+		}
+
+		cx := curX + adv/two - mark.dotD/two
+		e.emitEmphasisDot(cx, mark.dotY, mark.dotD, mark.isCircle, mark.isTriangle, mark.isOpen,
+			mark.red, mark.green, mark.blue)
+
+		curX += adv
+
+		if curX > runStart+runSpan+0.5 {
+			break
+		}
+	}
+}
+
+// hasEmphasisProps reports whether any text-emphasis custom prop is set.
+func hasEmphasisProps(style *ResolvedStyle) bool {
+	if style == nil || style.CustomProps == nil {
+		return false
+	}
+
+	return style.CustomProps["__emph_style"] != "" ||
+		style.CustomProps["__emph_color"] != "" ||
+		style.CustomProps["__emph_position"] != "" ||
+		style.CustomProps["__emph_skip"] != ""
+}
+
+// resolveEmphasisMark reads the __emph_* custom props into paint-ready mark
+// geometry. It reports false when emphasis is absent or disabled.
+func resolveEmphasisMark(item *inlineItem, baseline, ascent, descent, size float64) (emphasisMark, bool) {
+	var mark emphasisMark
+
+	if !hasEmphasisProps(item.style) {
+		return mark, false
+	}
+
+	styleVal := item.style.CustomProps["__emph_style"]
+	colorStr := item.style.CustomProps["__emph_color"]
+	posStr := item.style.CustomProps["__emph_position"]
+
+	if strings.EqualFold(styleVal, inlineStyleNone) {
+		return mark, false
+	}
+
+	if styleVal == "" {
+		styleVal = emphasisStyleFilled
+	}
+
+	mark.red, mark.green, mark.blue = item.style.Color[0], item.style.Color[1], item.style.Color[2]
+
+	if colorStr != "" {
+		if parsed, ok := parseUsedColor(colorStr, item.style.Color); ok {
+			mark.red, mark.green, mark.blue = parsed[0], parsed[1], parsed[2]
+		}
+	}
+
+	lowStyle := strings.ToLower(styleVal)
+	mark.isCircle = strings.Contains(lowStyle, "circle") || strings.Contains(lowStyle, "dot")
+	mark.isTriangle = strings.Contains(lowStyle, "triangle")
+	mark.isOpen = strings.Contains(lowStyle, "open")
+
+	isUnder := strings.Contains(strings.ToLower(posStr), "under")
+	mark.dotD, mark.dotY = emphasisDotGeometry(size, ascent, descent, baseline, isUnder)
+
+	return mark, true
+}
+
+// emphasisDotGeometry sizes one text-emphasis dot and returns its diameter
+// and canvas Y above or below the text.
+func emphasisDotGeometry(size, ascent, descent, baseline float64, isUnder bool) (float64, float64) {
+	dotD := size * emphasisDotRatio
+	if dotD < minEmphasisDot {
+		dotD = minEmphasisDot
+	}
+
+	if dotD > maxEmphasisDot {
+		dotD = maxEmphasisDot
+	}
+
+	var dotY float64
+
+	if isUnder {
+		dotY = baseline + descent + dotD + emphasisUnderGap
+	} else {
+		dotY = baseline - ascent - dotD - 1.0
+	}
+
+	return dotD, dotY
+}
+
+// emitEmphasisDot paints one text-emphasis mark: a triangle reads as a square
+// (true triangles need path ops), open marks stroke, solid marks fill.
+func (e *engine) emitEmphasisDot(
+	centerX, dotY, dotD float64, isCircle, isTriangle, isOpen bool, red, green, blue float64,
+) {
+	radius := 0.0
+	if isCircle {
+		radius = dotD / two
+	}
+
+	switch {
+	case isTriangle:
+		// triangle emphasis: keep visible as square with slight offset
+		// (true triangle would need path ops; square is distinguishable and visible)
+		e.add(Op{ //nolint:exhaustruct // intentional zero fields
+			Kind: OpFillRect, X: centerX, Y: dotY, W: dotD, H: dotD,
+			R: red, G: green, B: blue, Alpha: 1,
+		})
+	case isOpen:
+		e.add(Op{ //nolint:exhaustruct // intentional zero fields
+			Kind: OpStrokeRect, X: centerX, Y: dotY, W: dotD, H: dotD,
+			R: red, G: green, B: blue, Alpha: 1, Width: emphasisOpenStrokeWidth, Radius: radius,
+		})
+	default:
+		e.add(Op{ //nolint:exhaustruct // intentional zero fields
+			Kind: OpFillRect, X: centerX, Y: dotY, W: dotD, H: dotD,
+			R: red, G: green, B: blue, Alpha: 1, Radius: radius,
+		})
+	}
+}
+
+// ellipsisAvail resolves the width budget for text-overflow ellipsis from the
+// style width, the inline containing block, or the page width.
+func (e *engine) ellipsisAvail(item *inlineItem) (float64, bool) {
+	switch {
+	case item.style.Width > 0:
+		return e.scalePt(item.style.Width), true
+	case e.inlineCBW > 0:
+		return e.inlineCBW, true
+	case e.opts.Width > 0:
+		return e.opts.Width, true
+	default:
+		return 0, false
+	}
+}
+
+func (e *engine) applyEllipsis(item *inlineItem) {
+	if item.style == nil {
+		return
+	}
+
+	if item.text == "" {
+		return
+	}
+
+	avail, ok := e.ellipsisAvail(item)
+	if !ok {
+		return
+	}
+
+	if avail < minEllipsisAvail {
+		return
+	}
+
+	totalW := e.measureTextFace(item.text, item.style)
+	if totalW <= avail+0.5 {
+		return
+	}
+
+	ellipsis := "..."
+	ellipsisW := e.measureTextFace(ellipsis, item.style)
+	budget := avail - ellipsisW - 1
+
+	if budget <= 0 {
+		item.text = ellipsis
+		item.w = ellipsisW
+
+		return
+	}
+
+	trimmed := e.truncateForEllipsis(item.text, budget, item.style)
+	if trimmed == "" {
+		item.text = ellipsis
+		item.w = ellipsisW
+
+		return
+	}
+
+	item.text = trimmed + ellipsis
+	item.w = e.measureTextFace(item.text, item.style)
+}
+
+func (e *engine) truncateForEllipsis(text string, budget float64, sty *ResolvedStyle) string {
+	var runWidth float64
+
+	end := 0
+
+	for idx, runic := range text {
+		adv := e.measureRuneFace(runic, sty)
+		if runWidth+adv > budget {
+			break
+		}
+
+		runWidth += adv
+		end = idx + len(string(runic))
+	}
+
+	if end <= 0 {
+		return ""
+	}
+
+	// avoid cutting mid-word leaving trailing space
+	res := strings.TrimRight(text[:end], " ")
+
+	return res
+}
+
+// measureTextFace measures s using per-rune CSS font-family fallback
+// (same face selection as paint).
+//
+// Primary-face fast path: resolve the style face once and only consult the
+// fallback cache when a glyph is missing — Latin report text almost never
+// leaves the primary face.
+func (e *engine) measureTextFace(cssSheet string, sty *ResolvedStyle) float64 {
+	if cssSheet == "" || sty == nil {
+		return 0
+	}
+
+	primary := e.faceFor(sty)
+
+	if primary == nil {
+		primary = e.font
+	}
+
+	size := usedFontSize(sty, primary) * e.scale
+
+	if len(cssSheet) > maxCachedTextLen {
+		return e.measureTextFaceUncached(cssSheet, sty, primary, size)
+	}
+
+	key := textWidthCacheKey(sty, primary, size, cssSheet)
+	if w, ok := e.lookupTextWidth(key); ok {
+		return w
+	}
+
+	w := e.measureTextFaceUncached(cssSheet, sty, primary, size)
+	e.storeTextWidth(key, w)
+
+	return w
+}
+
+// measureTextFaceUncached sums per-rune advances for cssSheet without
+// consulting the string cache.
+func (e *engine) measureTextFaceUncached(cssSheet string, sty *ResolvedStyle, primary *pdf.Font, size float64) float64 {
+	lstyle := sty.LetterSpacing * e.scale
+	wstyle := sty.WordSpacing * e.scale
+
+	total, runeCount, spaceCount := e.accumulateTextFaceWidth(cssSheet, sty, primary, size)
+
+	if lstyle != 0 && runeCount > 0 {
+		total += lstyle * float64(runeCount)
+	}
+
+	if wstyle != 0 && spaceCount > 0 {
+		total += wstyle * float64(spaceCount)
+	}
+
+	return total
+}
+
+func (e *engine) accumulateTextFaceWidth(
+	cssSheet string, sty *ResolvedStyle, primary *pdf.Font, size float64,
+) (float64, int, int) {
+	var total float64
+
+	runeCount := 0
+	spaceCount := 0
+
+	var prev rune
+
+	for _, runic := range cssSheet {
+		if runic == softHyphenRune || isVariationSelector(runic) {
+			// Soft hyphens are invisible unless a break occurs at that point.
+			// Variation selectors have no glyf in bundled faces; skip .notdef.
+			continue
+		}
+
+		if runic == '\t' {
+			total += e.tabStopAdvance(sty, primary, size)
+			runeCount++
+			prev = runic
+
+			continue
+		}
+
+		face := primary
+		if !isRuneWhitespace(runic) && primary.GlyphID(runic) == 0 {
+			face = e.faceForRuneFallback(sty, runic, primary)
+			if face == nil {
+				face = e.font
+			}
+		}
+
+		adv := face.GlyphAdvancePoints(runic, size)
+		if em := emojiPresentationAdvance(sty, runic, size); em > adv {
+			adv = em
+		}
+
+		total += adv
+		total += textAutospaceGap(sty, prev, runic, size)
+		runeCount++
+
+		if runic == ' ' {
+			spaceCount++
+		}
+
+		prev = runic
+	}
+
+	return total, runeCount, spaceCount
+}
+
+// tabStopAdvance returns the advance width of a tab stop: an absolute length
+// when tab-size is a length, else TabSize (default 8) space widths.
+func (e *engine) tabStopAdvance(sty *ResolvedStyle, primary *pdf.Font, size float64) float64 {
+	if isTabSizeLength(sty) {
+		return e.scalePt(sty.TabSize)
+	}
+
+	tabSize := sty.TabSize
+	if tabSize <= 0 {
+		tabSize = 8
+	}
+
+	spaceW := primary.GlyphAdvancePoints(' ', size)
+	if spaceW <= 0 {
+		spaceW = size * tabSpaceRatio
+	}
+
+	return spaceW * tabSize
+}
+
+// splitTextByFace splits s into contiguous runs that share the same face
+// under CSS font-family fallback.
+//
+//nolint:cyclop,funlen,wsl // hot path: per-rune face-fallback run splitting
+func (e *engine) splitTextByFace(cssSheet string, sty *ResolvedStyle) []faceRun {
+	if cssSheet == "" || sty == nil {
+		return nil
+	}
+
+	primaryRun, allPrimary := e.primaryFaceRun(cssSheet, sty)
+	// Fast path: every non-whitespace glyph is on the primary face (typical
+	// for Latin). One faceFor + per-rune GlyphID, single output run.
+	if allPrimary {
+		return []faceRun{primaryRun}
+	}
+
+	size := sty.FontSize * e.scale
+
+	primary := e.faceFor(sty)
+	if primary == nil {
+		primary = e.font
+	}
+
+	runs := make([]faceRun, 0, 1)
+	start := 0
+
+	var current *pdf.Font
+
+	var width float64
+	runeCount := 0
+	spaceCount := 0
+	var prev rune
+
+	for idx, runic := range cssSheet {
+		if runic == softHyphenRune {
+			continue
+		}
+
+		face := primary
+		if isRuneWhitespace(runic) {
+			face = primary
+		} else if primary.GlyphID(runic) == 0 {
+			face = e.faceForRuneFallback(sty, runic, primary)
+			if face == nil {
+				face = e.font
+			}
+		}
+
+		gap := textAutospaceGap(sty, prev, runic, size)
+
+		if current != nil && face != current {
+			runs = append(runs, faceRun{
+				text: cssSheet[start:idx],
+				face: current,
+				w: width + sty.LetterSpacing*e.scale*float64(runeCount) +
+					sty.WordSpacing*e.scale*float64(spaceCount),
+			})
+			start = idx
+			width = 0
+			runeCount = 0
+			spaceCount = 0
+		}
+
+		if current == nil {
+			start = idx
+		}
+
+		current = face
+		if face != nil {
+			width += face.AdvanceInPoints(runic, size)
+		}
+
+		width += gap
+		runeCount++
+
+		if runic == ' ' {
+			spaceCount++
+		}
+
+		prev = runic
+	}
+
+	if current != nil {
+		runs = append(runs, faceRun{
+			text: cssSheet[start:],
+			face: current,
+			w: width + sty.LetterSpacing*e.scale*float64(runeCount) +
+				sty.WordSpacing*e.scale*float64(spaceCount),
+		})
+	}
+
+	return runs
+}
+
+//nolint:wsl // hot path keeps the primary-face fast path compact
+func (e *engine) primaryFaceRun(cssSheet string, sty *ResolvedStyle) (faceRun, bool) {
+	if cssSheet == "" || sty == nil {
+		return faceRun{}, false //nolint:exhaustruct // intentional zero fields
+	}
+
+	primary := e.faceFor(sty)
+	if primary == nil {
+		primary = e.font
+	}
+
+	if !faceRunAllPrimary(cssSheet, primary) {
+		return faceRun{}, false //nolint:exhaustruct // intentional zero fields
+	}
+
+	size := sty.FontSize * e.scale
+	paintText := stripSoftHyphens(transformInlineText(cssSheet, sty.TextTransform))
+
+	var width float64
+	runeCount := 0
+	spaceCount := 0
+	var prev rune
+
+	for _, runic := range paintText {
+		if runic == '\t' {
+			width += e.tabStopAdvance(sty, primary, size)
+		} else {
+			width += primary.AdvanceInPoints(runic, size)
+		}
+		width += textAutospaceGap(sty, prev, runic, size)
+		runeCount++
+
+		if runic == ' ' {
+			spaceCount++
+		}
+
+		prev = runic
+	}
+
+	return faceRun{
+		text: cssSheet,
+		face: primary,
+		w: width + sty.LetterSpacing*e.scale*float64(runeCount) +
+			sty.WordSpacing*e.scale*float64(spaceCount),
+	}, true
+}
+
+// faceRunAllPrimary reports that every non-whitespace rune in s is covered by
+// primary (so splitTextByFace can emit a single run).
+func faceRunAllPrimary(cssSheet string, primary *pdf.Font) bool {
+	if primary == nil {
+		return false
+	}
+
+	for _, runic := range cssSheet {
+		if !isRuneWhitespace(runic) && primary.GlyphID(runic) == 0 {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (e *engine) fontAscent(size float64) float64 {
+	return e.fontAscentFace(e.font, size)
+}
+
+func (e *engine) fontAscentFace(face *pdf.Font, size float64) float64 {
+	if face == nil || face.UnitsPerEm() <= 0 {
+		return size * fallbackAscentRatio
+	}
+
+	return float64(face.Ascent()) * size / float64(face.UnitsPerEm())
+}
+
+func (e *engine) fontDescentFace(face *pdf.Font, size float64) float64 {
+	if face == nil || face.UnitsPerEm() <= 0 {
+		return size * fallbackDescentRatio
+	}
+
+	return float64(-face.Descent()) * size / float64(face.UnitsPerEm())
+}
+
+// inlineFontMetrics returns the largest ascent/descent pair used by an inline
+// item. A line can contain a mix of sans, serif, mono, and fallback faces;
+// using the engine default face for all of them shifts baselines and gives
+// inline chrome the wrong height.
+func (e *engine) inlineFontMetrics(text string, style *ResolvedStyle) (float64, float64) {
+	if style == nil {
+		return 0, 0
+	}
+
+	size := style.FontSize * e.scale
+	runs := e.splitTextByFace(text, style)
+
+	if len(runs) == 0 {
+		runs = []faceRun{{face: e.faceFor(style)}} //nolint:exhaustruct // text and width are filled by shaping
+	}
+
+	maxAscent, maxDescent := 0.0, 0.0
+
+	for _, run := range runs {
+		ascent := e.fontAscentFace(run.face, size)
+		descent := e.fontDescentFace(run.face, size)
+
+		if ascent > maxAscent {
+			maxAscent = ascent
+		}
+
+		if descent > maxDescent {
+			maxDescent = descent
+		}
+	}
+
+	return maxAscent, maxDescent
+}
+
+// isExternalHref reports whether a link target is an absolute URI
+// (http/https/mailto). Local same-document fragments are handled separately
+// as internal fragment links.
+func isExternalHref(href string) bool {
+	low := strings.ToLower(href)
+
+	return strings.HasPrefix(low, "http://") || strings.HasPrefix(low, "https://") || strings.HasPrefix(low, "mailto:")
+}
+
+// isLinkHref reports whether an anchor target becomes an OpLinkURI op.
+// Relative references are retained so a consumer can resolve them against the
+// document base URL.
+func isLinkHref(href string) bool {
+	href = strings.TrimSpace(href)
+	if href == "" {
+		return false
+	}
+
+	if isExternalHref(href) || isInternalHref(href) {
+		return true
+	}
+
+	if hasDangerousScheme(href) {
+		return false
+	}
+
+	return !strings.Contains(href, "://") && !strings.Contains(href, ":")
+}
+
+// hasDangerousScheme reports whether href uses a non-navigable URI scheme,
+// even when obfuscated with whitespace or control characters between the
+// scheme name and the colon.
+func hasDangerousScheme(href string) bool {
+	low := stripASCIISpace(strings.ToLower(href))
+
+	for _, prefix := range []string{"javascript:", "vbscript:", "data:", "blob:", "file:"} {
+		if strings.HasPrefix(low, prefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// stripASCIISpace removes ASCII whitespace and control characters so scheme
+// prefix checks cannot be bypassed with embedded junk characters. Only ASCII
+// is stripped: bytes at or below 0x20 (which covers space and all C0
+// controls) plus DEL.
+func stripASCIISpace(src string) string {
+	var compact strings.Builder
+
+	compact.Grow(len(src))
+
+	for _, char := range src {
+		if char < 0x80 && (char <= 0x20 || char == 0x7f) {
+			continue
+		}
+
+		compact.WriteRune(char)
+	}
+
+	return compact.String()
+}
+
+// isInternalHref reports a same-document fragment link (#id).
+func isInternalHref(href string) bool {
+	return strings.HasPrefix(href, "#") && len(href) > 1
+}
+
+func isTabSizeLength(sty *ResolvedStyle) bool {
+	if sty == nil || sty.CustomProps == nil {
+		return false
+	}
+
+	return sty.CustomProps["__tab_size_is_length"] == "1"
+}
+
+type shadowPaint struct {
+	x, y, blur float64
+	color      [3]float64
+}
+
+func (e *engine) collectTextShadows(sty *ResolvedStyle) []shadowPaint {
+	if sty == nil || !sty.TextShadowSet {
+		return nil
+	}
+
+	base := shadowPaint{x: sty.TextShadowX, y: sty.TextShadowY, blur: sty.TextShadowBlur, color: sty.TextShadowColor}
+	shadows := []shadowPaint{base}
+
+	if sty.CustomProps != nil {
+		if extra, ok := sty.CustomProps["__text_shadow_extra"]; ok && extra != "" {
+			for _, part := range strings.Split(extra, "|") {
+				if spec, ok := shadowDecode(part); ok {
+					shadows = append(shadows, shadowPaint(spec))
+				}
+			}
+		}
+	}
+
+	return shadows
+}

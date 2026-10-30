@@ -1,0 +1,83 @@
+package frame
+
+import (
+	"time"
+)
+
+// Step applies the value at now and reports the boxes it changed. The
+// first step fixes the start time; the step that reaches the end applies
+// the final value and reports false. A later step, or one after a Redraw
+// replaced a bound list, changes nothing.
+func (a *Anim) Step(now time.Time) (Damage, bool) {
+	if a == nil {
+		return Damage{}, false
+	}
+	if a.stale() {
+		a.live = false
+		return Damage{}, false
+	}
+	if !a.live {
+		return Damage{}, false
+	}
+
+	if a.start.IsZero() {
+		a.start = now
+	}
+
+	raw := progress(now, a.start, a.dur)
+	p := a.ease(raw)
+
+	var dmg Damage
+
+	for i, op := range a.ops {
+		if op == nil {
+			continue
+		}
+		old := OpBox(a.d, op)
+		a.patch(i, op, p)
+		dmg.Old = dmg.Old.Union(old)
+		dmg.New = dmg.New.Union(OpBox(a.d, op))
+	}
+
+	if raw >= 1 {
+		a.live = false
+	}
+
+	return dmg, a.live
+}
+
+// Tick steps the animation and marks the changed box on m. It reports
+// whether the animation is still running, so a tick can stop asking for
+// frames once every animation is done.
+func (a *Anim) Tick(m Marker, now time.Time) bool {
+	if a == nil {
+		return false
+	}
+	dmg, live := a.Step(now)
+	if m != nil && !dmg.Empty() {
+		m.MarkRect(dmg.Box())
+	}
+
+	return live
+}
+
+// progress clamps now against the animation's window to 0..1.
+func progress(now, start time.Time, dur time.Duration) float64 {
+	if dur <= 0 {
+		return 1
+	}
+
+	p := float64(now.Sub(start)) / float64(dur)
+	if p < 0 {
+		return 0
+	}
+
+	if p > 1 {
+		return 1
+	}
+
+	return p
+}
+
+// lerp is from + (to-from)*p.
+func lerp(from, to, p float64) float64 { return from + (to-from)*p }

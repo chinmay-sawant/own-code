@@ -1,0 +1,414 @@
+package layout
+
+import (
+	"strings"
+
+	"github.com/chinmay-sawant/blinkless/internal/css"
+)
+
+// splitRadiusSlash splits CSS border-radius slash syntax into the horizontal
+// (rx) side and the optional vertical (ry) side.
+func splitRadiusSlash(value string) (string, string, bool) {
+	before, after, ok := strings.Cut(value, "/")
+	horiz := strings.TrimSpace(before)
+
+	if !ok {
+		return horiz, "", false
+	}
+
+	return horiz, strings.TrimSpace(after), true
+}
+
+// splitCornerRadiusTokens reads one longhand: `rx`, `rx ry`, or `rx / ry`.
+func splitCornerRadiusTokens(value string) (string, string, bool) {
+	horiz, vert, hasVert := splitRadiusSlash(value)
+	if hasVert {
+		tokenX, _, _ := nextSpaceToken(horiz, 0)
+		tokenY, _, hasY := nextSpaceToken(vert, 0)
+
+		return tokenX, tokenY, hasY
+	}
+
+	tokenX, next, ok := nextSpaceToken(horiz, 0)
+	if !ok {
+		return "", "", false
+	}
+
+	tokenY, _, hasY := nextSpaceToken(horiz, next)
+
+	return tokenX, tokenY, hasY
+}
+
+func setBorderRadius(style *ResolvedStyle, value string, fsize float64) bool {
+	horiz, vert, hasVert := splitRadiusSlash(value)
+	if horiz == "" {
+		return true
+	}
+
+	if radiusListHasPercent(horiz) || radiusListHasPercent(vert) {
+		applyUniformRadiusPercent(style, firstRadiusPercent(horiz, vert))
+
+		return true
+	}
+
+	xs, ok := parseRadiusLengths(horiz, fsize)
+	if !ok {
+		return true
+	}
+
+	assignCornerRadiiX(style, expandRadius4(xs))
+
+	if !hasVert || vert == "" {
+		clearCornerRadiiY(style)
+
+		return true
+	}
+
+	ys, yok := parseRadiusLengths(vert, fsize)
+	if !yok {
+		return true
+	}
+
+	assignCornerRadiiY(style, expandRadius4(ys))
+
+	return true
+}
+
+func radiusListHasPercent(value string) bool {
+	for start := 0; ; {
+		token, next, ok := nextSpaceToken(value, start)
+		if !ok {
+			return false
+		}
+
+		if _, unit, parsed := css.ParseLength(token); parsed && unit == "%" {
+			return true
+		}
+
+		start = next
+	}
+}
+
+func firstRadiusPercent(horiz, vert string) float64 {
+	for _, side := range []string{horiz, vert} {
+		for start := 0; ; {
+			token, next, ok := nextSpaceToken(side, start)
+			if !ok {
+				break
+			}
+
+			if percent, unit, parsed := css.ParseLength(token); parsed && unit == "%" && percent >= 0 {
+				return percent
+			}
+
+			start = next
+		}
+	}
+
+	return 0
+}
+
+func applyUniformRadiusPercent(style *ResolvedStyle, percent float64) {
+	style.BorderRadius = 0
+	style.BorderRadiusPercent = percent
+	clearCornerRadiiY(style)
+}
+
+func parseRadiusLengths(value string, fsize float64) ([]float64, bool) {
+	values := make([]float64, 0, borderRadiusValueCount)
+
+	for start := 0; ; {
+		token, next, ok := nextSpaceToken(value, start)
+		if !ok {
+			break
+		}
+
+		radius, parsed := lengthBox(token, fsize, 0, cssDisplayNone)
+		if !parsed || radius < 0 {
+			return nil, false
+		}
+
+		values = append(values, radius)
+		start = next
+	}
+
+	if len(values) == 0 {
+		return nil, false
+	}
+
+	return values, true
+}
+
+func expandRadius4(values []float64) []float64 {
+	out := append([]float64(nil), values...)
+
+	for len(out) < borderRadiusValueCount {
+		switch len(out) {
+		case 1:
+			out = append(out, out[0], out[0], out[0])
+		case borderRadiusPairCount:
+			out = append(out, out[0], out[1])
+		case borderRadiusTripleCount:
+			out = append(out, out[1])
+		}
+	}
+
+	return out[:borderRadiusValueCount]
+}
+
+func assignCornerRadiiX(style *ResolvedStyle, values []float64) {
+	style.BorderRadiusTopLeft = values[0]
+	style.BorderRadiusTopRight = values[1]
+	style.BorderRadiusBottomRight = values[2]
+	style.BorderRadiusBottomLeft = values[3]
+	style.BorderRadiusPercent = -1
+
+	if values[0] == values[1] && values[1] == values[2] && values[2] == values[3] {
+		style.BorderRadius = values[0]
+	} else {
+		style.BorderRadius = 0
+	}
+}
+
+func assignCornerRadiiY(style *ResolvedStyle, values []float64) {
+	style.BorderRadiusTopLeftY = values[0]
+	style.BorderRadiusTopRightY = values[1]
+	style.BorderRadiusBottomRightY = values[2]
+	style.BorderRadiusBottomLeftY = values[3]
+}
+
+func clearCornerRadiiY(style *ResolvedStyle) {
+	style.BorderRadiusTopLeftY = 0
+	style.BorderRadiusTopRightY = 0
+	style.BorderRadiusBottomRightY = 0
+	style.BorderRadiusBottomLeftY = 0
+}
+
+const borderRadiusPercentBasis = 100.0
+
+// radiiSnapEpsilon collapses sub-pixel corner-axis noise: percentage radii
+// resolve against used box sizes, and flex distribution can leave those a
+// ULP apart on a square box (border-radius:50% of 3px). A relative gap this
+// small paints identically either way, but an exact rx != ry comparison
+// downstream treats the corner as elliptical and drops the page to bitmap.
+const radiiSnapEpsilon = 1e-9
+
+// snapRadiiXY circularizes corners whose axes differ only by float noise so
+// a dusty width cannot flip a circle into an ellipse.
+func snapRadiiXY(radiusX, radiusY [4]float64) ([4]float64, [4]float64) {
+	for idx := range radiusX {
+		axisX, axisY := radiusX[idx], radiusY[idx]
+		if axisX == axisY {
+			continue
+		}
+
+		scale := axisX
+		if axisY > scale {
+			scale = axisY
+		}
+
+		if scale < 0 {
+			scale = -scale
+		}
+
+		if scale < 1 {
+			scale = 1
+		}
+
+		if (axisX-axisY) < radiiSnapEpsilon*scale && (axisY-axisX) < radiiSnapEpsilon*scale {
+			radiusY[idx] = axisX
+		}
+	}
+
+	return radiusX, radiusY
+}
+
+// usedBorderRadiiXY resolves both axes of a box's corner ellipses together.
+// Percent radii resolve against width on X and height on Y. Absolute circular
+// shorthand (Y left 0) copies X onto Y before a unified CSS overlap scale so
+// border-radius:999px on a wide short pill becomes half-height circles, not
+// half-width ellipses.
+func usedBorderRadiiXY(sty ResolvedStyle, width, height float64) ([4]float64, [4]float64) {
+	var radiusX, radiusY [4]float64
+
+	if sty.BorderRadiusPercent >= 0 {
+		pctX := width * sty.BorderRadiusPercent / borderRadiusPercentBasis
+		pctY := height * sty.BorderRadiusPercent / borderRadiusPercentBasis
+
+		for i := range radiusX {
+			radiusX[i] = pctX
+			radiusY[i] = pctY
+		}
+
+		scaleRadiiXY(radiusX[:], radiusY[:], width, height)
+
+		return snapRadiiXY(radiusX, radiusY)
+	}
+
+	radiusX = borderRadiusValues(sty, width, height)
+	radiusY = [4]float64{
+		sty.BorderRadiusTopLeftY, sty.BorderRadiusTopRightY,
+		sty.BorderRadiusBottomRightY, sty.BorderRadiusBottomLeftY,
+	}
+
+	for idx := range radiusX {
+		if radiusX[idx] < 0 {
+			radiusX[idx] = 0
+		}
+
+		if radiusY[idx] < 0 {
+			radiusY[idx] = 0
+		}
+
+		// Circular corner: omitted Y means the same absolute radius as X.
+		if radiusY[idx] <= 0 && radiusX[idx] > 0 {
+			radiusY[idx] = radiusX[idx]
+		}
+	}
+
+	scaleRadiiXY(radiusX[:], radiusY[:], width, height)
+
+	return snapRadiiXY(radiusX, radiusY)
+}
+
+func usedBorderRadii(sty ResolvedStyle, width, height float64) [4]float64 {
+	radiusX, _ := usedBorderRadiiXY(sty, width, height)
+
+	return radiusX
+}
+
+func usedBorderRadius(sty ResolvedStyle, width, height float64) float64 {
+	return uniformRadius(usedBorderRadii(sty, width, height))
+}
+
+func borderRadiusValues(sty ResolvedStyle, width, _ float64) [4]float64 {
+	var radii [4]float64
+
+	switch {
+	case sty.BorderRadiusPercent >= 0:
+		radius := width * sty.BorderRadiusPercent / borderRadiusPercentBasis
+		for i := range radii {
+			radii[i] = radius
+		}
+	case sty.BorderRadiusTopLeft != 0 || sty.BorderRadiusTopRight != 0 ||
+		sty.BorderRadiusBottomRight != 0 || sty.BorderRadiusBottomLeft != 0:
+		radii = [4]float64{
+			sty.BorderRadiusTopLeft, sty.BorderRadiusTopRight,
+			sty.BorderRadiusBottomRight, sty.BorderRadiusBottomLeft,
+		}
+	default:
+		for i := range radii {
+			radii[i] = sty.BorderRadius
+		}
+	}
+
+	return radii
+}
+
+// scaleRadiiXY applies the CSS Backgrounds Level 3 overlap reduction: when
+// adjacent corner radii on any edge exceed that edge's length, every radius
+// (both axes) is scaled by the same factor.
+//
+// CSS adjacent-radius scaling is four edge sums on two axes.
+func scaleRadiiXY(radiusX, radiusY []float64, width, height float64) {
+	if len(radiusX) < borderRadiusValueCount || len(radiusY) < borderRadiusValueCount {
+		return
+	}
+
+	scale := 1.0
+
+	for _, edge := range []struct {
+		sum   float64
+		limit float64
+	}{
+		{sum: radiusX[0] + radiusX[1], limit: width},
+		{sum: radiusX[3] + radiusX[2], limit: width},
+		{sum: radiusY[0] + radiusY[3], limit: height},
+		{sum: radiusY[1] + radiusY[2], limit: height},
+	} {
+		if edge.sum > edge.limit && edge.sum > 0 && edge.limit/edge.sum < scale {
+			scale = edge.limit / edge.sum
+		}
+	}
+
+	if scale >= 1 {
+		return
+	}
+
+	for i := range borderRadiusValueCount {
+		radiusX[i] *= scale
+		radiusY[i] *= scale
+	}
+}
+
+func stampOpRadiiY(ops []Op, radiiY [4]float64) {
+	for idx := range ops {
+		stampOneOpRadiiY(&ops[idx], radiiY)
+	}
+}
+
+func stampOneOpRadiiY(paintOp *Op, radiiY [4]float64) {
+	if paintOp.Kind != OpFillRect && paintOp.Kind != OpStrokeRect {
+		return
+	}
+
+	if paintOp.RadiusTopLeft > 0 {
+		paintOp.RadiusTopLeftY = radiiY[0]
+	}
+
+	if paintOp.RadiusTopRight > 0 {
+		paintOp.RadiusTopRightY = radiiY[1]
+	}
+
+	if paintOp.RadiusBottomRight > 0 {
+		paintOp.RadiusBottomRightY = radiiY[2]
+	}
+
+	if paintOp.RadiusBottomLeft > 0 {
+		paintOp.RadiusBottomLeftY = radiiY[3]
+	}
+
+	paintOp.RadiusY = uniformRadius([4]float64{
+		paintOp.RadiusTopLeftY, paintOp.RadiusTopRightY,
+		paintOp.RadiusBottomRightY, paintOp.RadiusBottomLeftY,
+	})
+}
+
+func opRadiiY(paintOp *Op) [4]float64 {
+	if paintOp.RadiusTopLeftY == 0 && paintOp.RadiusTopRightY == 0 &&
+		paintOp.RadiusBottomRightY == 0 && paintOp.RadiusBottomLeftY == 0 {
+		if paintOp.RadiusY > 0 {
+			return [4]float64{paintOp.RadiusY, paintOp.RadiusY, paintOp.RadiusY, paintOp.RadiusY}
+		}
+
+		return [4]float64{}
+	}
+
+	return [4]float64{
+		paintOp.RadiusTopLeftY, paintOp.RadiusTopRightY,
+		paintOp.RadiusBottomRightY, paintOp.RadiusBottomLeftY,
+	}
+}
+
+// OpRadiiXY resolves an op's corner radii into unscaled X and Y axis arrays.
+// A missing Y radius copies X (circular corner); a zero X radius forces a
+// zero Y radius so a stale Y cannot paint a corner the op does not have. The
+// values are layout points, not raster pixels; callers scale as needed.
+func OpRadiiXY(paintOp *Op) ([4]float64, [4]float64) {
+	radiusX := opRadii(paintOp)
+	radiusY := opRadiiY(paintOp)
+
+	for idx := range radiusX {
+		if radiusX[idx] <= 0 {
+			radiusY[idx] = 0
+
+			continue
+		}
+
+		if radiusY[idx] <= 0 {
+			radiusY[idx] = radiusX[idx]
+		}
+	}
+
+	return radiusX, radiusY
+}

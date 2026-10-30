@@ -1,0 +1,66 @@
+/* Scroll rails and the commit graph.
+   The working-tree and history thumbs sit on the sidebar's right edge, the
+   same 8px square as the window scrollbar, with no track. They are fixed so
+   the sidebar clip does not apply. The engine drops an empty thumb's
+   background, so the SVG rect is the paint. #c5c9d1 is that bar in the
+   dark palette. */
+
+.list-scroll,
+.hist-scroll {
+  position: fixed;
+  z-index: 28;
+  width: 8px;
+  display: block;
+  background-color: transparent;
+}
+
+.list-thumb,
+.hist-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 8px;
+  min-height: 24px;
+  display: block;
+  border-radius: 0;
+  background-color: #c5c9d1;
+  color: #c5c9d1;
+}
+
+.list-scroll:hover .list-thumb,
+.list-thumb:hover,
+.hist-scroll:hover .hist-thumb,
+.hist-thumb:hover {
+  background-color: #e7ebf2;
+  color: #e7ebf2;
+}
+
+/* Drawer resize handle: a thin fixed strip centered on the sidebar's right
+   edge, like the VS Code sidebar resize. Dragging it widens the
+   file/source-control drawer from 268 px up to 348 px (about 30% more) so
+   long files and cards fit. It sits after the scroll rails in the document,
+   so it wins ties where they overlap, while rail thumbs keep working because
+   their centers sit clear of this strip. The 2 px SVG bar paints idle; hover
+   washes the strip so the target is unmistakable. */
+.drawer-resize {
+  position: fixed;
+  z-index: 27;
+  width: 6px;
+  display: block;
+  padding: 0;
+  border: 0;
+  /* A whisper of fill so the handle owns a paint op and hit-tests above the
+     drawer and editor edges; the 2 px SVG bar is the visible affordance. */
+  background-color: rgba(255, 255, 255, 0.02);
+  cursor: ew-resize;
+}
+
+.drawer-resize:hover { background-color: rgba(122, 162, 247, 0.32); }
+
+.hist-graph {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  overflow: hidden;
+}

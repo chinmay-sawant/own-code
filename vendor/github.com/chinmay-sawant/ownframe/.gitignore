@@ -1,0 +1,48 @@
+# Built binaries and WebAssembly output
+/ownframe
+/dist/
+/tmp/
+*.exe
+*.wasm
+*.aar
+*.xcframework
+
+# Release binary for the player example
+/examples/spotify-player/spotify-player
+
+# Go test and editor leftovers
+*.test
+*.out
+.DS_Store
+temp
+# Android and Gradle build state
+**/.gradle/
+**/build/
+**/local.properties
+# New unsigned and debug APKs stay local; signed reference builder APKs are committed.
+examples/*/android/artifacts/*-unsigned.apk
+examples/*/android/artifacts/*-debug.apk
+# Teams example SQLite state
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Temporary packages used to compile documentation fragments
+/.doc-snippets-*/
+
+# Python maintenance-check bytecode
+__pycache__/
+
+# Website starter demo distributed with the generated site.
+!frontend/public/demos/workspace-inspector/demo.wasm
+!docs/demos/workspace-inspector/demo.wasm
+!frontend/public/demos/telegram/ownframe.wasm
+!docs/demos/telegram/ownframe.wasm
+
+!frontend/public/demos/expense-tracker/demo.wasm
+!docs/demos/expense-tracker/demo.wasm
+
+!frontend/public/demos/hello/demo.wasm
+!docs/demos/hello/demo.wasm

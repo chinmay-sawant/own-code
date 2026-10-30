@@ -1,0 +1,1232 @@
+//nolint:all
+package layout
+
+import (
+	"math"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/chinmay-sawant/blinkless/internal/html"
+)
+
+func bandEmSize(ops []Op, indices []int) float64 {
+	emSize := 8.0
+
+	for _, i := range indices {
+		if ops[i].Size > 0 {
+			emSize = ops[i].Size
+
+			break
+		}
+	}
+
+	return emSize
+}
+
+// band is a group of op indices sharing a baseline Y (average kept coherent).
+type band struct {
+	y   float64
+	idx []int
+}
+
+// bandShift maps an old baseline to the delta that lands it on its target.
+type bandShift struct{ y0, dy float64 }
+
+// collectTextBands groups text/bullet ops into baseline bands.
+func collectTextBands(ops []Op, start, end int, yEps float64) []band {
+	var bands []band
+
+	for idx := start; idx < end && idx < len(ops); idx++ {
+		paintOp := ops[idx]
+		if paintOp.Kind != OpText && paintOp.Kind != OpBullet {
+			continue
+		}
+
+		placed := false
+
+		for bi := range bands {
+			if math.Abs(bands[bi].y-paintOp.Y) <= yEps {
+				bands[bi].idx = append(bands[bi].idx, idx)
+				// Keep average Y so multi-glyph lines stay coherent.
+				n := float64(len(bands[bi].idx))
+				bands[bi].y = (bands[bi].y*(n-1) + paintOp.Y) / n
+				placed = true
+
+				break
+			}
+		}
+
+		if !placed {
+			bands = append(bands, band{y: paintOp.Y, idx: []int{idx}})
+		}
+	}
+
+	return bands
+}
+
+// sortBandsTopDown sorts bands by Y ascending.
+func sortBandsTopDown(bands []band) {
+	sort.Slice(bands, func(i, j int) bool { return bands[i].y < bands[j].y })
+}
+
+// measureCellContent returns the max-content border-box width of the cell
+// (longest unwrapped line, not longest word). Using min-content here made
+// auto tables shrink-wrap to a rivulet of columns and inflate row heights
+// via forced wraps (wiki filmography / any dense multi-column table).
+func (e *engine) measureCellContent(n *html.Node, st *ResolvedStyle) float64 {
+	minW, maxW := e.measureCellMinMax(n, st)
+	_ = minW
+
+	return maxW
+}
+
+// measureCellMinMax returns min-content and max-content border-box widths.
+// min-content ≈ longest unbreakable word; max-content ≈ widest line if soft
+// wraps are not taken (hard breaks from <br>/blocks still split lines).
+// When word-break/overflow-wrap allow breaking long tokens, min-content uses
+// the longest soft segment (or widest single rune) so URL-heavy cells can
+// shrink instead of forcing the table past the page edge.
+//
+// Short nowrap-only lines (wiki Ref cells with [127][128]) use the full line
+// as min-content so adjacent cite markers stay on one horizontal line instead
+// of wrapping into a stacked, overlapping pair in a one-marker-wide column.
+func (e *engine) measureCellMinMax(node *html.Node, style *ResolvedStyle) (float64, float64) {
+	// Size containment (and content-visibility: hidden) sizes intrinsic widths
+	// as if the descendants were absent: contain-intrinsic inline size (else
+	// 0) plus box chrome. A fixed intrinsic length contributes the same to
+	// min-content and max-content.
+	if containsSize(*style) || style.ContentVisibility == contentVisibilityHidden {
+		intrinsicW := containmentIntrinsicWidth(*style)
+		if intrinsicW < 0 {
+			intrinsicW = 0
+		}
+
+		chrome := e.scalePt(style.PaddingLeft) + e.scalePt(style.PaddingRight) +
+			e.scalePt(style.BorderLeft.Width) + e.scalePt(style.BorderRight.Width)
+		// Inline boxes measure their own chrome while walking text.
+		if style.Display == cssDisplayInline {
+			chrome = 0
+		}
+
+		width := e.scalePt(intrinsicW) + chrome
+
+		return width, width
+	}
+
+	cellMeas := &cellMeasure{ //nolint:exhaustruct // zero fields are the flushed-line state
+		engine: e,
+		em:     style.FontSize,
+		root:   node,
+	}
+	cellMeas.walk(node, style, style.WhiteSpace == cssWhiteSpaceNowrap || style.WhiteSpace == cssWhiteSpacePre)
+	cellMeas.flushLine()
+
+	chrome := e.scalePt(style.PaddingLeft) + e.scalePt(style.PaddingRight) +
+		e.scalePt(style.BorderLeft.Width) + e.scalePt(style.BorderRight.Width)
+	// Inline flex items measure their own padding/border while walking their
+	// text (inlineMeasurementChromeWidth). Do not add that chrome a second
+	// time as the outer cell contribution; this keeps intrinsic pill widths
+	// symmetric with the painted box.
+	if style.Display == cssDisplayInline {
+		chrome = 0
+	}
+
+	minW := cellMeas.longestWord + chrome
+	maxW := cellMeas.maxW + chrome
+
+	if maxW < minW {
+		maxW = minW
+	}
+
+	return minW, maxW
+}
+
+// cellMeasure accumulates min/max-content width contributions while walking a
+// table cell's subtree (see measureCellMinMax). It keeps only the scalar
+// metrics: the resolved style is read through pointers, so a measurement
+// never copies the 6KB record per node.
+type cellMeasure struct {
+	engine         *engine
+	root           *html.Node
+	em             float64
+	lineW          float64
+	maxW           float64
+	longestWord    float64
+	lineOnlyNowrap bool
+	lineHasInk     bool
+}
+
+// flushLine folds the current line into maxW and resets the line state.
+func (m *cellMeasure) flushLine() {
+	if m.lineW > m.maxW {
+		m.maxW = m.lineW
+	}
+
+	if m.lineHasInk && m.lineOnlyNowrap && m.lineW > m.longestWord {
+		// Cap so a pathological nowrap paragraph does not freeze the table
+		// at max-content; multi-cite clusters are well under ~10em.
+		em := m.em
+		if em < 1 {
+			em = 10
+		}
+
+		if m.lineW <= em*10*m.engine.scale {
+			m.longestWord = m.lineW
+		}
+	}
+
+	m.lineW = 0
+	m.lineOnlyNowrap = true
+	m.lineHasInk = false
+}
+
+// walk measures one node's contribution to the current line.
+func (m *cellMeasure) walk(nodeN *html.Node, cstate *ResolvedStyle, nowrap bool) {
+	if nodeN == nil {
+		return
+	}
+
+	switch nodeN.Type {
+	case html.TextNode:
+		m.measureText(nodeN.Text, cstate, nowrap)
+	case html.ElementNode:
+		m.measureElement(nodeN, cstate, nowrap)
+	case html.CommentNode, html.DoctypeNode:
+		return
+	}
+}
+
+// measureText accumulates a text run into the current line, using the same
+// face selection as paint (measureTextFace) - mismatched metrics undersize
+// columns and force emergency wraps on words that should fit.
+//
+//nolint:cyclop,funlen // word-scan and nowrap paths share state; splitting hurts readability
+func (m *cellMeasure) measureText(text string, cstate *ResolvedStyle, nowrap bool) {
+	if cstate == nil {
+		return
+	}
+
+	eng := m.engine
+
+	// vertical-rl/lr: physical width is one glyph column (line-height), not the
+	// horizontal string advance. Matching Chrome shrink-to-fit for fixture-62
+	// #119 (narrow yellow column, not a wide rotated run box).
+	if isVerticalWritingMode(cstate.WritingMode) {
+		if !hasNonHTMLSpace(text) {
+			return
+		}
+
+		col := verticalWritingColumnWidth(eng, cstate)
+		chromeW := inlineMeasurementChromeWidth(eng, cstate)
+		m.lineW += col + chromeW
+		m.noteWord(col + chromeW)
+		m.lineHasInk = true
+		m.lineOnlyNowrap = nowrap
+
+		return
+	}
+
+	if !nowrap {
+		// Walk words without strings.Fields: no []string or word copies.
+		// Matching white-space:normal - runs of HTML space collapse to one gap.
+		if !hasNonHTMLSpace(text) {
+			return
+		}
+
+		m.lineOnlyNowrap = false
+		m.lineHasInk = true
+		chromeW := inlineMeasurementChromeWidth(eng, cstate)
+		m.lineW += chromeW
+
+		spaceW := m.engine.measureTextFace(" ", cstate)
+
+		// Leading space if original had leading WS and line already started.
+		if m.lineW > 0 && len(text) > 0 && isHTMLSpace(text[0]) {
+			m.lineW += spaceW
+		}
+
+		wStart := 0
+		first := true
+
+		for wStart < len(text) {
+			for wStart < len(text) && isHTMLSpace(text[wStart]) {
+				wStart++
+			}
+
+			if wStart >= len(text) {
+				break
+			}
+
+			wEnd := wStart
+			for wEnd < len(text) && !isHTMLSpace(text[wEnd]) {
+				wEnd++
+			}
+
+			word := text[wStart:wEnd]
+
+			if !first {
+				m.lineW += spaceW
+			}
+
+			first = false
+			wordW := eng.measureTextFace(transformInlineText(word, cstate.TextTransform), cstate)
+			m.lineW += wordW
+			m.noteWord(eng.minContentWidth(word, cstate, wordW+chromeW))
+
+			wStart = wEnd
+		}
+
+		return
+	}
+
+	full := eng.measureTextFace(transformInlineText(text, cstate.TextTransform), cstate) +
+		inlineMeasurementChromeWidth(eng, cstate)
+	m.lineW += full
+	m.noteWord(eng.minContentWidth(text, cstate, full))
+
+	if hasNonHTMLSpace(text) {
+		m.lineHasInk = true
+	}
+}
+
+// verticalWritingColumnWidth is the physical horizontal measure of one glyph
+// column under writing-mode: vertical-rl / vertical-lr (Chrome fit-content).
+func verticalWritingColumnWidth(eng *engine, style *ResolvedStyle) float64 {
+	if eng == nil || style == nil {
+		return 0
+	}
+
+	col := eng.lineHeightOf(style) * eng.scale
+	if font := eng.scalePt(style.FontSize); font > col {
+		col = font
+	}
+
+	return col
+}
+
+// inlineMeasurementChromeWidth keeps intrinsic flex/grid measurements in
+// lockstep with inline paint. Without the padding and border contribution,
+// flex items containing code/mark spans receive a box that is just narrower
+// than their painted inline chrome and wrap unexpectedly.
+func inlineMeasurementChromeWidth(eng *engine, style *ResolvedStyle) float64 {
+	if eng == nil || style.Display != cssDisplayInline {
+		return 0
+	}
+
+	return eng.scalePt(style.PaddingLeft) + eng.scalePt(style.PaddingRight) +
+		eng.scalePt(style.BorderLeft.Width) + eng.scalePt(style.BorderRight.Width)
+}
+
+// noteWord records a token's min-content width.
+func (m *cellMeasure) noteWord(uw float64) {
+	if uw > m.longestWord {
+		m.longestWord = uw
+	}
+}
+
+// measureElement handles br, replaced images, and block-level in-cell boxes.
+func (m *cellMeasure) measureElement(nodeN *html.Node, childCS *ResolvedStyle, nowrap bool) {
+	if childCS.Display == cssDisplayNone {
+		return
+	}
+
+	// Size containment (contain: size/strict, or content-visibility: hidden)
+	// replaces the descendant-derived intrinsic width with contain-intrinsic
+	// inline size (else 0) plus box chrome, exactly like the measureCellMinMax
+	// root guard. Descendant content must not contribute.
+	if containsSize(*childCS) || childCS.ContentVisibility == contentVisibilityHidden {
+		m.measureSizeContained(childCS)
+
+		return
+	}
+
+	if nodeN.Name == "br" {
+		m.flushLine()
+
+		return
+	}
+	// Replaced images contribute their used CSS-pixel width (wiki thumbs).
+	if nodeN.Name == cssTagImg {
+		innerW := m.engine.measureImageWidth(nodeN, *childCS)
+		m.noteWord(innerW)
+		m.lineOnlyNowrap = false
+		m.lineHasInk = true
+		m.lineW += innerW
+
+		return
+	}
+	if nodeN.Name == cssTagSVG {
+		// Reuse the used-size policy so the intrinsic width floor sees the same
+		// max-width/max-height clamp and ratio transfer as the build: max-height
+		// 100pt on a 200x200 svg contributes 100, not the raw 200px attribute.
+		innerW := m.engine.usedInlineSVGSize(nodeN, *childCS, nil).w
+		m.noteWord(innerW)
+		m.lineOnlyNowrap = false
+		m.lineHasInk = true
+		m.lineW += innerW
+
+		return
+	}
+
+	if isInputCheckbox(nodeN) {
+		innerW := defaultCheckboxSize(m.engine, *childCS)
+		m.noteWord(innerW)
+		m.lineOnlyNowrap = false
+		m.lineHasInk = true
+		m.lineW += innerW
+
+		return
+	}
+
+	if m.measureSpecifiedInlineBlock(childCS) {
+		return
+	}
+	// Block-level in-cell boxes start a new line (simplified).
+	blockish := isCellBlockish(childCS.Display)
+	if countedBySpecifiedBlockMeasure(nodeN, childCS) && nodeN != m.root {
+		m.flushLine()
+		m.noteWord(specifiedBlockOuterWidth(m.engine, childCS))
+		m.lineW = specifiedBlockOuterWidth(m.engine, childCS)
+		m.flushLine()
+
+		return
+	}
+	m.walkBlockChildren(nodeN, childCS, nowrap, blockish)
+}
+
+// measureSpecifiedInlineBlock treats a definite-width inline-block as one
+// atomic advance (specified width, content-box chrome, and margins).
+// Percentage widths stay auto: intrinsic measure has no definite CB.
+func (m *cellMeasure) measureSpecifiedInlineBlock(style *ResolvedStyle) bool {
+	if style.Display != cssDisplayInlineBlock || style.WidthPercent >= 0 || style.Width < 0 {
+		return false
+	}
+
+	width := specifiedInlineBlockOuterWidth(m.engine, style)
+	m.noteWord(width)
+	m.lineOnlyNowrap = false
+	m.lineHasInk = true
+	m.lineW += width
+
+	return true
+}
+
+// measureSizeContained folds a size-contained subtree into the current
+// measure as an atomic placeholder: its contain-intrinsic inline size (else 0)
+// plus box chrome, never its descendant content. Block-level boxes occupy
+// their own measured line.
+func (m *cellMeasure) measureSizeContained(style *ResolvedStyle) {
+	intrinsicW := containmentIntrinsicWidth(*style)
+	if intrinsicW < 0 {
+		intrinsicW = 0
+	}
+
+	chrome := m.engine.scalePt(style.PaddingLeft) + m.engine.scalePt(style.PaddingRight) +
+		m.engine.scalePt(style.BorderLeft.Width) + m.engine.scalePt(style.BorderRight.Width)
+	if style.Display == cssDisplayInline {
+		chrome = 0
+	}
+
+	width := m.engine.scalePt(intrinsicW) + chrome
+	blockish := isCellBlockish(style.Display)
+
+	if blockish {
+		m.flushLine()
+	}
+
+	m.noteWord(width)
+	m.lineOnlyNowrap = false
+	m.lineHasInk = true
+	m.lineW += width
+
+	if blockish {
+		m.flushLine()
+	}
+}
+
+func specifiedInlineBlockOuterWidth(eng *engine, style *ResolvedStyle) float64 {
+	width := eng.scalePt(style.Width)
+	if style.BoxSizing != borderBox {
+		width += eng.scalePt(style.PaddingLeft) + eng.scalePt(style.PaddingRight) +
+			eng.scalePt(style.BorderLeft.Width) + eng.scalePt(style.BorderRight.Width)
+	}
+
+	return width + eng.scalePt(style.MarginLeft) + eng.scalePt(style.MarginRight)
+}
+
+// specifiedBlockOuterWidth is the margin-box width of a blockish child with a
+// specified width, the contribution measureElement records for that arm.
+func specifiedBlockOuterWidth(eng *engine, style *ResolvedStyle) float64 {
+	width := eng.scalePt(style.Width)
+	if style.BoxSizing != borderBox {
+		width += style.horizontalChrome(eng)
+	}
+
+	return width + eng.scalePt(style.MarginLeft) + eng.scalePt(style.MarginRight)
+}
+
+// countedBySpecifiedBlockMeasure reports whether measureCellMinMax counts the
+// node's margin box through its specified-width blockish arm. Replaced and
+// contained nodes are measured by earlier arms that omit outer margins, so
+// callers must still add their horizontal chrome. Shared by measureElement and
+// nestedBlockHChrome so the two dispatch sites cannot drift apart.
+func countedBySpecifiedBlockMeasure(node *html.Node, style *ResolvedStyle) bool {
+	if node == nil || node.Type != html.ElementNode {
+		return false
+	}
+
+	if containsSize(*style) || style.ContentVisibility == contentVisibilityHidden {
+		return false
+	}
+
+	if node.Name == "br" || node.Name == cssTagImg || node.Name == cssTagSVG || isInputCheckbox(node) {
+		return false
+	}
+
+	return isCellBlockish(style.Display) && style.Width >= 0
+}
+
+// isCellBlockish reports displays that break the current measured line.
+func isCellBlockish(display string) bool {
+	switch display {
+	case displayBlock, displayTable, displayListItem, displayFlex, displayGrid:
+		return true
+	default:
+		return false
+	}
+}
+
+// walkBlockChildren walks an element's children, flushing the line before and
+// after block-level boxes.
+func (m *cellMeasure) walkBlockChildren(nodeN *html.Node, childCS *ResolvedStyle, nowrap, blockish bool) {
+	if blockish {
+		m.flushLine()
+	}
+
+	childNowrap := nowrap || childCS.WhiteSpace == cssWhiteSpaceNowrap || childCS.WhiteSpace == cssWhiteSpacePre
+
+	poll := newCtxPoll(m.engine.ctx)
+	for _, child := range nodeN.Children {
+		if poll.poll() {
+			m.engine.err = poll.err
+
+			return
+		}
+
+		childStyle := childCS
+
+		if child.Type == html.ElementNode {
+			childStyle = m.engine.stylePtr(child)
+		}
+
+		m.walk(child, childStyle, childNowrap || childStyle.WhiteSpace == cssWhiteSpaceNowrap ||
+			childStyle.WhiteSpace == cssWhiteSpacePre)
+	}
+
+	if blockish {
+		m.flushLine()
+	}
+}
+
+// wordBreakPolicy is the single table for "how may a token split?" —
+// white-space, word-break and overflow-wrap combine into one enum.
+// Shared by intrinsic min-content measurement and inline overflow packing.
+//
+// Intent: breakNormal is intentionally the zero value. It is both the CSS
+// default (ordinary wrapping) and the safe conservative fallback, and the
+// only producer (wordBreakOf) always returns an explicit member. An
+// uninitialized policy therefore behaves as normal wrapping rather than as
+// an unknown mode that would need handling at every consumer.
+type wordBreakPolicy int
+
+const (
+	breakNormal  wordBreakPolicy = iota
+	breakAll                     // word-break:break-all / overflow-wrap:anywhere
+	breakWord                    // overflow-wrap:break-word (soft only)
+	breakNever                   // white-space:nowrap|pre
+	breakKeepAll                 // word-break:keep-all
+)
+
+func wordBreakOf(sty *ResolvedStyle) wordBreakPolicy {
+	if sty.WhiteSpace == cssWhiteSpaceNowrap || sty.WhiteSpace == cssWhiteSpacePre {
+		return breakNever
+	}
+
+	// line-break:anywhere allows breaks between any typographic units, same
+	// practical effect as overflow-wrap:anywhere for our line breaker.
+	if sty.WordBreak == "break-all" || sty.OverflowWrap == overflowWrapAnywhere ||
+		sty.LineBreak == overflowWrapAnywhere {
+		return breakAll
+	}
+
+	if sty.WordBreak == "keep-all" {
+		return breakKeepAll
+	}
+
+	if sty.OverflowWrap == overflowWrapBreakWord {
+		return breakWord
+	}
+
+	return breakNormal
+}
+
+// softModeOf maps a break policy to the soft-wrap rune table used by
+// breakToken / splitTextToWidth. Emergency (breakNormal) uses URL-ish
+// opportunities only so ordinary hyphenated words stay intact.
+func softModeOf(pol wordBreakPolicy) softBreakMode {
+	switch pol {
+	case breakAll:
+		return softBreakNone
+	case breakWord:
+		return softBreakWord
+	case breakNever, breakKeepAll:
+		return softBreakURL
+	case breakNormal:
+		return softBreakURL
+	}
+
+	return softBreakURL
+}
+
+// minContentWidth is the min-content contribution of a single token under
+// the element's word-break / overflow-wrap policy (CSS min-content). full is
+// the token's already-measured full advance (the caller measures it for the
+// line anyway), so breakNormal/breakNever return it without re-measuring.
+// Emergency print wrapping (tokens wider than the used line) is layout-only
+// and must not shrink table column mins to a single rune.
+func (e *engine) minContentWidth(cssSheet string, sty *ResolvedStyle, full float64) float64 {
+	if cssSheet == "" || sty == nil {
+		return 0
+	}
+
+	switch wordBreakOf(sty) {
+	case breakNever:
+		return full
+	case breakAll:
+		return e.maxRuneWidth(cssSheet, sty)
+	case breakWord:
+		// Soft opportunities (/, ?, &, ...) split the token for min-content.
+		return e.maxSoftSegmentWidth(cssSheet, sty)
+	case breakNormal, breakKeepAll:
+		return full
+	}
+
+	return full
+}
+
+func (e *engine) maxRuneWidth(text string, style *ResolvedStyle) float64 {
+	if style == nil {
+		return 0
+	}
+
+	var widest float64
+
+	for _, r := range text {
+		w := e.measureRuneFace(r, style)
+		if w > widest {
+			widest = w
+		}
+	}
+
+	return widest
+}
+
+func (e *engine) maxSoftSegmentWidth(cssS string, sty *ResolvedStyle) float64 {
+	if cssS == "" || sty == nil {
+		return 0
+	}
+
+	var widest, cur float64
+
+	for _, r := range cssS {
+		cur += e.measureRuneFace(r, sty)
+		// Soft-break runes end a min-content segment; residual after the
+		// last break is flushed below (covers tokens with no soft points).
+		if isSoftWrapRune(r, softBreakWord) {
+			if cur > widest {
+				widest = cur
+			}
+
+			cur = 0
+		}
+	}
+
+	if cur > widest {
+		widest = cur
+	}
+
+	if widest <= 0 {
+		return e.maxRuneWidth(cssS, sty)
+	}
+
+	return widest
+}
+
+// countLeadingTHRows returns how many consecutive leading rows are composed
+// entirely of <th> cells (column header band without an explicit <thead>).
+// Empty rows (no cells) are skipped so a leading blank tr does not block
+// detection of the real header band.
+func countLeadingTHRows(rows [][]*html.Node) int {
+	node := 0
+
+	for _, row := range rows {
+		if len(row) == 0 {
+			continue
+		}
+
+		allTH := true
+
+		for _, cell := range row {
+			if cell == nil || cell.Name != "th" {
+				allTH = false
+
+				break
+			}
+		}
+
+		if !allTH {
+			break
+		}
+
+		node++
+	}
+
+	return node
+}
+
+// stripEmptyTableRows removes rows that have no table-cell elements.
+// Safe: rowspan placement only creates geometry for rows that exist in the
+// source list; empty tr nodes never start cells and only produced phantom
+// min-height bands in the border-collapse grid.
+func stripEmptyTableRows(rows [][]*html.Node) [][]*html.Node {
+	if len(rows) == 0 {
+		return rows
+	}
+
+	out := rows[:0]
+
+	for _, row := range rows {
+		if len(row) == 0 {
+			continue
+		}
+
+		out = append(out, row)
+	}
+	// If every row was empty, return a fresh empty slice (not a shared buf).
+	if len(out) == 0 {
+		return nil
+	}
+
+	return out
+}
+
+// rowCellsHaveNoInk reports whether every cell in the row is free of text,
+// images, and other non-whitespace content (padding-only empty th/td).
+// The ink flags are recorded once per cell at build time (buildCell), so
+// this is a flat flag loop instead of a per-row subtree walk.
+func rowCellsHaveNoInk(cells []*box) bool {
+	for _, cell := range cells {
+		if cell != nil && cell.hasInk {
+			return false
+		}
+	}
+
+	return true
+}
+
+func nodeHasTableInk(node *html.Node) bool {
+	if node == nil {
+		return false
+	}
+
+	switch node.Type {
+	case html.TextNode:
+		return strings.TrimSpace(node.Text) != ""
+	case html.ElementNode:
+		if isTableInkElement(node.Name) {
+			return true
+		}
+
+		for _, child := range node.Children {
+			if nodeHasTableInk(child) {
+				return true
+			}
+		}
+	case html.CommentNode, html.DoctypeNode:
+		return false
+	}
+
+	return false
+}
+
+// isTableInkElement reports element names that carry ink without text.
+func isTableInkElement(name string) bool {
+	switch name {
+	case cssTagImg, "svg", "video", "canvas", "br":
+		return true
+	}
+
+	return false
+}
+
+func isHTMLSpace(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\n' || b == '\r' || b == '\f'
+}
+
+// hasNonHTMLSpace reports that s contains at least one non-HTML-whitespace byte.
+// Used instead of strings.TrimSpace(s) != "" to avoid the TrimSpace string header.
+func hasNonHTMLSpace(s string) bool {
+	for i := range len(s) {
+		if !isHTMLSpace(s[i]) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// measureImageWidth returns the same used content width that buildImage and
+// inline painting use. Keeping intrinsic/attribute/CSS/max/containing-block
+// policy in usedImageSize prevents float/table shrink-to-fit from disagreeing
+// with the eventually painted image.
+func (e *engine) measureImageWidth(n *html.Node, st ResolvedStyle) float64 {
+	if n == nil {
+		return 0
+	}
+
+	return e.usedImageSize(n, st, e.resolveImage(n.Attribute("src"))).w
+}
+
+// measureLargestImageWidth walks n for the widest descendant <img>.
+func (e *engine) measureLargestImageWidth(node *html.Node) float64 {
+	if node == nil {
+		return 0
+	}
+
+	var best float64
+
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		if node.Type == html.ElementNode {
+			if node.Name == cssTagImg {
+				st := e.styleVal(node)
+				if w := e.measureImageWidth(node, st); w > best {
+					best = w
+				}
+			}
+
+			for _, c := range node.Children {
+				walk(c)
+			}
+		}
+	}
+	walk(node)
+
+	return best
+}
+
+// layoutCell measures the height of a cell's content (no ops emitted).
+func (e *engine) layoutCell(n *html.Node, sty ResolvedStyle, width float64) float64 {
+	measure := e.noEmit
+	if measure {
+		e.beginMeasureFloats()
+	}
+
+	_, contentW := e.contentBox(0, width, &sty)
+	curY := e.scalePt(sty.PaddingTop) + e.scalePt(sty.BorderTop.Width)
+	enclose := e.pushBFCFloats(sty, 0, contentW)
+	curY = e.flowChildren(nil, n.Children, sty, contentW, 0, 0, curY)
+
+	if enclose && e.bfcFloats != nil {
+		curY = e.bfcFloats.extentCy(0, curY)
+	}
+
+	e.popBFCFloats(enclose)
+
+	if measure {
+		e.endMeasureFloats()
+	}
+
+	return e.borderBoxBottom(sty, curY)
+}
+
+func colSpan(n *html.Node) int {
+	return tableSpan(n.Attribute("colspan"))
+}
+
+func cellRowSpan(n *html.Node) int {
+	return tableSpan(n.Attribute("rowspan"))
+}
+
+const maxTableSpan = 1024
+
+func tableSpan(value string) int {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 1
+	}
+
+	if v, err := strconv.Atoi(value); err == nil && v > 1 {
+		if v > maxTableSpan {
+			v = maxTableSpan
+		}
+
+		return v
+	}
+
+	return 1
+}
+
+// tableColumnEnv is everything the column-sizing pass needs; no DOM, no ops.
+type tableColumnEnv struct {
+	colMin []float64 // min-content per column (content only)
+	colW   []float64 // max-content per column (content only); mutated to used widths
+	colPct []float64 // width:% hints, -1 = auto
+	colAbs []float64 // width:pt hints, -1 = auto
+	chrome float64   // spacing + border + padding
+	availW float64
+	// tableW is a definite table border-box width when >= 0; -1 means auto.
+	tableW float64
+	// fixed is table-layout:fixed with a definite table width: columns are
+	// sized from width hints / equal shares, not content max-content.
+	fixed bool
+}
+
+// sizeTableColumns resolves used column widths and the table border-box width
+// (CSS2.1-lite auto/fixed: sum, % and abs hints, min floors, definite scaling).
+func sizeTableColumns(env tableColumnEnv) ([]float64, float64) {
+	colW := env.colW
+	colMin := env.colMin
+	colPct := env.colPct
+	colAbs := env.colAbs
+	chrome := env.chrome
+	availW := env.availW
+
+	nCols := len(colW)
+	if nCols == 0 {
+		if env.tableW >= 0 {
+			return colW, env.tableW
+		}
+
+		return colW, availW
+	}
+
+	sumMax, sumMin := columnWidthSums(colW, colMin, chrome)
+
+	definiteTable := env.tableW >= 0
+	tableW := env.tableW
+
+	if !definiteTable {
+		tableW = availW
+		if sumMax < availW {
+			// width:auto — shrink-wrap to max-content (not min-content).
+			tableW = sumMax
+		}
+	}
+
+	if env.fixed && definiteTable {
+		sizeFixedTableColumns(colW, colPct, colAbs, tableW, chrome, nCols)
+
+		return colW, tableW
+	}
+
+	distributeColumnWidths(colW, colMin, colPct, colAbs, tableW, chrome, definiteTable, sumMax, sumMin, nCols)
+
+	// Auto tables: border box covers used columns. Definite width keeps tableW.
+	if !definiteTable {
+		if sumCols := chrome + sumColWidths(colW); sumCols > tableW {
+			tableW = sumCols
+		}
+	}
+
+	return colW, tableW
+}
+
+// sizeFixedTableColumns applies table-layout:fixed column used widths for a
+// definite table border box: hinted columns take their share, remaining
+// columns split the leftover evenly (content max-content is ignored).
+func sizeFixedTableColumns(colW, colPct, colAbs []float64, tableW, chrome float64, nCols int) {
+	inner := tableW - chrome
+	if inner < 0 {
+		inner = 0
+	}
+
+	used, autoN := applyFixedColumnHints(colW, colPct, colAbs, inner)
+	remain := inner - used
+
+	if remain < 0 {
+		remain = 0
+	}
+
+	fillFixedColumnRemainder(colW, colPct, colAbs, remain, autoN, nCols)
+}
+
+func applyFixedColumnHints(colW, colPct, colAbs []float64, inner float64) (float64, int) {
+	var (
+		used  float64
+		autoN int
+	)
+
+	for idx := range colW {
+		switch {
+		case colPct[idx] >= 0:
+			colW[idx] = inner * colPct[idx] / 100
+			used += colW[idx]
+		case colAbs[idx] >= 0:
+			colW[idx] = colAbs[idx]
+			used += colW[idx]
+		default:
+			autoN++
+		}
+	}
+
+	return used, autoN
+}
+
+func fillFixedColumnRemainder(
+	colW, colPct, colAbs []float64, remain float64, autoN, nCols int,
+) {
+	switch {
+	case autoN > 0:
+		share := remain / float64(autoN)
+
+		for idx := range colW {
+			if colPct[idx] < 0 && colAbs[idx] < 0 {
+				colW[idx] = share
+			}
+		}
+	case remain > 0:
+		spreadRemainderOverHinted(colW, colPct, remain, nCols)
+	}
+}
+
+// distributeColumnWidths applies the hint/extra/shrink strategy to the used
+// column widths (extracted from sizeTableColumns for clarity).
+func distributeColumnWidths(
+	colW, colMin, colPct, colAbs []float64, tableW, chrome float64,
+	definiteTable bool, sumMax, sumMin float64, nCols int,
+) {
+	switch {
+	case definiteTable && hasColumnHints(colPct, colAbs):
+		distributeColumnHints(colW, colMin, colPct, colAbs, tableW, chrome, nCols)
+	case tableW > sumMax:
+		distributeColumnExtra(colW, tableW, sumMax, nCols)
+	case tableW < sumMax:
+		distributeColumnShrink(colW, colMin, sumMax, sumMin, tableW, chrome, definiteTable)
+	}
+}
+
+// columnWidthSums returns the max-content and min-content sums plus chrome.
+func columnWidthSums(colW, colMin []float64, chrome float64) (float64, float64) {
+	sumMax, sumMin := 0.0, 0.0
+
+	for i := range colW {
+		sumMax += colW[i]
+		sumMin += colMin[i]
+	}
+
+	return sumMax + chrome, sumMin + chrome
+}
+
+// sumColWidths returns the sum of the used column widths.
+func sumColWidths(colW []float64) float64 {
+	sum := 0.0
+	for i := range colW {
+		sum += colW[i]
+	}
+
+	return sum
+}
+
+// hasColumnHints reports whether any column has a % or absolute width hint.
+func hasColumnHints(colPct, colAbs []float64) bool {
+	for i := range colPct {
+		if colPct[i] >= 0 || colAbs[i] >= 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
+// distributeColumnHints resolves a definite table width with % / absolute
+// column hints: hinted columns take their share first, then the leftover is
+// spread over auto columns (or by % share when every column is hinted).
+func distributeColumnHints(colW, colMin, colPct, colAbs []float64, tableW, chrome float64, nCols int) {
+	inner := tableW - chrome
+	if inner < 0 {
+		inner = 0
+	}
+
+	used, autoMax := applyHintedColumns(colW, colMin, colPct, colAbs, inner)
+
+	remain := inner - used
+	if remain < 0 {
+		remain = 0
+	}
+
+	switch {
+	case autoMax > 0 && remain > 0:
+		spreadRemainderOverAuto(colW, colMin, colPct, colAbs, remain, autoMax)
+	case autoMax == 0 && remain > 0:
+		// All columns hinted — distribute leftover by % share, else evenly.
+		spreadRemainderOverHinted(colW, colPct, remain, nCols)
+	}
+}
+
+// applyHintedColumns sizes the hinted columns and returns the used width plus
+// the total max-content of the auto columns (extracted from
+// distributeColumnHints for readability).
+func applyHintedColumns(colW, colMin, colPct, colAbs []float64, inner float64) (float64, float64) {
+	used, autoMax := 0.0, 0.0
+
+	for idx := range colW {
+		switch {
+		case colPct[idx] >= 0:
+			colW[idx] = maxF(inner*colPct[idx]/100, colMin[idx])
+			used += colW[idx]
+		case colAbs[idx] >= 0:
+			colW[idx] = maxF(colAbs[idx], colMin[idx])
+			used += colW[idx]
+		default:
+			autoMax += colW[idx]
+		}
+	}
+
+	return used, autoMax
+}
+
+// spreadRemainderOverAuto distributes leftover width over auto columns
+// proportionally to their current share (min floor per column).
+func spreadRemainderOverAuto(colW, colMin, colPct, colAbs []float64, remain, autoMax float64) {
+	for i := range colW {
+		if colPct[i] < 0 && colAbs[i] < 0 {
+			colW[i] = maxF(remain*(colW[i]/autoMax), colMin[i])
+		}
+	}
+}
+
+// spreadRemainderOverHinted distributes leftover width by % share, else evenly.
+func spreadRemainderOverHinted(colW, colPct []float64, remain float64, nCols int) {
+	pctTotal := 0.0
+
+	for i := range colPct {
+		if colPct[i] > 0 {
+			pctTotal += colPct[i]
+		}
+	}
+
+	for i := range colW {
+		if pctTotal > 0 && colPct[i] > 0 {
+			colW[i] += remain * (colPct[i] / pctTotal)
+		} else {
+			colW[i] += remain / float64(nCols)
+		}
+	}
+}
+
+func maxF(a, b float64) float64 {
+	return max(a, b)
+}
+
+// distributeColumnExtra spreads a surplus evenly across all columns.
+func distributeColumnExtra(colW []float64, tableW, sumMax float64, nCols int) {
+	extra := (tableW - sumMax) / float64(nCols)
+	for i := range colW {
+		colW[i] += extra
+	}
+}
+
+// distributeColumnShrink squeezes columns when the used max-content width
+// overflows the table: grow from min toward max, scale mins into a definite
+// box, or honor mins for auto tables (which may overflow).
+func distributeColumnShrink(colW, colMin []float64, sumMax, sumMin, tableW, chrome float64, definiteTable bool) {
+	innerAvail := tableW - chrome
+	if innerAvail < 0 {
+		innerAvail = 0
+	}
+
+	innerMax := sumMax - chrome
+	innerMin := sumMin - chrome
+
+	switch {
+	case innerAvail >= innerMin && innerMax > innerMin:
+		growFromMinTowardMax(colW, colMin, innerAvail, innerMin, innerMax)
+	case innerMin > 0 && innerAvail < innerMin:
+		// Narrower than min-content.
+		if definiteTable {
+			scaleMinsIntoBox(colW, colMin, innerAvail, innerMin)
+		} else {
+			// width:auto — honor mins (table may overflow) rather than
+			// crushing text into emergency mid-word wraps.
+			copy(colW, colMin)
+		}
+	case innerMax > 0:
+		scaleToInnerWidth(colW, colMin, innerAvail, innerMax, definiteTable)
+	}
+}
+
+// growFromMinTowardMax grows each column from min toward max proportionally
+// to its free space.
+func growFromMinTowardMax(colW, colMin []float64, innerAvail, innerMin, innerMax float64) {
+	free := innerAvail - innerMin
+	span := innerMax - innerMin
+
+	for idx := range colW {
+		grow := colW[idx] - colMin[idx]
+		if grow < 0 {
+			grow = 0
+		}
+
+		colW[idx] = colMin[idx] + free*(grow/span)
+	}
+}
+
+// scaleMinsIntoBox scales the column mins into a definite, narrower box so
+// max-width:100% images in a 22em float still shrink.
+func scaleMinsIntoBox(colW, colMin []float64, innerAvail, innerMin float64) {
+	scale := innerAvail / innerMin
+	if scale < 0 {
+		scale = 0
+	}
+
+	for i := range colW {
+		colW[i] = colMin[i] * scale
+	}
+}
+
+// scaleToInnerWidth scales columns down to the available inner width.
+func scaleToInnerWidth(colW, colMin []float64, innerAvail, innerMax float64, definiteTable bool) {
+	scale := innerAvail / innerMax
+	if scale < 0 {
+		scale = 0
+	}
+
+	for i := range colW {
+		colW[i] *= scale
+		if !definiteTable && colW[i] < colMin[i] {
+			colW[i] = colMin[i]
+		}
+	}
+}
+
+// DeactivateOp marks an op so every painter (Paint, PaintBand) and every
+// pagination helper ignores it while keeping its slot in Ops: the box tree
+// stores op indices (opStart/opEnd) that Paint relies on, so entries must
+// not be removed.
+const opKindNoop OpKind = 255
+
+// OpKindNoop is opKindNoop under an exported name. A display-list consumer
+// outside this module sees deactivated operations in Ops and needs a name for
+// the sentinel in order to skip them.
+const OpKindNoop OpKind = opKindNoop
+
+func DeactivateOp(paintOp *Op) {
+	if paintOp == nil {
+		return
+	}
+
+	paintOp.Kind = opKindNoop
+	paintOp.setURI("")
+}

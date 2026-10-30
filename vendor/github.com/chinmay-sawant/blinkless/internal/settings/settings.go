@@ -1,0 +1,699 @@
+package settings
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+)
+
+const (
+	sPDFVersion14 = "1.4"
+	sPDFVersion17 = "1.7"
+	sPDFVersion20 = "2.0"
+	sUnknown      = "unknown"
+)
+
+const (
+	// ProfileNone indicates no conformance profile (standard unconstrained PDF).
+	ProfileNone = ""
+	// ProfilePDFA3a indicates PDF/A-3a archival conformance (ISO 19005-3 Level A).
+	ProfilePDFA3a = "PDF/A-3a"
+	// ProfilePDFUA1 indicates PDF/UA-1 accessibility conformance (ISO 14289-1).
+	ProfilePDFUA1 = "PDF/UA-1"
+	// ProfilePDFA3aPDFUA1 indicates combined PDF/A-3a and PDF/UA-1 conformance.
+	ProfilePDFA3aPDFUA1 = "PDF/A-3a+PDF/UA-1"
+	// ProfileDualA3aUA1 is an alias for ProfilePDFA3aPDFUA1.
+	ProfileDualA3aUA1 = ProfilePDFA3aPDFUA1
+	// ProfilePDFA4 indicates PDF/A-4 archival conformance (ISO 19005-4).
+	ProfilePDFA4 = "PDF/A-4"
+	// ProfilePDFUA2 indicates PDF/UA-2 accessibility conformance (ISO 14289-2).
+	ProfilePDFUA2 = "PDF/UA-2"
+	// ProfilePDFA4PDFUA2 indicates combined PDF/A-4 and PDF/UA-2 conformance.
+	ProfilePDFA4PDFUA2 = "PDF/A-4+PDF/UA-2"
+	// ProfileDualA4UA2 is an alias for ProfilePDFA4PDFUA2.
+	ProfileDualA4UA2 = ProfilePDFA4PDFUA2
+)
+
+var (
+	ErrInvalidPDFVersion = errors.New("settings: invalid pdf version (allowed: 1.4|1.7|2.0)")
+
+	// ErrInvalidPDFProfile reports an invalid or unsupported PDF conformance profile.
+	ErrInvalidPDFProfile = errors.New(
+		"settings: invalid pdf profile (allowed: a3a-ua1, a3a, ua1, a4-ua2, a4, ua2, " +
+			"PDF/A-3a+PDF/UA-1, PDF/A-3a, PDF/UA-1, PDF/A-4+PDF/UA-2, PDF/A-4, PDF/UA-2)",
+	)
+
+	// ErrProfilePDF20Unsupported indicates PDF 2.0 conformance profiles are unsupported
+	// (historical sentinel; never returned).
+	//
+	// Deprecated: PDF/A-4 and PDF/UA-2 profiles are supported since v0.2.2;
+	// this sentinel is never returned and exists only for source compatibility.
+	ErrProfilePDF20Unsupported = errors.New(
+		"settings: PDF 2.0 conformance profiles (PDF/A-4, PDF/UA-2) are unsupported",
+	)
+
+	// ErrProfilePDFA1Unsupported indicates PDF/A-1 is unsupported.
+	ErrProfilePDFA1Unsupported = errors.New("settings: PDF/A-1 is unsupported")
+)
+
+// Parse validates and normalizes a PDF conformance profile string.
+// Accepted values map to canonical constants: ProfilePDFA3aPDFUA1,
+// ProfilePDFA3a, ProfilePDFUA1, ProfilePDFA4PDFUA2, ProfilePDFA4,
+// ProfilePDFUA2, or ProfileNone ("").
+// Invalid or unsupported values return an error wrapping the respective sentinel.
+func ParsePDFProfile(value string) (string, error) {
+	raw := strings.TrimSpace(strings.ToLower(value))
+	if raw == "" {
+		return ProfileNone, nil
+	}
+
+	cleaned := strings.ReplaceAll(raw, " ", "")
+	cleaned = strings.ReplaceAll(cleaned, "_", "")
+
+	switch cleaned {
+	case "pdf/a-3a+pdf/ua-1", "pdf/a-3a-pdf/ua-1", "pdf/a-3a+ua-1", "pdf/a-3a-ua-1",
+		"pdfa-3a+pdfua-1", "pdfa-3a-pdfua-1", "pdfa3a+pdfua1", "pdfa3a-pdfua1",
+		"a3a+ua1", "a3a-ua1", "a3a,ua1", "a3a+pdf/ua-1", "a3a-pdf/ua-1",
+		"pdf/ua-1+pdf/a-3a", "pdf/ua-1-pdf/a-3a", "pdfua-1+pdfa-3a", "pdfua1+pdfa3a",
+		"ua1+a3a", "ua1-a3a", "ua1,a3a", "ua1+pdf/a-3a", "ua1-pdf/a-3a":
+		return ProfilePDFA3aPDFUA1, nil
+	case "pdf/a-3a", "pdfa-3a", "pdf-a-3a",
+		"a-3a", "a3a", "pdfa3a":
+		return ProfilePDFA3a, nil
+	case "pdf/ua-1", "pdfua-1", "pdf-ua-1",
+		"ua-1", "ua1", "pdfua1":
+		return ProfilePDFUA1, nil
+	case "pdf/a-4+pdf/ua-2", "pdf/a-4-pdf/ua-2", "pdf/a-4+ua-2", "pdf/a-4-ua-2",
+		"pdfa-4+pdfua-2", "pdfa-4-pdfua-2", "pdfa4+pdfua2", "pdfa4-pdfua2",
+		"a4+ua2", "a4-ua2", "a4,ua2", "a4+pdf/ua-2", "a4-pdf/ua-2",
+		"pdf/ua-2+pdf/a-4", "pdf/ua-2-pdf/a-4", "pdfua-2+pdfa-4", "pdfua2+pdfa4",
+		"ua2+a4", "ua2-a4", "ua2,a4", "ua2+pdf/a-4", "ua2-pdf/a-4":
+		return ProfilePDFA4PDFUA2, nil
+	case "pdf/a-4", "pdf/a-4a", "pdf/a4", "pdfa-4", "pdfa-4a", "pdfa4", "pdfa4a",
+		"pdf-a-4", "pdf-a-4a", "pdf-a4", "a-4", "a4":
+		return ProfilePDFA4, nil
+	case "pdf/ua-2", "pdf/ua2", "pdfua-2", "pdfua2", "pdf-ua-2", "pdf-ua2", "ua-2", "ua2":
+		return ProfilePDFUA2, nil
+	}
+
+	if isUnsupportedProfilePDFA1(cleaned) {
+		return "", ErrProfilePDFA1Unsupported
+	}
+
+	return "", fmt.Errorf("%w: %q", ErrInvalidPDFProfile, value)
+}
+
+func isUnsupportedProfilePDFA1(profileStr string) bool {
+	switch profileStr {
+	case "pdf/a-1", "pdf/a-1a", "pdf/a-1b", "pdfa-1", "pdfa-1a", "pdfa-1b",
+		"pdf-a-1", "pdf-a-1a", "pdf-a-1b", "a-1", "a-1a", "a-1b", "a1", "a1a", "a1b",
+		"pdfa1", "pdfa1a", "pdfa1b":
+		return true
+	default:
+		return false
+	}
+}
+
+// IsPDFA3 reports whether canonicalProfile specifies PDF/A-3 archival conformance.
+func IsPDFA3(canonicalProfile string) bool {
+	return canonicalProfile == ProfilePDFA3a || canonicalProfile == ProfilePDFA3aPDFUA1
+}
+
+// IsPDFA4 reports whether canonicalProfile specifies PDF/A-4 archival conformance.
+func IsPDFA4(canonicalProfile string) bool {
+	return canonicalProfile == ProfilePDFA4 || canonicalProfile == ProfilePDFA4PDFUA2
+}
+
+// IsPDFUA1 reports whether canonicalProfile specifies PDF/UA-1 accessibility conformance.
+func IsPDFUA1(canonicalProfile string) bool {
+	return canonicalProfile == ProfilePDFUA1 || canonicalProfile == ProfilePDFA3aPDFUA1
+}
+
+// IsPDFUA2 reports whether canonicalProfile specifies PDF/UA-2 accessibility conformance.
+func IsPDFUA2(canonicalProfile string) bool {
+	return canonicalProfile == ProfilePDFUA2 || canonicalProfile == ProfilePDFA4PDFUA2
+}
+
+// IsPDFUA reports whether canonicalProfile specifies either PDF/UA-1 or PDF/UA-2 conformance.
+func IsPDFUA(canonicalProfile string) bool {
+	return IsPDFUA1(canonicalProfile) || IsPDFUA2(canonicalProfile)
+}
+
+func ParsePDFVersion(value string) (string, error) {
+	switch normalize(strings.TrimSpace(value)) {
+	case "", sPDFVersion14:
+		return sPDFVersion14, nil
+	case sPDFVersion17:
+		return sPDFVersion17, nil
+	case sPDFVersion20:
+		return sPDFVersion20, nil
+	default:
+		return "", fmt.Errorf("%w: %q", ErrInvalidPDFVersion, value)
+	}
+}
+
+const (
+	defaultMarginMM       = 10
+	defaultHeaderFontSize = 12
+	defaultTOCFontScale   = 0.8
+	defaultOutlineDepth   = 4
+	defaultImageWidth     = 1024
+	defaultImageQuality   = 94
+	sAbort                = "abort"
+)
+
+// Orientation mirrors wkhtmltopdf --orientation.
+type Orientation int
+
+const (
+	OrientationPortrait Orientation = iota
+	OrientationLandscape
+)
+
+func (o Orientation) String() string {
+	switch o {
+	case OrientationPortrait:
+		return "Portrait"
+	case OrientationLandscape:
+		return "Landscape"
+	}
+
+	return sUnknown
+}
+
+// ParseOrientation accepts "portrait" or "landscape" (case-insensitive).
+func ParseOrientation(value string) (Orientation, error) {
+	switch normalize(value) {
+	case "", "portrait":
+		return OrientationPortrait, nil
+	case "landscape":
+		return OrientationLandscape, nil
+	}
+
+	return OrientationPortrait, errInvalid("orientation", value, "portrait|landscape")
+}
+
+// LoadErrorHandling mirrors wkhtmltopdf --load-error-handling.
+type LoadErrorHandling int
+
+const (
+	LoadErrorAbort LoadErrorHandling = iota
+	LoadErrorSkip
+	LoadErrorIgnore
+)
+
+func (h LoadErrorHandling) String() string {
+	switch h {
+	case LoadErrorAbort:
+		return sAbort
+	case LoadErrorSkip:
+		return "skip"
+	case LoadErrorIgnore:
+		return sIgnore
+	}
+
+	return sUnknown
+}
+
+// ParseLoadErrorHandling accepts abort|skip|ignore.
+func ParseLoadErrorHandling(value string) (LoadErrorHandling, error) {
+	switch normalize(value) {
+	case "", sAbort:
+		return LoadErrorAbort, nil
+	case "skip":
+		return LoadErrorSkip, nil
+	case "ignore":
+		return LoadErrorIgnore, nil
+	}
+
+	return LoadErrorAbort, errInvalid("load-error-handling", value, "abort|skip|ignore")
+}
+
+// MediaType mirrors wkhtmltopdf --print-media-type (screen|print) and the
+// --media-type override. The web and load key setters read and write it, and
+// css.Apply maps its Options.Media onto it.
+type MediaType int
+
+const (
+	// MediaUnset is the zero value: the field was never set, so media
+	// resolution falls through to the next source (see ResolveMedia). It is
+	// NOT an explicit ignore; wkhtmltopdf "ignore" input maps here for
+	// compatibility, and the comment on ResolveMedia states how unset
+	// differs from screen/print.
+	MediaUnset MediaType = iota
+	MediaScreen
+	MediaPrint
+)
+
+func (m MediaType) String() string {
+	switch m {
+	case MediaUnset:
+		// wkhtmltopdf compatibility: "--media-type ignore" is accepted and
+		// stores MediaUnset, so its getter still reports "ignore".
+		return sIgnore
+	case MediaScreen:
+		return sScreen
+	case MediaPrint:
+		return sPrint
+	}
+
+	return sUnknown
+}
+
+// ResolveMedia computes the effective CSS media type: the print-media-type
+// override (either home) wins, then the object media-type, then the global
+// media-type, falling back to base (ResolvePDFMedia passes "print",
+// ResolveImageMedia passes "screen"). MediaUnset (the zero value) means
+// "not set" and lets resolution fall through to the next source; it is never
+// an explicit ignore. obj may be nil.
+func ResolveMedia(base string, global Web, obj *Web) string {
+	if global.PrintMediaType || obj != nil && obj.PrintMediaType {
+		return sPrint
+	}
+
+	media := global.MediaType
+
+	if obj != nil && obj.MediaType != MediaUnset {
+		media = obj.MediaType
+	}
+
+	switch media {
+	case MediaPrint:
+		return sPrint
+	case MediaScreen:
+		return sScreen
+	case MediaUnset:
+	}
+
+	return base
+}
+
+// ResolvePDFMedia resolves the effective CSS media string from PdfGlobal and
+// an optional PdfObject via ResolveMedia. The base default is "print".
+func ResolvePDFMedia(glob PdfGlobal, obj *PdfObject) string {
+	var objWeb *Web
+
+	if obj != nil {
+		objView := Web{ //nolint:exhaustruct // intentional zero-value fields
+			PrintMediaType: obj.Load.PrintMediaType || obj.Web.PrintMediaType,
+			MediaType:      obj.Load.MediaType,
+		}
+		if obj.Web.MediaType != MediaUnset {
+			objView.MediaType = obj.Web.MediaType
+		}
+
+		objWeb = &objView
+	}
+
+	return ResolveMedia(sPrint, glob.Web, objWeb)
+}
+
+// ResolveImageMedia resolves the effective CSS media string from ImageGlobal
+// plus the PdfGlobal and optional PdfObject layers via ResolveMedia. The base
+// default is "screen".
+func ResolveImageMedia(global PdfGlobal, image ImageGlobal, obj *PdfObject) string {
+	web := image.Web
+	if global.Web.PrintMediaType {
+		web.PrintMediaType = true
+	}
+
+	if web.MediaType == MediaUnset {
+		web.MediaType = global.Web.MediaType
+	}
+
+	var objWeb *Web
+
+	if obj != nil {
+		objView := Web{ //nolint:exhaustruct // intentional zero/partial fields
+			PrintMediaType: obj.Load.PrintMediaType || obj.Web.PrintMediaType,
+			MediaType:      obj.Load.MediaType,
+		}
+		if obj.Web.MediaType != MediaUnset {
+			objView.MediaType = obj.Web.MediaType
+		}
+
+		objWeb = &objView
+	}
+
+	return ResolveMedia(sScreen, web, objWeb)
+}
+
+// ResolveImages folds the web.images flag across the layers that register it:
+// the global web settings, an optional image-mode layer (nil outside image
+// mode), and an optional object layer (nil when the caller has no object).
+// Images stay enabled only when every supplied layer enables them, so an
+// explicit web.images=false on global, image, or object disables fetching.
+// Canonical constructors (DefaultPdfGlobal, DefaultImageGlobal,
+// DefaultPdfObject) all default the flag to true, so an untouched layer never
+// disables images on its own.
+func ResolveImages(global Web, image *ImageGlobal, obj *PdfObject) bool {
+	enabled := global.Images
+
+	if image != nil {
+		enabled = enabled && image.Web.Images
+	}
+
+	if obj != nil {
+		enabled = enabled && obj.Web.Images
+	}
+
+	return enabled
+}
+
+// Margin holds the four page margins in millimetres.
+type Margin struct {
+	Top    float64
+	Bottom float64
+	Left   float64
+	Right  float64
+}
+
+// ValidMargins reports whether m follows the settings model's margin
+// contract. Every value must be finite and left/right must be non-negative.
+// Top and bottom accept any finite negative value as the auto-margin
+// sentinel. The dotted-key margin setter calls this before storing a value.
+func ValidMargins(m Margin) bool {
+	if !finite(m.Top) || !finite(m.Right) || !finite(m.Bottom) || !finite(m.Left) {
+		return false
+	}
+
+	return m.Left >= 0 && m.Right >= 0
+}
+
+// DefaultMargins match pdfsettings.cc: 10 mm on all sides.
+func DefaultMargins() Margin {
+	return Margin{Top: defaultMarginMM, Bottom: defaultMarginMM, Left: defaultMarginMM, Right: defaultMarginMM}
+}
+
+// Size holds optional custom page dimensions in millimetres (0 = unset).
+type Size struct {
+	Width  float64 // mm; 0 = unset
+	Height float64 // mm; 0 = unset
+}
+
+// Web holds web-behaviour settings that the engine actually consults.
+// Body paint background is PdfGlobal.Background only (not a Web field).
+// Inert wkhtml keys (javascript, plugins, user-style-sheet, …) are accepted
+// via Set into Ignored maps — not typed fields (Policy A).
+type Web struct {
+	Images bool
+	// PrintMediaType / MediaType: CSS media selection inputs. ResolveMedia
+	// folds them across the global, object, and load-page layers.
+	PrintMediaType bool
+	MediaType      MediaType
+	// SimplifyDOM opts into chrome-strip heuristics for URL/print mode
+	// (--simplify-dom). Default false so invoice/report HTML is unchanged.
+	SimplifyDOM bool
+	// SimplifyDOMProfile selects extra chrome-strip selectors when SimplifyDOM
+	// is on. Empty = landmarks only; "mediawiki" adds #mw-navigation / .mw-jump-link.
+	SimplifyDOMProfile string
+	// PrintLinkUnderline opts into underlining a[href] after cascade
+	// (--print-link-underline). Default false — author text-decoration wins.
+	PrintLinkUnderline bool
+}
+
+// LoadGlobal holds load settings shared by all page loads. NewLoaderWithError applies
+// the full policy (proxy, allow prefixes, local-access flag) in one place.
+type LoadGlobal struct {
+	Proxy                 string
+	Allow                 []string // local ACL prefixes (--allow)
+	EnableLocalFileAccess bool
+	// NetworkPolicySet distinguishes the explicit network policy from the
+	// compatibility default used by existing CLI and library callers.
+	NetworkPolicySet      bool
+	NetworkAllowedSchemes []string
+	NetworkAllowedHosts   []string
+	NetworkBlockPrivate   bool
+	NetworkBlockCrossHost bool
+}
+
+// LoadPage holds per-page load settings with engine consumers in load/convert.
+// JS/plugin/encoding stubs are not typed; Set routes them to Ignored.
+type LoadPage struct {
+	ZoomFactor           float64
+	BlockLocalFileAccess bool
+	LoadErrorHandling    LoadErrorHandling
+	Username             string
+	Password             string
+	CustomHeaders        map[string]string
+	Cookies              map[string]string
+	Post                 []PostItem
+	MediaType            MediaType
+	PrintMediaType       bool
+	Timeout              int // seconds; 0 = default
+	// InlineHTML is an in-memory HTML document source (SetBody); when set it
+	// replaces Page as the input and skips URL guessing entirely. InlineBase
+	// resolves relative subresources (load.Load).
+	InlineHTML []byte
+	InlineBase string
+}
+
+// PostItem is one urlencoded form field for POST loads.
+type PostItem struct {
+	Name  string
+	Value string
+}
+
+// HeaderFooter mirrors the text/HTML header & footer settings.
+type HeaderFooter struct {
+	FontSize float64
+	FontName string
+	Left     string
+	Right    string
+	Center   string
+	Line     bool
+	Spacing  float64
+	HTMLURL  string
+	Replace  map[string]string
+}
+
+// DefaultHeaderFooter matches pdfsettings.cc defaults (Arial 12, no spacing).
+func DefaultHeaderFooter() HeaderFooter {
+	return HeaderFooter{ //nolint:exhaustruct // intentional zero/partial fields
+		FontSize: defaultHeaderFontSize,
+		FontName: "Arial",
+		Spacing:  0,
+	}
+}
+
+// TableOfContent mirrors TOC object settings.
+type TableOfContent struct {
+	FontScale     float64
+	Indentation   string
+	DottedLines   bool
+	CaptionText   string
+	ForwardLinks  bool
+	BackLinks     bool
+	XSLStyleSheet string
+}
+
+// DefaultTableOfContent matches pdfsettings.cc defaults.
+func DefaultTableOfContent() TableOfContent {
+	return TableOfContent{ //nolint:exhaustruct // intentional zero/partial fields
+		FontScale:   defaultTOCFontScale,
+		Indentation: "1em",
+		DottedLines: true,
+		CaptionText: "Table of Contents",
+	}
+}
+
+// PdfGlobal is the global settings struct, named after the wkhtmltopdf
+// PDF-mode model it mirrors.
+//
+// Policy A: only fields with a live engine consumer (convert, load, or css)
+// are typed. Inert wkhtml keys may land in Ignored.
+type PdfGlobal struct {
+	// Page geometry: named size plus optional custom Size width/height (mm).
+	// Custom Size.Width/Height overrides the named size when both are > 0.
+	PageSize    string
+	Size        Size
+	Orientation Orientation
+	// PdfVersion is the wkhtmltopdf --pdf-version value: "1.4" (default),
+	// "1.7", or "2.0". ParsePDFVersion validates and normalizes it.
+	PdfVersion string
+	// PdfProfile is the wkhtmltopdf --pdf-profile value (e.g. "a3a-ua1",
+	// "PDF/A-3a+PDF/UA-1", "a3a", "ua1"). Empty means no profile.
+	// ParsePDFProfile validates and normalizes it.
+	PdfProfile string
+	// Grayscale is the sole color bit; Set("colormode") / Set("grayscale")
+	// both write this field.
+	Grayscale    bool
+	PageOffset   int
+	Copies       int
+	Collate      bool
+	Outline      bool
+	OutlineDepth int
+	// DumpOutline / DumpDefaultTOCXSL live on PdfGlobal; the dotted-key
+	// Set/Get surface reads and writes them.
+	DumpOutline        bool
+	DumpDefaultTOCXSL  bool
+	UseCompression     bool
+	Title              string
+	Margin             Margin
+	SmartShrinking     bool
+	Footer             HeaderFooter
+	Header             HeaderFooter
+	TOC                TableOfContent
+	Background         bool // sole home for the body background bit (no Web.Background mirror)
+	ExcludeFromOutline []string
+	Quiet              bool
+	Web                Web
+	// Load carries the shared load policy: Proxy, Allow (ACL prefixes) and
+	// EnableLocalFileAccess live on LoadGlobal, applied by load.NewLoaderWithError.
+	Load                 LoadGlobal
+	FontPaths            []string // --font-path directories (opt-in TTF discovery)
+	UseSystemFonts       bool     // --use-system-fonts
+	ResolveRelativeLinks bool     // resolve relative <a href> against page URL
+	// Ignored holds accepted-but-inert wkhtml keys (dpi, javascript, …).
+	// ponytail: Policy A sink — do not re-add typed stubs without engine consumers.
+	Ignored map[string]string
+}
+
+// DefaultPdfGlobal returns the pdfsettings.cc-compatible defaults for fields
+// the engine actually uses.
+func DefaultPdfGlobal() PdfGlobal {
+	return PdfGlobal{ //nolint:exhaustruct // intentional zero/partial fields
+		PageSize:       "A4",
+		Orientation:    OrientationPortrait,
+		PdfVersion:     "",
+		PdfProfile:     "",
+		Copies:         1,
+		Collate:        true,
+		Outline:        true,
+		OutlineDepth:   defaultOutlineDepth,
+		UseCompression: true,
+		Margin:         DefaultMargins(),
+		SmartShrinking: true,
+		Footer:         DefaultHeaderFooter(),
+		Header:         DefaultHeaderFooter(),
+		TOC:            DefaultTableOfContent(),
+		Background:     true,
+		Web: Web{ //nolint:exhaustruct // intentional zero/partial fields
+			Images: true,
+		},
+		ResolveRelativeLinks: true,
+	}
+}
+
+// PdfObject is one page/cover/toc object's settings.
+type PdfObject struct {
+	ExternalLinks    bool
+	LocalLinks       bool
+	IncludeInOutline bool
+	Page             string // URL or path or "-"
+	IsTableOfContent bool
+	IsCover          bool
+	Header           HeaderFooter
+	Footer           HeaderFooter
+	HeaderSet        bool // true when object-level header overrides exist
+	FooterSet        bool // true when object-level footer overrides exist
+	TOC              TableOfContent
+	Load             LoadPage
+	Web              Web
+	UseOutline       bool
+	// Ignored holds accepted-but-inert object/load/web keys (Policy A).
+	Ignored map[string]string
+}
+
+// HeaderFor returns the effective header: object override or global.
+func (o *PdfObject) HeaderFor(g PdfGlobal) HeaderFooter {
+	if o.HeaderSet {
+		return o.Header
+	}
+
+	return g.Header
+}
+
+// FooterFor returns the effective footer: object override or global.
+func (o *PdfObject) FooterFor(g PdfGlobal) HeaderFooter {
+	if o.FooterSet {
+		return o.Footer
+	}
+
+	return g.Footer
+}
+
+// ErrNoRenderableObjects reports a conversion job whose object list has no
+// renderable page source (all empty pages or only TOC objects).
+var ErrNoRenderableObjects = errors.New("settings: no renderable page objects")
+
+// ValidateRenderableObjects checks that objects contains at least one non-TOC
+// object with a non-empty page source or inline HTML.
+func ValidateRenderableObjects(objects []PdfObject) error {
+	for _, object := range objects {
+		if object.IsTableOfContent {
+			continue
+		}
+
+		if strings.TrimSpace(object.Page) != "" || len(object.Load.InlineHTML) > 0 {
+			return nil
+		}
+	}
+
+	return ErrNoRenderableObjects
+}
+
+// DefaultPdfObject matches pdfsettings.cc defaults for engine-consumed fields.
+func DefaultPdfObject() PdfObject {
+	return PdfObject{ //nolint:exhaustruct // intentional zero/partial fields
+		ExternalLinks:    true,
+		LocalLinks:       true,
+		IncludeInOutline: true,
+		UseOutline:       true,
+		Load:             DefaultLoadPage(),
+		Web: Web{ //nolint:exhaustruct // intentional zero/partial fields
+			Images: true,
+		},
+	}
+}
+
+// DefaultLoadPage matches loadsettings.cc defaults for engine-consumed fields:
+// blockLocalFileAccess true, load error abort. JS-delay and similar stubs are
+// not typed (Policy A).
+func DefaultLoadPage() LoadPage {
+	return LoadPage{ //nolint:exhaustruct // intentional zero/partial fields
+		BlockLocalFileAccess: true,
+		LoadErrorHandling:    LoadErrorAbort,
+	}
+}
+
+// ImageGlobal is the image-mode global settings struct (wkhtmltoimage).
+// Quiet lives on PdfGlobal; fonts.LogFontRegistryScan reads that bit.
+type ImageGlobal struct {
+	Width       int
+	Height      int
+	Padding     int
+	Quality     int
+	SmartWidth  bool
+	Crop        CropSettings
+	Format      string // "" = sniff from output; "png"|"jpg"|"jpeg"
+	Transparent bool
+	Web         Web
+	Load        LoadGlobal
+	// Ignored holds accepted-but-inert image keys (Policy A).
+	Ignored map[string]string
+}
+
+// CropSettings mirrors wkhtmltoimage crop settings.
+type CropSettings struct {
+	Left   int
+	Top    int
+	Width  int
+	Height int
+}
+
+// DefaultImageGlobal matches imagesettings.cc defaults for engine fields.
+func DefaultImageGlobal() ImageGlobal {
+	return ImageGlobal{ //nolint:exhaustruct // intentional zero/partial fields
+		Width:      defaultImageWidth,
+		Height:     0,
+		Quality:    defaultImageQuality,
+		SmartWidth: true,
+		Crop:       CropSettings{Left: -1, Top: -1, Width: -1, Height: -1},
+		Web: Web{ //nolint:exhaustruct // intentional zero/partial fields
+			Images: true,
+		},
+	}
+}
+
+func normalize(s string) string { return strings.ToLower(s) }

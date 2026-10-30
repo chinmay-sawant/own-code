@@ -1,0 +1,28 @@
+# Binaries and build output
+own-code
+own-code.exe
+*.exe
+*.test
+*.out
+/dist/
+/bin/
+
+# Go cache and coverage
+*.coverprofile
+coverage.txt
+
+# Screenshots taken by the test suite land outside the repo.
+# See README: OWNFRAME_CODE_VIEW_SCREENSHOT=1 writes to /tmp/opencode/code-view-shots/.
+/tmp/
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# User session files are written to the OS config dir, not here.
+# Kept here so a stray local session file never gets committed.
+session-*.json
