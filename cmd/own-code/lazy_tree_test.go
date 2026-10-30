@@ -11,13 +11,13 @@ func createLazyTestDir(t *testing.T) string {
 	dir := t.TempDir()
 
 	files := map[string]string{
-		"main.go":                   "package main\n\nfunc main() {}\n",
-		"README.md":                 "# Readme\n",
-		"src/app.go":                "package src\n\nfunc App() {}\n",
-		"src/view.go":               "package src\n\nfunc View() {}\n",
-		"src/components/button.go":  "package components\n\nfunc Button() {}\n",
-		"testdata/fixture.json":     `{"test": true}`,
-		"internal/core/logic.go":    "package core\n\nfunc Logic() {}\n",
+		"main.go":                  "package main\n\nfunc main() {}\n",
+		"README.md":                "# Readme\n",
+		"src/app.go":               "package src\n\nfunc App() {}\n",
+		"src/view.go":              "package src\n\nfunc View() {}\n",
+		"src/components/button.go": "package components\n\nfunc Button() {}\n",
+		"testdata/fixture.json":    `{"test": true}`,
+		"internal/core/logic.go":   "package core\n\nfunc Logic() {}\n",
 	}
 
 	for path, content := range files {

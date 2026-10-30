@@ -8,34 +8,56 @@ The screenshot shows the app with the explorer open and `interaction.md` in the 
 
 ## Run
 
-You need Go 1.26 and a sibling `ownframe` checkout for the local `replace`, or drop the `replace` and pin a published tag.
+All app sources live in `cmd/own-code/`; `go.mod`, `vendor/`, `docs/`, and this file stay at the root.
+
+You need Go 1.26 and a sibling `ownframe` checkout for the local `replace`.
 
 ```sh
 cd /home/chinmay/ChinmayPersonalProjects/own-code
 go mod tidy
-go run .
+go run ./cmd/own-code
 ```
 
 Point it at another directory:
 
 ```sh
-go run . -root /path/to/repo
-go run . -root /path/to/monorepo -files 25000
+go run ./cmd/own-code -root /path/to/repo
+go run ./cmd/own-code -root /path/to/monorepo -files 25000
 ```
 
 Useful flags:
 
 ```sh
-go run . -web
-go run . -web -addr 127.0.0.1:8145
-go run . -dev
-go run . -perf=false
-go run . -chrome=false
+go run ./cmd/own-code -web
+go run ./cmd/own-code -web -addr 127.0.0.1:8145
+go run ./cmd/own-code -dev
+go run ./cmd/own-code -perf=false
+go run ./cmd/own-code -chrome=false
 ```
 
 The viewer opens the current directory by default and reads the working tree diff at startup. The default window is 1500x900 with a minimum of 840x700. `F12` opens the developer dock. The scan stops at 10,000 files unless `-files` raises the budget, and the status bar reports when the limit hits. `testdata/sample` is the deterministic fixture the tests use. `-web` serves the same tick, key, wheel, click, and live frame loop in a browser. It does not start the file watcher.
 
 On Windows, a workspace under a WSL network path (`\\wsl$\...`) hands off into WSL through `wsl.exe` with a translated path, so scanning, git, and watching run on Linux. `-wsl=false` forces the native Windows build.
+
+## Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/chinmay-sawant/own-code/master/install.sh | sh
+```
+
+This builds from source and installs the binary to `$HOME/.local/bin/own-code`. To choose another prefix (the binary goes to `$PREFIX/bin`):
+
+```sh
+PREFIX=/usr/local curl -fsSL https://raw.githubusercontent.com/chinmay-sawant/own-code/master/install.sh | sh
+```
+
+Manual alternative:
+
+```sh
+git clone https://github.com/chinmay-sawant/own-code.git
+cd own-code
+go build -mod=vendor -o own-code ./cmd/own-code
+```
 
 ## Features
 
@@ -89,6 +111,8 @@ Details reads the active file, with language, line count, exact size, encoding, 
 `F12` and `Ctrl+Shift+I` belong to the window and toggle the developer dock. `Tab` moves through id bearing controls. While the palette, content search, or branch picker is open, background controls get `tabindex="-1"`, so Tab stays inside the overlay.
 
 ## Files
+
+All paths below are under `cmd/own-code/`.
 
 | File | Purpose |
 |---|---|
@@ -150,13 +174,13 @@ Details reads the active file, with language, line count, exact size, encoding, 
 
 ```sh
 cd /home/chinmay/ChinmayPersonalProjects/own-code
-go test -p 1 .
+go test -p 1 ./cmd/own-code
 ```
 
 Capture review frames:
 
 ```sh
-OWNFRAME_CODE_VIEW_SCREENSHOT=1 go test -run '^TestScreenshot$' .
+OWNFRAME_CODE_VIEW_SCREENSHOT=1 go test -run '^TestScreenshot$' ./cmd/own-code
 ```
 
 PNGs land in `/tmp/opencode/code-view-shots/`: `explorer`, `preview`, `palette`, `changes`, `split`, `details`, `edit`, `inline-card`, `split-editor`, `commit-tip`, `search`, `scrolled`, `scrollrails`, `ignored`, and `welcome`. Nothing is added to this repo.
