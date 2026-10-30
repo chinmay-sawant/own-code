@@ -244,7 +244,7 @@ func clipSecondCrumbPath(paneWidth, windowWidth int, name, dir string) (string, 
 	return clipCrumbPath(paneWidth, windowWidth, name, dir, secondCrumbRightWidePx, secondCrumbRightNarrowPx, false)
 }
 
-// The cmdbar constants mirror components/css/chrome.css and
+// The cmdbar constants mirror components/css/window-control.css and
 // components/css/editor.css: the bar keeps 8 px side padding on each side, a
 // 12 px search icon, two 7 px gaps, and the "Ctrl P" pill (about 42 px
 // with its own padding and border). The flex basis is 430 px above the

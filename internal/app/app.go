@@ -18,16 +18,16 @@ const (
 	minWidth      = 720
 	minHeight     = 540
 
-	activityW    = 46
-	sideWidth    = 268
-	detailsWidth = 280
-	chromeTop    = 42
-	chromeBottom = 24
-	tabStripH    = 38
-	crumbH       = 30
+	activityW           = 46
+	sideWidth           = 268
+	detailsWidth        = 280
+	windowControlTop    = 42
+	windowControlBottom = 24
+	tabStripH           = 38
+	crumbH              = 30
 
-	chromeLeft    = activityW + sideWidth
-	editorBodyTop = chromeTop + tabStripH + crumbH
+	windowControlLeft = activityW + sideWidth
+	editorBodyTop     = windowControlTop + tabStripH + crumbH
 
 	// drawerMaxExtra allows the file/source-control drawer to expand 30%
 	// beyond its 268 px base (268*0.3=80.4), like the VS Code sidebar resize.
@@ -254,12 +254,12 @@ type App struct {
 	cardStartLeft int
 	cardStartTop  int
 
-	details bool
-	devOn   bool
-	chrome  bool
+	details       bool
+	devOn         bool
+	windowControl bool
 
 	// zoom is the layout multiplier, 1 for 100 percent. It scales the row
-	// grid, the chrome, and the reader fonts together, and persists per
+	// grid, the window controls, and the reader fonts together, and persists per
 	// workspace in the session.
 	zoom float64
 
@@ -494,7 +494,7 @@ func (a *App) openInitial() {
 	a.resetNavHistory(target)
 }
 
-// File drawer geometry, kept next to chrome.css so the recent flyout lands
+// File drawer geometry, kept next to window-control.css so the recent flyout lands
 // beside the toggle row the way a submenu does.
 const (
 	fileDrawerLeft = 14
@@ -941,7 +941,7 @@ func (a *App) buildView() View {
 		v.Second = a.secondView()
 	}
 
-	v.TitleBar = a.chrome
+	v.TitleBar = a.windowControl
 	if v.TitleBar {
 		v.TitleBarMax = a.page.Window().Maximized()
 	}
@@ -1221,7 +1221,7 @@ func (a *App) fillDiff(v *View) {
 			d.ScrollTop, d.ScrollHeight, _ = a.changesScroll.Thumb(track, total, visible, a.zx(paneThumbMin))
 			d.ScrollTrack = track
 			d.RailLeft = a.paneRailLeftPx()
-			d.RailTop = a.zx(chromeTop) + a.zx(changesRailTop)
+			d.RailTop = a.zx(windowControlTop) + a.zx(changesRailTop)
 			d.RailThumbTop = d.RailTop + d.ScrollTop
 			d.ThumbCells = max(1, d.ScrollHeight/a.zx(thumbCellH))
 		}
@@ -1273,7 +1273,7 @@ func (a *App) fillDiff(v *View) {
 			d.ScrollTop, d.ScrollHeight, _ = a.changesScroll.Thumb(track, total, visible, a.zx(paneThumbMin))
 			d.ScrollTrack = track
 			d.RailLeft = a.paneRailLeftPx()
-			d.RailTop = a.zx(chromeTop) + a.zx(changesRailTop)
+			d.RailTop = a.zx(windowControlTop) + a.zx(changesRailTop)
 			d.RailThumbTop = d.RailTop + d.ScrollTop
 			d.ThumbCells = max(1, d.ScrollHeight/a.zx(thumbCellH))
 		}
@@ -1555,7 +1555,7 @@ func (a *App) findCommit(hash string) *gitCommit {
 
 // bodyHeight is the editor body below the tab strip and breadcrumbs.
 func (a *App) bodyHeight() int {
-	h := a.viewportH - a.zx(editorBodyTop) - a.zx(chromeBottom)
+	h := a.viewportH - a.zx(editorBodyTop) - a.zx(windowControlBottom)
 	if h < a.zx(rowH) {
 		h = a.zx(rowH)
 	}
@@ -1605,7 +1605,7 @@ func (a *App) historyHeight() int {
 
 // historyPaneTop is the page y of the history rail's top edge.
 func (a *App) historyPaneTop() int {
-	return a.viewportH - a.zx(chromeBottom) - a.zx(treeFootH) - a.historyHeight()
+	return a.viewportH - a.zx(windowControlBottom) - a.zx(treeFootH) - a.historyHeight()
 }
 
 // historyVisibleRows is how many 42 px commit rows fit in the rail.
@@ -1669,7 +1669,7 @@ func (a *App) diffBodyHeight() int { return a.bodyHeight() }
 // drawerStackHeight is the Source Control space between the side header and
 // footer, after the changes header and divider.
 func (a *App) drawerStackHeight() int {
-	h := a.viewportH - a.zx(chromeTop) - a.zx(chromeBottom) - a.zx(treeHeadH) - a.zx(treeFootH) - a.zx(changesHeadH) - a.zx(histSplitH)
+	h := a.viewportH - a.zx(windowControlTop) - a.zx(windowControlBottom) - a.zx(treeHeadH) - a.zx(treeFootH) - a.zx(changesHeadH) - a.zx(histSplitH)
 	if h < 1 {
 		h = 1
 	}
@@ -1876,7 +1876,7 @@ func (a *App) windowSlice(total int) (int, int, int) {
 	return a.windowSliceForGroup(0, total)
 }
 
-// contentHeight is the page height for the current mode. The fixed chrome
+// contentHeight is the page height for the current mode. The fixed window controls
 // covers the rest, so a short file leaves the page at one viewport.
 func (a *App) contentHeight() int {
 	rows := 0
@@ -1891,7 +1891,7 @@ func (a *App) contentHeight() int {
 		}
 	}
 
-	h := a.zx(editorBodyTop) + rows*a.zx(rowH) + a.zx(chromeBottom)
+	h := a.zx(editorBodyTop) + rows*a.zx(rowH) + a.zx(windowControlBottom)
 	if h < a.viewportH {
 		h = a.viewportH
 	}
@@ -1929,11 +1929,11 @@ func (a *App) editorWidth() int {
 		w -= a.zx(detailsWidth)
 	}
 
-	if w < a.chromeLeftPx()+a.zx(paneMinWidth) {
-		w = a.chromeLeftPx() + a.zx(paneMinWidth)
+	if w < a.windowControlLeftPx()+a.zx(paneMinWidth) {
+		w = a.windowControlLeftPx() + a.zx(paneMinWidth)
 	}
 
-	return w - a.chromeLeftPx()
+	return w - a.windowControlLeftPx()
 }
 
 // codeCols is the number of monospace cells that fit in the focused pane.
@@ -2019,7 +2019,7 @@ func (a *App) resetFind() {
 
 // treeCapacity is the raw number of 26 px rows that fit in the sidebar.
 func (a *App) treeCapacity() int {
-	h := a.viewportH - a.zx(chromeTop) - a.zx(chromeBottom) - a.zx(treeHeadH) - a.zx(treeFilterH) - a.zx(treeFootH) - a.zx(treeInnerPad)
+	h := a.viewportH - a.zx(windowControlTop) - a.zx(windowControlBottom) - a.zx(treeHeadH) - a.zx(treeFilterH) - a.zx(treeFootH) - a.zx(treeInnerPad)
 	rows := h / a.zx(treeRowH)
 	if rows < 1 {
 		rows = 1

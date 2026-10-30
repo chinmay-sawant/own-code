@@ -243,15 +243,15 @@ func (a *App) isOverPane(group int, x, y float64) bool {
 			return false
 		}
 		left, width := a.secondGeometry()
-		top := float64(a.zx(chromeTop))
-		bottom := float64(a.viewportH - a.zx(chromeBottom))
+		top := float64(a.zx(windowControlTop))
+		bottom := float64(a.viewportH - a.zx(windowControlBottom))
 
 		return x >= float64(left) && x <= float64(left+width) && y >= top && y <= bottom
 	}
 
 	left, width := a.paneGeometry()
-	top := float64(a.zx(chromeTop))
-	bottom := float64(a.viewportH - a.zx(chromeBottom))
+	top := float64(a.zx(windowControlTop))
+	bottom := float64(a.viewportH - a.zx(windowControlBottom))
 
 	return x >= float64(left) && x <= float64(left+width) && y >= top && y <= bottom
 }

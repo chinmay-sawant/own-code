@@ -32,7 +32,7 @@ go run ./cmd/own-code -web
 go run ./cmd/own-code -web -addr 127.0.0.1:8145
 go run ./cmd/own-code -dev
 go run ./cmd/own-code -perf=false
-go run ./cmd/own-code -chrome=false
+go run ./cmd/own-code -window-control=false
 ```
 
 The viewer opens the current directory by default and reads the working tree diff at startup. The default window is 1500x900 with a minimum of 840x700. `F12` opens the developer dock. The scan stops at 10,000 files unless `-files` raises the budget, and the status bar reports when the limit hits. `testdata/sample` (embedded via root `owncode.SampleFiles`) is the deterministic fixture the tests use. `-web` serves the same tick, key, wheel, click, and live frame loop in a browser. It does not start the file watcher.

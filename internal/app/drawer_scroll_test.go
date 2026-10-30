@@ -50,7 +50,7 @@ func TestDrawerResizeExpandsSidebar(t *testing.T) {
 		t.Fatalf("SideW = %d, want %d", got, sideWidth)
 	}
 
-	baseLeft := app.chromeLeftPx()
+	baseLeft := app.windowControlLeftPx()
 	app.setDrawerExtra(67)
 	app.refresh()
 
@@ -58,8 +58,8 @@ func TestDrawerResizeExpandsSidebar(t *testing.T) {
 		t.Fatalf("wide SideW = %d, want %d", got, want)
 	}
 
-	if got := app.chromeLeftPx(); got != baseLeft+app.zx(67) {
-		t.Fatalf("wide chrome left = %d, want %d", got, baseLeft+app.zx(67))
+	if got := app.windowControlLeftPx(); got != baseLeft+app.zx(67) {
+		t.Fatalf("wide window-control left = %d, want %d", got, baseLeft+app.zx(67))
 	}
 
 	app.setDrawerExtra(drawerMaxExtra)

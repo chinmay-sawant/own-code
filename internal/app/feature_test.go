@@ -136,7 +136,7 @@ func TestFeatureChangedLineMarkers(t *testing.T) {
 		t.Fatalf("inline card = %+v", card)
 	}
 
-	if card.Left <= chromeLeft {
+	if card.Left <= windowControlLeft {
 		t.Fatalf("card left = %d, want inside the editor", card.Left)
 	}
 }

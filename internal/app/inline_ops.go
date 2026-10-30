@@ -155,7 +155,7 @@ func (a *App) showInlineCard(line int) {
 
 	card := inlineCardFor(rowTop, a.pageWidth(), a.viewportH, line, change, doc.Path, newText)
 	card.Line = line
-	card.Left = a.chromeLeftPx() + inlineCardLeft
+	card.Left = a.windowControlLeftPx() + inlineCardLeft
 	card.HasPrev = hasPrev
 	card.HasNext = hasNext
 
@@ -208,7 +208,7 @@ func (a *App) showSelectionCard(doc *fileDoc, start, end int) {
 	rowTop := a.zx(editorBodyTop) + (visual-a.scrollY/a.zx(rowH))*a.zx(rowH)
 	lines := append([]string(nil), doc.Lines[start-1:end]...)
 	card := inlineCardForSelection(rowTop, a.pageWidth(), a.viewportH, start, end, doc.Path, lines)
-	card.Left = a.chromeLeftPx() + inlineCardLeft
+	card.Left = a.windowControlLeftPx() + inlineCardLeft
 	changes := a.changedLinesFor(doc.Path)
 	changed := inlineChangeLines(changes)
 	index := -1
@@ -287,7 +287,7 @@ func (a *App) cardAnchor() (int, int, bool) {
 			return 0, 0, false
 		}
 	}
-	left := a.chromeLeftPx() + inlineCardLeft
+	left := a.windowControlLeftPx() + inlineCardLeft
 	visual := line - 1
 	if a.wrap {
 		plan := doc.wrapped(a.codeColsForGroup(0))

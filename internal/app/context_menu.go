@@ -20,9 +20,9 @@ type contextMenuRow struct {
 }
 
 const (
-	menuChromeWidth = 196
-	menuChromeRow   = 26
-	menuChromePad   = 8
+	menuWindowControlWidth = 196
+	menuWindowControlRow   = 26
+	menuWindowControlPad   = 8
 
 	contextMenuIDPrefix     = "code-view:"
 	contextMenuCloseID      = contextMenuIDPrefix + "tab-close:"
@@ -67,9 +67,9 @@ func (a *App) presentMenu(x, y int, items []ownframe.MenuItem) bool {
 	}
 
 	w, h := a.page.Size()
-	menuH := a.zx(menuChromePad) + len(rows)*a.zx(menuChromeRow)
-	if x+a.zx(menuChromeWidth) > w {
-		x = w - a.zx(menuChromeWidth)
+	menuH := a.zx(menuWindowControlPad) + len(rows)*a.zx(menuWindowControlRow)
+	if x+a.zx(menuWindowControlWidth) > w {
+		x = w - a.zx(menuWindowControlWidth)
 	}
 
 	if y+menuH > h {

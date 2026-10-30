@@ -564,7 +564,7 @@ func TestWrapLongCodeLine(t *testing.T) {
 		t.Fatalf("wrapped text changed: %q", firstLine)
 	}
 
-	if view.SpaceHeight <= editorBodyTop+2*rowH+chromeBottom {
+	if view.SpaceHeight <= editorBodyTop+2*rowH+windowControlBottom {
 		t.Fatalf("space height = %d", view.SpaceHeight)
 	}
 
@@ -997,7 +997,7 @@ func TestHistoryLivesInSidebar(t *testing.T) {
 		t.Fatalf("divider outside sidebar: %.0f..%.0f", divider.X, divider.X+divider.W)
 	}
 
-	if want := float64(defaultHeight - editorBodyTop - chromeBottom); code.H != want {
+	if want := float64(defaultHeight - editorBodyTop - windowControlBottom); code.H != want {
 		t.Fatalf("code body height = %.0f, want %.0f", code.H, want)
 	}
 

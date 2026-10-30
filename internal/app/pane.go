@@ -83,7 +83,7 @@ func (a *App) groupPaths() []string {
 func (a *App) paneGeometry() (int, int) {
 	total := a.editorWidth()
 	if !a.split || a.mode != "explorer" {
-		return a.chromeLeftPx(), total
+		return a.windowControlLeftPx(), total
 	}
 
 	left := int(float64(total) * a.splitRatio)
@@ -99,7 +99,7 @@ func (a *App) paneGeometry() (int, int) {
 		left = total
 	}
 
-	return a.chromeLeftPx(), left
+	return a.windowControlLeftPx(), left
 }
 
 // secondGeometry returns the left edge and width of the second pane.

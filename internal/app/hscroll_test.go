@@ -86,8 +86,8 @@ func TestHScrollWheelEvents(t *testing.T) {
 	if !ok {
 		editorBox, ok = boxByID(app.Page().Boxes(), "editor-window")
 	}
-	editorX := float64(chromeLeft + 50)
-	editorY := float64(chromeTop + 50)
+	editorX := float64(windowControlLeft + 50)
+	editorY := float64(windowControlTop + 50)
 	if ok {
 		editorX = editorBox.X + editorBox.W/2
 		editorY = editorBox.Y + editorBox.H/2

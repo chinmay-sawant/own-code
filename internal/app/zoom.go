@@ -9,7 +9,7 @@ import (
 
 // Layout zoom bounds for the code view. The window's own paint zoom covers
 // 0.25 to 4; the layout zoom stays inside it and matches the editor feel of
-// staying readable without exploding the chrome.
+// staying readable without exploding the window frame.
 const (
 	zoomMin  = 0.5
 	zoomMax  = 3.0
@@ -164,7 +164,7 @@ func zoomFontTable() []zoomFont {
 		{".sc-stats", 9},
 		{".changes-count", 8.5},
 		{".side-tag", 7.5},
-		// Editor chrome.
+		// Editor window controls.
 		{".tab-x", 13},
 		{".tab-tool", 11},
 		{".seg-btn", 9},
@@ -270,12 +270,12 @@ func zoomOverrideCSS(z float64) string {
 	var b strings.Builder
 	b.WriteString(":root {")
 	fmt.Fprintf(&b, " --row-h:%s !important;", px(rowH))
-	fmt.Fprintf(&b, " --titlebar-h:%s !important;", px(chromeTop))
+	fmt.Fprintf(&b, " --titlebar-h:%s !important;", px(windowControlTop))
 	fmt.Fprintf(&b, " --tab-h:%s !important;", px(tabStripH))
 	fmt.Fprintf(&b, " --crumb-h:%s !important;", px(crumbH))
 	fmt.Fprintf(&b, " --side-w:%s !important;", px(sideWidth))
 	fmt.Fprintf(&b, " --activity-w:%s !important;", px(activityW))
-	fmt.Fprintf(&b, " --status-h:%s !important;", px(chromeBottom))
+	fmt.Fprintf(&b, " --status-h:%s !important;", px(windowControlBottom))
 	b.WriteString(" }")
 
 	// Core rows.
@@ -295,7 +295,7 @@ func zoomOverrideCSS(z float64) string {
 		fmt.Fprintf(&b, "%s { font-size:%dpx !important; }", f.sel, max(1, int(math.Round(f.base*z))))
 	}
 
-	zoomChromeCSS(&b, px)
+	zoomWindowControlCSS(&b, px)
 	zoomTreeCSS(&b, px)
 	zoomEditorCSS(&b, px)
 	zoomRailsCSS(&b, px)

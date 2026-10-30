@@ -21,7 +21,7 @@ func main() {
 	files := flag.Int("files", app.MaxWorkspaceFiles, "maximum files to scan; raise it for a large repository")
 	dev := flag.Bool("dev", false, "open the developer tools dock at startup")
 	perf := flag.Bool("perf", true, "enable pipeline sampling for the devtools Frame tab")
-	chrome := flag.Bool("chrome", true, "draw custom minimize, maximize, and close controls in the titlebar")
+	windowControl := flag.Bool("window-control", true, "draw custom minimize, maximize, and close controls in the titlebar")
 	wsl.AddWSLFlags(flag.CommandLine)
 	flag.Parse()
 	if wsl.MaybeReexecInWSL() {
@@ -65,16 +65,16 @@ func main() {
 		return
 	}
 
-	// Custom chrome is a desktop window only. The web preview keeps the
+	// Custom window controls are desktop window only. The web preview keeps the
 	// native frame and hides the in-page controls.
-	a.SetChrome(*chrome)
+	a.SetWindowControl(*windowControl)
 
 	if err := a.StartWatcher(ctx); err != nil {
 		log.Printf("code-view: watcher unavailable: %v", err)
 	}
-	options := ownframe.WindowOptions{CustomChrome: a.Chrome(), PlacementID: "own-code"}
-	if a.Chrome() {
-		options.Draggable = a.ChromeDrag
+	options := ownframe.WindowOptions{CustomChrome: a.WindowControl(), PlacementID: "own-code"}
+	if a.WindowControl() {
+		options.Draggable = a.WindowControlDrag
 	}
 	runErr := ownframe.RunWithOptions(ctx, a.Page(), options)
 	a.StopWatcher()

@@ -158,7 +158,7 @@ func TestZoomOverrideTracksLevel(t *testing.T) {
 		"left:calc(50% - 420px)",
 		"margin-right:-15px",
 		".hist-graph svg",
-		// Scaled chrome the reports flagged.
+		// Scaled window controls the reports flagged.
 		".changes-title",
 		".side-title",
 		".win-btn",

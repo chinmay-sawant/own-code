@@ -32,7 +32,7 @@ func writeZoomRules(b *strings.Builder, px func(int) string, rules []zoomRule) {
 	}
 }
 
-func zoomChromeCSS(b *strings.Builder, px func(int) string) {
+func zoomWindowControlCSS(b *strings.Builder, px func(int) string) {
 	writeZoomRules(b, px, []zoomRule{
 		// Titlebar shell.
 		{".titlebar", []string{" gap:", " !important; padding:0 ", " 0 ", " !important;"}, []int{8, 10, 14}},
@@ -62,7 +62,7 @@ func zoomChromeCSS(b *strings.Builder, px func(int) string) {
 		{".browse-path", []string{" padding:0 ", " !important;"}, []int{4}},
 		{".browse-list", []string{" max-height:", " !important;"}, []int{180}},
 		{".browse-panel .browse-list", []string{" max-height:", " !important;"}, []int{320}},
-		// Alerts and toast chrome.
+		// Alerts and toast window controls.
 		{".file-alert", []string{" right:", " !important; width:", " !important; padding:", " ", " ", " ", " !important; border-radius:", " !important;"}, []int{14, 300, 8, 8, 8, 10, 8}},
 		{".file-alert-x", []string{" min-height:", " !important; height:", " !important; line-height:", " !important;"}, []int{24, 24, 24}},
 		{".toast-layer", []string{" left:", " !important;"}, []int{16}},
@@ -265,7 +265,7 @@ func zoomOverlayCSS(b *strings.Builder, px func(int) string) {
 		{".search-meta", []string{" height:", " !important; line-height:", " !important; padding:0 ", " !important;"}, []int{24, 24, 12}},
 		{".palette-foot", []string{" height:", " !important; padding:0 ", " !important;"}, []int{28, 12}},
 		{".palette-empty", []string{" padding:", " ", " !important;"}, []int{22, 12}},
-		// Browse panel is in zoomChromeCSS. Settings panel.
+		// Browse panel is in zoomWindowControlCSS. Settings panel.
 		{".settings-panel", []string{" top:", " !important; left:calc(50% - ", ") !important; width:", " !important; border-radius:", " !important; max-width:calc(100vw - ", ") !important;"}, []int{50, 360, 720, 10, 40}},
 		{".settings-nav-active", []string{" padding:", " ", " !important; border-radius:", " !important;"}, []int{9, 10, 4}},
 		{".settings-caption", []string{" margin:", " 0 ", " !important;"}, []int{5, 12}},

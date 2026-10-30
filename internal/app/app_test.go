@@ -57,11 +57,11 @@ func TestShellMetrics(t *testing.T) {
 		x, y, w, h float64
 	}{
 		{"app-shell", 0, 0, defaultWidth, defaultHeight},
-		{"titlebar", 0, 0, defaultWidth, chromeTop},
-		{"sidebar", activityW, chromeTop, sideWidth, defaultHeight - chromeTop - chromeBottom},
-		{"editor-window", chromeLeft, chromeTop, defaultWidth - chromeLeft, defaultHeight - chromeTop - chromeBottom},
-		{"code-body", chromeLeft, editorBodyTop, defaultWidth - chromeLeft, defaultHeight - editorBodyTop - chromeBottom},
-		{"statusbar", 0, defaultHeight - chromeBottom, defaultWidth, chromeBottom},
+		{"titlebar", 0, 0, defaultWidth, windowControlTop},
+		{"sidebar", activityW, windowControlTop, sideWidth, defaultHeight - windowControlTop - windowControlBottom},
+		{"editor-window", windowControlLeft, windowControlTop, defaultWidth - windowControlLeft, defaultHeight - windowControlTop - windowControlBottom},
+		{"code-body", windowControlLeft, editorBodyTop, defaultWidth - windowControlLeft, defaultHeight - editorBodyTop - windowControlBottom},
+		{"statusbar", 0, defaultHeight - windowControlBottom, defaultWidth, windowControlBottom},
 	}
 
 	for _, tc := range cases {
@@ -267,7 +267,7 @@ func TestDetails(t *testing.T) {
 	}
 
 	editor, ok := boxByID(app.Page().Boxes(), "editor-window")
-	if !ok || math.Abs(editor.W-(defaultWidth-chromeLeft-280)) > 1 {
+	if !ok || math.Abs(editor.W-(defaultWidth-windowControlLeft-280)) > 1 {
 		t.Fatalf("editor width = %.0f", editor.W)
 	}
 

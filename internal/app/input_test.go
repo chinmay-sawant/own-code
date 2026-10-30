@@ -322,7 +322,7 @@ func TestActionControlsHaveIDs(t *testing.T) {
 	check()
 }
 
-func TestFixedChromeClickAfterScroll(t *testing.T) {
+func TestFixedWindowControlClickAfterScroll(t *testing.T) {
 	app := newTestApp(t)
 	app.openFile("backend/probe.go")
 	app.scrollTo(400)

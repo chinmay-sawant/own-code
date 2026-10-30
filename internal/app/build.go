@@ -16,7 +16,7 @@ func buildHTML() string {
 	b.WriteString(shellHead)
 
 	for _, name := range []string{
-		"base.css", "chrome.css", "sidebar.css",
+		"base.css", "window-control.css", "sidebar.css",
 		"settings.css", "editor.css", "diff.css", "history.css", "scrollrails.css", "details.css", "palette.css", "preview.css", "file_nav.css", "inline_card.css", "motion.css",
 	} {
 		b.WriteString(file("components/css/" + name))

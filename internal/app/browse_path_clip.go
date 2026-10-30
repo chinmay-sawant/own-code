@@ -1,6 +1,6 @@
 package app
 
-// The browse-head constants mirror components/css/chrome.css: the 560 px panel
+// The browse-head constants mirror components/css/window-control.css: the 560 px panel
 // keeps 10 px side padding and a 1 px border on each side, the Up button
 // carries its label plus 10 px side padding (reserved with slack for wider
 // faces), the row keeps a 6 px gap, and the path keeps 4 px side padding.
@@ -9,13 +9,13 @@ package app
 // measured advance so a clipped name cannot reach the panel edge even when
 // the face resolves a little wide.
 const (
-	browsePanelW      = 560
-	browsePanelChrome = 22
-	browseUpW         = 44
-	browseHeadGap     = 6
-	browsePathPad     = 8
-	browseGutter      = 40
-	browseCellW       = 6.5
+	browsePanelW             = 560
+	browsePanelWindowControl = 22
+	browseUpW                = 44
+	browseHeadGap            = 6
+	browsePathPad            = 8
+	browseGutter             = 40
+	browseCellW              = 6.5
 )
 
 // clipBrowsePath keeps the folder browser's displayed path on one line
@@ -30,7 +30,7 @@ func clipBrowsePath(windowWidth int, name string) string {
 		panel = max
 	}
 
-	budget := int(float64(panel-browsePanelChrome-browseUpW-browseHeadGap-browsePathPad) / browseCellW)
+	budget := int(float64(panel-browsePanelWindowControl-browseUpW-browseHeadGap-browsePathPad) / browseCellW)
 	if budget < 1 {
 		budget = 1
 	}

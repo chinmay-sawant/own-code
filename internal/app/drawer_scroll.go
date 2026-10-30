@@ -41,14 +41,14 @@ func (a *App) drawerVisiblePx() int {
 	return a.zx(a.drawerWidth())
 }
 
-// chromeLeftPx is the editor's left edge: activity bar plus drawer.
-func (a *App) chromeLeftPx() int {
+// windowControlLeftPx is the editor's left edge: activity bar plus drawer.
+func (a *App) windowControlLeftPx() int {
 	return a.zx(activityW) + a.drawerVisiblePx()
 }
 
 // paneRailLeftPx is the vertical rail's left edge at the drawer right edge.
 func (a *App) paneRailLeftPx() int {
-	left := a.chromeLeftPx() - a.zx(paneScrollW)
+	left := a.windowControlLeftPx() - a.zx(paneScrollW)
 	if left < 0 {
 		return 0
 	}
@@ -81,6 +81,6 @@ func (a *App) fillDrawer(v *View) {
 	visible := a.drawerVisiblePx()
 	v.SideW = visible
 	v.DrawerResizeLeft = a.zx(activityW) + visible - a.zx(drawerResizeHalfW)
-	v.DrawerResizeTop = a.zx(chromeTop)
-	v.DrawerResizeH = a.viewportH - a.zx(chromeTop) - a.zx(chromeBottom)
+	v.DrawerResizeTop = a.zx(windowControlTop)
+	v.DrawerResizeH = a.viewportH - a.zx(windowControlTop) - a.zx(windowControlBottom)
 }
