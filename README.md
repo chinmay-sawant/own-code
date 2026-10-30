@@ -63,6 +63,32 @@ cd own-code
 go build -o own-code ./cmd/own-code
 ```
 
+### Windows
+
+Prebuilt binary (no Go toolchain needed). Downloads
+`own-code-windows-amd64.exe` from the `v0.1.0` release into
+`%USERPROFILE%\.local\bin\own-code.exe`. From CMD:
+
+```cmd
+curl -fSL -o install.bat https://raw.githubusercontent.com/chinmay-sawant/own-code/master/install.bat && install.bat
+```
+
+Build from source instead (needs `git` and Go >= 1.26). From PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/chinmay-sawant/own-code/master/install.ps1 | iex
+```
+
+With a custom prefix (the binary goes to `$PREFIX\bin\own-code.exe`):
+
+```powershell
+$env:PREFIX = "C:\tools"; irm https://raw.githubusercontent.com/chinmay-sawant/own-code/master/install.ps1 | iex
+```
+
+The Windows exe is built on demand via the Actions tab:
+`build-windows` workflow, `Run workflow`, then the artifact is attached
+to the release by hand.
+
 ## Features
 
 - Explorer tree with filter, language badges, change letters, and sticky folders. Right click gives Copy Path, Copy File, Paste.
