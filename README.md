@@ -1,6 +1,6 @@
 # own-code
 
-A dark code viewer and review app. I copied it from `ownframe/examples/code-view` into this folder so it can grow as a separate app. The `ownframe` checkout stays untouched.
+own-code is a dark desktop app for reading code and reviewing diffs: explorer, in-place editor, unified and split diffs, git history, and Markdown preview.
 
 ![own-code demo](docs/demo.webp)
 
