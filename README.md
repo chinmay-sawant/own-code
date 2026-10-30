@@ -135,6 +135,17 @@ The VS Code figures are px0's published head-to-head measurements, included for 
 - Editing is a simple buffer. It has no multi cursor, no language server, and no unsaved change prompt when a tab closes.
 - Git ignored paths stay in the explorer as muted gray rows with an `IGNORED` badge. A skipped ignored directory gets one placeholder row.
 
+### How VS Code handles the same limits
+
+own-code scans the whole tree up front and tokenizes every line, so its caps are explicit. VS Code instead defers the work.
+
+| Area | own-code | VS Code |
+|---|---|---|
+| **Explorer tree** | Crawls the whole tree at startup up to the file budget and keeps all nodes in memory | Lazy reads: folders load only when expanded, no full tree walk at startup |
+| **Quick open and search** | Filters the pre-scanned in-memory slice; workspace search caps at 200 hits, 8 per file | Out-of-process ripgrep streaming from disk, respecting ignores and excludes |
+| **File watching** | In-process fsnotify up to 2,000 directories | Native recursive watchers, skipping `node_modules` and `.git/objects` |
+| **Large files** | Skips files over 512 KB or 20,000 lines with a notice row | Piece Tree buffer; above roughly 20–50 MB it drops tokenization, minimap, and language features and shows plain text |
+
 ## Tests
 
 ```sh
