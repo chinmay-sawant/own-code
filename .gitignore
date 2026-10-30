@@ -7,6 +7,10 @@ own-code.exe
 /dist/
 /bin/
 
+# Dependencies resolve through the module proxy plus the ../ownframe
+# sibling checkout. vendor/ stays local-only and is never committed.
+/vendor/
+
 # Go cache and coverage
 *.coverprofile
 coverage.txt

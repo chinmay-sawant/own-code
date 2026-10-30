@@ -8,7 +8,7 @@ The screenshot shows the app with the explorer open and `interaction.md` in the 
 
 ## Run
 
-The entry point is `cmd/own-code/main.go`. All app code lives in `internal/app/`, with its embedded `components/`, `fixtures/`, and `testdata/` trees alongside it. `go.mod`, `vendor/`, `docs/`, `install.sh`, and this file stay at the root.
+The entry point is `cmd/own-code/main.go`. All app code lives in `internal/app/`, with its embedded `components/`, `fixtures/`, and `testdata/` trees alongside it. `go.mod`, `docs/`, `install.sh`, and this file stay at the root. Builds resolve `ownframe` through the `../ownframe` sibling checkout in `go.mod`; `vendor/` is local-only and never committed.
 
 You need Go 1.26 and a sibling `ownframe` checkout for the local `replace`.
 
@@ -51,12 +51,14 @@ This builds from source and installs the binary to `$HOME/.local/bin/own-code`. 
 PREFIX=/usr/local curl -fsSL https://raw.githubusercontent.com/chinmay-sawant/own-code/master/install.sh | sh
 ```
 
-Manual alternative:
+Manual alternative (run it next to an `ownframe` checkout, since `go.mod`
+points at `../ownframe`):
 
 ```sh
 git clone https://github.com/chinmay-sawant/own-code.git
+git clone https://github.com/chinmay-sawant/ownframe.git
 cd own-code
-go build -mod=vendor -o own-code ./cmd/own-code
+go build -o own-code ./cmd/own-code
 ```
 
 ## Features
@@ -194,8 +196,7 @@ This folder started as a copy of `ownframe/examples/code-view`. That example rem
 `go.mod` requires `github.com/chinmay-sawant/ownframe` at master commit
 `f2f079065cfa` (pseudo-version `v0.0.3-0.20261030080535-f2f079065cfa`),
 which has the `MenuItem` API this copy needs. No published tag has it yet.
-The upstream module zip at that commit is too large to download, so
-`vendor/` is committed and the build uses it. A local `replace` to
-`../ownframe` stays for development; plain `go build`, `go vet`, and
-`go test` work from a clean clone with no network because of the vendor
-tree, while `go mod tidy` needs the sibling checkout.
+The upstream module zip at that commit is too large to download, so the
+build resolves `ownframe` through the local `replace` to `../ownframe`
+instead. Keep an `ownframe` checkout next to this repo: `go build`,
+`go vet`, and `go test` all need the sibling, and so does `go mod tidy`.
