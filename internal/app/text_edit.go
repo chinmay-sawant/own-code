@@ -6,6 +6,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/chinmay-sawant/own-code/internal/edit"
 )
 
 const (
@@ -211,8 +213,8 @@ func (a *App) editKey(ctx context.Context, key string) error {
 
 	text, _, _ := a.editSelection()
 	runes := []rune(text)
-	caret := clampEditPos(a.editCaret, len(runes))
-	anchor := clampEditPos(a.editAnchor, len(runes))
+	caret := edit.ClampPos(a.editCaret, len(runes))
+	anchor := edit.ClampPos(a.editAnchor, len(runes))
 
 	switch key {
 	case "arrowleft":
@@ -267,8 +269,8 @@ func (a *App) insertEditText(ctx context.Context, insert string) error {
 // replaceEditRange applies one text change, records undo, and redraws.
 func (a *App) replaceEditRange(ctx context.Context, text string, start, end int, insert string) error {
 	runes := []rune(text)
-	start = clampEditPos(start, len(runes))
-	end = clampEditPos(end, len(runes))
+	start = edit.ClampPos(start, len(runes))
+	end = edit.ClampPos(end, len(runes))
 	if start > end {
 		start, end = end, start
 	}
@@ -304,8 +306,8 @@ func (a *App) editSelection() (string, int, int) {
 
 	text := a.edit.Text()
 	n := utf8.RuneCountInString(text)
-	anchor := clampEditPos(a.editAnchor, n)
-	caret := clampEditPos(a.editCaret, n)
+	anchor := edit.ClampPos(a.editAnchor, n)
+	caret := edit.ClampPos(a.editCaret, n)
 
 	if anchor > caret {
 		anchor, caret = caret, anchor
@@ -551,7 +553,7 @@ func lineTextAt(text string, line int) string {
 // offsetLineCol turns a rune offset into a zero-based line and column.
 func offsetLineCol(text string, offset int) (int, int) {
 	runes := []rune(text)
-	offset = clampEditPos(offset, len(runes))
+	offset = edit.ClampPos(offset, len(runes))
 	line, col := 0, 0
 
 	for _, r := range runes[:offset] {
@@ -587,19 +589,19 @@ func (a *App) editMoveVertical(runes []rune, caret, delta int) int {
 	display := min(row.Start+col-rows[current].Start, row.Start+segmentRuneLen(row.Segments))
 	text := string(runes)
 	rawCol := rawColumnAt(lineTextAt(text, row.Line), display)
-	return offsetAtPoint(selectionLines(text), row.Line, rawCol)
+	return edit.OffsetAtPoint(edit.SelectionLines(text), row.Line, rawCol)
 }
 
 // editMoveLine keeps the raw column while moving one source line.
 func editMoveLine(runes []rune, caret, delta int) int {
 	line, col := offsetLineCol(string(runes), caret)
-	lines := selectionLines(string(runes))
+	lines := edit.SelectionLines(string(runes))
 	line += delta
 	if line < 0 || line >= len(lines) {
 		return caret
 	}
 
-	return offsetAtPoint(lines, line, col)
+	return edit.OffsetAtPoint(lines, line, col)
 }
 
 func editMoveLines(runes []rune, caret, delta int) int {
@@ -636,7 +638,7 @@ func lineEnd(runes []rune, caret int) int {
 }
 
 func wordStart(runes []rune, caret int) int {
-	i := clampEditPos(caret, len(runes))
+	i := edit.ClampPos(caret, len(runes))
 	for i > 0 && unicode.IsSpace(runes[i-1]) {
 		i--
 	}
@@ -646,18 +648,6 @@ func wordStart(runes []rune, caret int) int {
 	}
 
 	return i
-}
-
-func clampEditPos(pos, n int) int {
-	if pos < 0 {
-		return 0
-	}
-
-	if pos > n {
-		return n
-	}
-
-	return pos
 }
 
 func absInt(n int) int {

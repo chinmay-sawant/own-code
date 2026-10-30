@@ -1,13 +1,14 @@
 package app
 
-import _ "embed"
+import (
+	owncode "github.com/chinmay-sawant/own-code"
+)
 
 // sampleDiff is a checked-in unified diff for the bundled workspace. It is
 // the default Source Control view so the example has a rich diff without a
-// repository. With -root, live git replaces it.
-//
-//go:embed fixtures/sample.diff
-var sampleDiff []byte
+// repository. With -root, live git replaces it. The bytes live at the
+// repository root; see the owncode package.
+var sampleDiff = owncode.SampleDiff
 
 // sampleStagedCount is the number of bundled sample files shown as staged
 // so the fixture demonstrates both the staged and unstaged sections.

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/chinmay-sawant/own-code/internal/edit"
 	"github.com/chinmay-sawant/ownframe"
 	"github.com/fsnotify/fsnotify"
 )
@@ -156,7 +157,7 @@ type App struct {
 	splitWheelAccum [2]float64
 
 	editing    bool
-	edit       *editBuffer
+	edit       *edit.Buffer
 	dirty      map[string]bool
 	editCaret  int
 	editAnchor int

@@ -1,6 +1,10 @@
 package app
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/chinmay-sawant/own-code/internal/edit"
+)
 
 // toggleEdit switches the focused editor between the token view and a plain
 // text buffer. Editing stays in the left group; the right group is a view.
@@ -38,7 +42,7 @@ func (a *App) toggleEdit() {
 		return
 	}
 
-	a.edit = newEditBuffer(doc.Path, raw)
+	a.edit = edit.NewBuffer(doc.Path, raw)
 	a.editing = true
 	a.editCaret = 0
 	a.editAnchor = 0

@@ -26,7 +26,7 @@ type previewRule struct {
 func readPreviewRules(t *testing.T) []previewRule {
 	t.Helper()
 
-	raw, err := os.ReadFile(filepath.Join("components", "preview.css"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "components", "preview.css"))
 	if err != nil {
 		t.Fatalf("read preview.css: %v", err)
 	}

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chinmay-sawant/own-code/internal/wsl"
 	"github.com/chinmay-sawant/ownframe"
 )
 
@@ -616,9 +617,9 @@ func TestWslMntToWindows(t *testing.T) {
 		{"C:\\x", "", false},
 		{"", "", false},
 	} {
-		got, ok := wslMntToWindows(tc.in)
+		got, ok := wsl.WSLMntToWindows(tc.in)
 		if got != tc.want || ok != tc.ok {
-			t.Fatalf("wslMntToWindows(%q) = %q, %v; want %q, %v", tc.in, got, ok, tc.want, tc.ok)
+			t.Fatalf("wsl.WSLMntToWindows(%q) = %q, %v; want %q, %v", tc.in, got, ok, tc.want, tc.ok)
 		}
 	}
 }

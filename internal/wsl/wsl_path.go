@@ -1,10 +1,15 @@
-package app
+package wsl
 
 import (
 	"strings"
 )
 
-// parseWSLRoot recognizes WSL network paths of the form
+// IsDriveLetter reports an ASCII drive letter.
+func IsDriveLetter(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+}
+
+// ParseWSLRoot recognizes WSL network paths of the form
 // \\wsl$\<distro>\... and \\wsl.localhost\<distro>\... and returns the
 // distro name with the in-WSL POSIX path. The host part matches
 // case-insensitively and either slash separator is accepted, including
@@ -12,8 +17,8 @@ import (
 // converted to forward slashes and a leading slash is ensured, so a bare
 // \\wsl$\<distro> with no subpath maps to "/". Anything else reports
 // ok=false.
-func parseWSLRoot(root string) (distro, wslPath string, ok bool) {
-	if len(root) < 2 || !isWSLSep(root[0]) || !isWSLSep(root[1]) {
+func ParseWSLRoot(root string) (distro, wslPath string, ok bool) {
+	if len(root) < 2 || !IsWSLSep(root[0]) || !IsWSLSep(root[1]) {
 		return "", "", false
 	}
 	rest := root[2:]
@@ -54,22 +59,22 @@ func parseWSLRoot(root string) (distro, wslPath string, ok bool) {
 	return distro, "/" + strings.Join(kept, "/"), true
 }
 
-// drivePrefixLen is the shortest drive-letter path: `C:\`.
-const drivePrefixLen = 3
+// DrivePrefixLen is the shortest drive-letter path: `C:\`.
+const DrivePrefixLen = 3
 
-// windowsToWSLPath maps drive-letter paths such as C:\x or C:/x (any
+// WindowsToWSLPath maps drive-letter paths such as C:\x or C:/x (any
 // letter, case-insensitive) to /mnt/<lower-letter>/x with forward slashes.
 // Anything else, including UNC non-WSL paths, relative paths, and the empty
 // string, reports false.
-func windowsToWSLPath(p string) (string, bool) {
-	if len(p) < drivePrefixLen {
+func WindowsToWSLPath(p string) (string, bool) {
+	if len(p) < DrivePrefixLen {
 		return "", false
 	}
 	drive := p[0]
-	if !isDriveLetter(drive) {
+	if !IsDriveLetter(drive) {
 		return "", false
 	}
-	if p[1] != ':' || !isWSLSep(p[2]) {
+	if p[1] != ':' || !IsWSLSep(p[2]) {
 		return "", false
 	}
 	rest := strings.ReplaceAll(p[2:], `\`, "/")
@@ -88,13 +93,15 @@ func windowsToWSLPath(p string) (string, bool) {
 	return mnt + "/" + strings.Join(kept, "/"), true
 }
 
-func isWSLSep(c byte) bool {
+// IsWSLSep reports whether c separates WSL path elements. Both separators
+// are accepted because Windows hands out backslashes and WSL uses slashes.
+func IsWSLSep(c byte) bool {
 	return c == '\\' || c == '/'
 }
 
-// wslMntToWindows maps a /mnt/<drive>/... path seen from Windows back to a
+// WSLMntToWindows maps a /mnt/<drive>/... path seen from Windows back to a
 // drive-letter path such as C:\.... Anything else reports false.
-func wslMntToWindows(p string) (string, bool) {
+func WSLMntToWindows(p string) (string, bool) {
 	lowered := strings.ToLower(p)
 	if lowered != "/mnt" && !strings.HasPrefix(lowered, "/mnt/") {
 		return "", false
@@ -107,7 +114,7 @@ func wslMntToWindows(p string) (string, bool) {
 	}
 
 	drive := rest[0]
-	if !isDriveLetter(drive) || (len(rest) > 1 && rest[1] != '/') {
+	if !IsDriveLetter(drive) || (len(rest) > 1 && rest[1] != '/') {
 		return "", false
 	}
 

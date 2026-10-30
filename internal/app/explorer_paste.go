@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+
+	"github.com/chinmay-sawant/own-code/internal/wsl"
 )
 
 // Explorer paste backend: the Copy/Paste menu and Ctrl+V land here.
@@ -24,7 +26,7 @@ import (
 // NSPasteboardTypeString). There is no CF_HDROP, text/uri-list, or image
 // backend, so file drops from other apps arrive as text when the source
 // offers it, and ParseClipboardFileList parses that text. WSL translation
-// reuses wsl_path.go, so no new internal/filepick import is needed and
+// reuses the wsl package, so no new internal/filepick import is needed and
 // scripts/example-internal-allowlist.txt stays untouched.
 //
 // ParseClipboardFileList is the validated variant: the Ctrl+V text flow in
@@ -475,7 +477,7 @@ const (
 
 // ParseClipboardFileList reads clipboard text as a file list: text/uri-list
 // (file:// URIs with %-decoding, "#" comments skipped), Windows C:\ paths
-// translated through windowsToWSLPath when isWSL, WSL \\wsl$\ paths, and
+// translated through wsl.WindowsToWSLPath for WSL distros, \\wsl$\ paths, and
 // plain newline-separated absolute paths. Only existing regular files come
 // back, in first-seen order; relative paths, ".." traversal, and missing
 // files are dropped. Extension policy is permissive on purpose: PNG, JPEG,
@@ -524,13 +526,13 @@ func translateClipboardPath(line string) (string, bool) {
 		return "", false
 	}
 
-	if len(trimmed) >= 2 && isWSLSep(trimmed[0]) && isWSLSep(trimmed[1]) {
+	if len(trimmed) >= 2 && wsl.IsWSLSep(trimmed[0]) && wsl.IsWSLSep(trimmed[1]) {
 		return wslClipboardPath(trimmed)
 	}
 
 	if isClipboardDrivePath(trimmed) {
 		if isWSL() {
-			translated, ok := windowsToWSLPath(trimmed)
+			translated, ok := wsl.WindowsToWSLPath(trimmed)
 			if !ok {
 				return "", false
 			}
@@ -583,7 +585,7 @@ func clipboardFileURIToPath(uri string) (string, bool) {
 		return "", false
 	}
 
-	if len(decoded) >= drivePrefixLen && decoded[0] == '/' && isDriveLetter(decoded[1]) && decoded[2] == ':' {
+	if len(decoded) >= wsl.DrivePrefixLen && decoded[0] == '/' && wsl.IsDriveLetter(decoded[1]) && decoded[2] == ':' {
 		decoded = decoded[1:]
 	}
 
@@ -591,9 +593,9 @@ func clipboardFileURIToPath(uri string) (string, bool) {
 }
 
 // isClipboardDrivePath reports a Windows drive-letter path such as C:\x or
-// C:/x, reusing the drivePrefixLen shape from wsl_path.go.
+// C:/x, reusing the drive-prefix shape from the wsl package.
 func isClipboardDrivePath(path string) bool {
-	return len(path) >= drivePrefixLen && isDriveLetter(path[0]) && path[1] == ':' && isWSLSep(path[2])
+	return len(path) >= wsl.DrivePrefixLen && wsl.IsDriveLetter(path[0]) && path[1] == ':' && wsl.IsWSLSep(path[2])
 }
 
 // wslClipboardPath maps \\wsl$\<distro>\... to the local path. The distro
@@ -601,7 +603,7 @@ func isClipboardDrivePath(path string) bool {
 // a local file. An unknown guest keeps the path and lets the existence
 // filter decide.
 func wslClipboardPath(unc string) (string, bool) {
-	distro, wslPath, ok := parseWSLRoot(unc)
+	distro, wslPath, ok := wsl.ParseWSLRoot(unc)
 	if !ok {
 		return "", false
 	}

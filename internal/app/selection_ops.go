@@ -5,6 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/chinmay-sawant/own-code/internal/edit"
 	"github.com/chinmay-sawant/ownframe"
 )
 
@@ -66,7 +67,7 @@ func (a *App) onPress(ctx context.Context, box ownframe.Box, x, y float64) (bool
 
 	a.selX, a.selY = x, y
 	text := a.edit.Text()
-	sel := selectionFromPoints(text, line, col, line, col)
+	sel := edit.SelectionFromPoints(text, line, col, line, col)
 	a.editAnchor = sel.Anchor
 	a.editCaret = sel.Caret
 	a.dragSelect = true
@@ -94,7 +95,7 @@ func (a *App) extendEditSelection(x, y float64) {
 
 	text := a.edit.Text()
 	anchorLine, anchorCol := offsetLineCol(text, a.editAnchor)
-	sel := selectionFromPoints(text, anchorLine, anchorCol, line, col)
+	sel := edit.SelectionFromPoints(text, anchorLine, anchorCol, line, col)
 	a.editAnchor = sel.Anchor
 	a.editCaret = sel.Caret
 }

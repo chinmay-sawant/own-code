@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/chinmay-sawant/own-code/internal/wsl"
 	"github.com/chinmay-sawant/ownframe"
 )
 
@@ -253,11 +254,11 @@ func (a *App) explorerAbsPath(rel string) string {
 	}
 
 	if isWSL() {
-		if win, ok := windowsToWSLPath(abs); ok {
+		if win, ok := wsl.WindowsToWSLPath(abs); ok {
 			return win
 		}
 	} else if runtime.GOOS == "windows" {
-		if win, ok := wslMntToWindows(abs); ok {
+		if win, ok := wsl.WSLMntToWindows(abs); ok {
 			return win
 		}
 	}

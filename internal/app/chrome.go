@@ -23,7 +23,7 @@ func (a *App) ChromeDrag(x, y int) bool {
 	return a.chromeDrag(x, y)
 }
 
-// chromeDrag moves a borderless code-view window by its titlebar. Ebiten
+// chromeDrag moves a borderless own-code window by its titlebar. Ebiten
 // hands the cursor in device pixels, so the strip scales with the display
 // and the layout zoom. A press on a titlebar button still reaches the page
 // as a click when it is released without moving.

@@ -10,6 +10,7 @@ import (
 	"log"
 
 	"github.com/chinmay-sawant/own-code/internal/app"
+	"github.com/chinmay-sawant/own-code/internal/wsl"
 	"github.com/chinmay-sawant/ownframe"
 )
 
@@ -21,9 +22,9 @@ func main() {
 	dev := flag.Bool("dev", false, "open the developer tools dock at startup")
 	perf := flag.Bool("perf", true, "enable pipeline sampling for the devtools Frame tab")
 	chrome := flag.Bool("chrome", true, "draw custom minimize, maximize, and close controls in the titlebar")
-	app.AddWSLFlags(flag.CommandLine)
+	wsl.AddWSLFlags(flag.CommandLine)
 	flag.Parse()
-	if app.MaybeReexecInWSL() {
+	if wsl.MaybeReexecInWSL() {
 		return
 	}
 
@@ -71,7 +72,7 @@ func main() {
 	if err := a.StartWatcher(ctx); err != nil {
 		log.Printf("code-view: watcher unavailable: %v", err)
 	}
-	options := ownframe.WindowOptions{CustomChrome: a.Chrome(), PlacementID: "code-view"}
+	options := ownframe.WindowOptions{CustomChrome: a.Chrome(), PlacementID: "own-code"}
 	if a.Chrome() {
 		options.Draggable = a.ChromeDrag
 	}

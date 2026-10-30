@@ -1,4 +1,4 @@
-package app
+package edit
 
 import (
 	"slices"
@@ -50,7 +50,7 @@ func TestEditBufferRoundTrip(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			buf := newEditBuffer("main.go", []byte(tc.raw))
+			buf := NewBuffer("main.go", []byte(tc.raw))
 			if buf.Path != "main.go" {
 				t.Errorf("path = %q", buf.Path)
 			}
@@ -81,7 +81,7 @@ func TestEditBufferRoundTrip(t *testing.T) {
 func TestEditBufferDirtyTracking(t *testing.T) {
 	t.Parallel()
 
-	buf := newEditBuffer("main.go", []byte("alpha\nbeta\n"))
+	buf := NewBuffer("main.go", []byte("alpha\nbeta\n"))
 	if buf.Dirty {
 		t.Fatal("new buffer is dirty")
 	}
@@ -148,7 +148,7 @@ func TestEditBufferLineCount(t *testing.T) {
 	}
 
 	for raw, want := range cases {
-		buf := newEditBuffer("x.go", []byte(raw))
+		buf := NewBuffer("x.go", []byte(raw))
 		if got := buf.LineCount(); got != want {
 			t.Errorf("LineCount(%q) = %d, want %d", raw, got, want)
 		}

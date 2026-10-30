@@ -1,13 +1,13 @@
 package app
 
-import "embed"
+import (
+	owncode "github.com/chinmay-sawant/own-code"
+)
 
-//go:embed components/*.html components/*.css
-var files embed.FS
-
-// file returns one embedded component or stylesheet as text.
+// file returns one embedded component or stylesheet as text. The template
+// set lives at the repository root; see the owncode package.
 func file(name string) string {
-	b, err := files.ReadFile(name)
+	b, err := owncode.Components.ReadFile(name)
 	if err != nil {
 		return ""
 	}

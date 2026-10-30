@@ -1,11 +1,13 @@
-package app
+// Package edit is the text buffer and selection model behind the editor:
+// the unsaved text of one open file and the anchor/caret selection over it.
+package edit
 
 import "strings"
 
-// editBuffer is the unsaved text of one open file. Lines are the editable
+// Buffer is the unsaved text of one open file. Lines are the editable
 // form; Text serializes them with one trailing newline so a normal save keeps
 // the file's last newline.
-type editBuffer struct {
+type Buffer struct {
 	Path  string
 	Lines []string
 	Dirty bool
@@ -13,43 +15,43 @@ type editBuffer struct {
 	Original string
 }
 
-// newEditBuffer parses a file into lines. CRLF becomes LF, one trailing
+// NewBuffer parses a file into lines. CRLF becomes LF, one trailing
 // newline is dropped before splitting, and an empty file has zero lines.
-func newEditBuffer(path string, raw []byte) *editBuffer {
+func NewBuffer(path string, raw []byte) *Buffer {
 	lines := splitEditLines(string(raw))
 
-	return &editBuffer{
+	return &Buffer{
 		Path:     path,
 		Lines:    lines,
-		Original: joinEditLines(lines),
+		Original: JoinLines(lines),
 	}
 }
 
 // Text returns the text a save would write.
-func (b *editBuffer) Text() string {
-	return joinEditLines(b.Lines)
+func (b *Buffer) Text() string {
+	return JoinLines(b.Lines)
 }
 
 // SetText replaces the lines from editor text. The buffer is dirty only when
 // the new text differs from the text it opened or last saved with.
-func (b *editBuffer) SetText(text string) {
+func (b *Buffer) SetText(text string) {
 	b.Lines = splitEditLines(text)
 	b.Dirty = b.Text() != b.Original
 }
 
 // LineCount returns the number of editable lines.
-func (b *editBuffer) LineCount() int {
+func (b *Buffer) LineCount() int {
 	return len(b.Lines)
 }
 
 // Save serializes the buffer for the workspace writer. It does not touch
 // disk.
-func (b *editBuffer) Save() []byte {
+func (b *Buffer) Save() []byte {
 	return []byte(b.Text())
 }
 
 // MarkSaved records the current text as the saved text.
-func (b *editBuffer) MarkSaved() {
+func (b *Buffer) MarkSaved() {
 	b.Original = b.Text()
 	b.Dirty = false
 }
@@ -66,12 +68,25 @@ func splitEditLines(text string) []string {
 	return strings.Split(strings.TrimSuffix(text, "\n"), "\n")
 }
 
-// joinEditLines writes lines as text with one trailing newline. A zero-line
+// JoinLines writes lines as text with one trailing newline. A zero-line
 // buffer writes nothing.
-func joinEditLines(lines []string) string {
+func JoinLines(lines []string) string {
 	if len(lines) == 0 {
 		return ""
 	}
 
 	return strings.Join(lines, "\n") + "\n"
+}
+
+// ClampPos bounds a buffer position to [0, n].
+func ClampPos(pos, n int) int {
+	if pos < 0 {
+		return 0
+	}
+
+	if pos > n {
+		return n
+	}
+
+	return pos
 }

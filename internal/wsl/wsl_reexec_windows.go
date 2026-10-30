@@ -1,6 +1,6 @@
 //go:build windows
 
-package app
+package wsl
 
 import (
 	"errors"
@@ -38,12 +38,12 @@ func AddWSLFlags(fs *flag.FlagSet) {
 }
 
 // MaybeReexecInWSL hands a Windows launch to the Linux companion inside WSL
-// and exits with the child's exit code, reporting true. It triggers only
-// when the workspace root (or, for a relative root, the current directory)
-// is a WSL network path per parseWSLRoot; -wsl-bin alone never forces a
-// handoff. Any failure before the child starts returns false so the app runs
-// natively instead of stranding the user. The re-exec itself cannot be
-// unit-tested headless; it needs a Windows host with WSL.
+// and exits with the child's exit code. It triggers only when the workspace
+// root (or, for a relative root, the current directory) is a WSL network
+// path per ParseWSLRoot; -wsl-bin alone never forces a handoff. Any failure
+// before the child starts returns false so the app runs natively instead of
+// stranding the user. The re-exec itself cannot be unit-tested headless; it
+// needs a Windows host with WSL.
 func MaybeReexecInWSL() bool {
 	if !wslEnabled {
 		return false
@@ -58,7 +58,7 @@ func MaybeReexecInWSL() bool {
 	}
 
 	var distro, linuxRoot string
-	if parsedDistro, parsedPath, ok := parseWSLRoot(rawRoot); ok {
+	if parsedDistro, parsedPath, ok := ParseWSLRoot(rawRoot); ok {
 		distro, linuxRoot = parsedDistro, parsedPath
 	} else {
 		// An explicit absolute root chose native Windows; only a
@@ -70,7 +70,7 @@ func MaybeReexecInWSL() bool {
 		if err != nil {
 			return false
 		}
-		parsedDistro, parsedBase, ok := parseWSLRoot(cwd)
+		parsedDistro, parsedBase, ok := ParseWSLRoot(cwd)
 		if !ok {
 			return false
 		}
@@ -86,7 +86,7 @@ func MaybeReexecInWSL() bool {
 		if strings.HasSuffix(strings.ToLower(exe), wslExeSuffix) {
 			exe = exe[:len(exe)-len(wslExeSuffix)]
 		}
-		translated, ok := windowsToWSLPath(exe)
+		translated, ok := WindowsToWSLPath(exe)
 		if !ok {
 			return false
 		}

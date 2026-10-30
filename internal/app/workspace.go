@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	owncode "github.com/chinmay-sawant/own-code"
 )
 
 const (
@@ -80,7 +82,7 @@ type workspace struct {
 
 // loadSampleWorkspace scans the embedded demo project.
 func loadSampleWorkspace() (*workspace, error) {
-	sub, err := fs.Sub(sampleFiles, "testdata/sample")
+	sub, err := fs.Sub(owncode.SampleFiles, "testdata/sample")
 	if err != nil {
 		return nil, fmt.Errorf("sample workspace: %w", err)
 	}
@@ -757,7 +759,7 @@ func (w *workspace) ensureFile(path string) (*fileMeta, error) {
 	var size int64
 
 	if w.Sample {
-		sub, err := fs.Sub(sampleFiles, "testdata/sample")
+		sub, err := fs.Sub(owncode.SampleFiles, "testdata/sample")
 		if err != nil {
 			return nil, err
 		}
@@ -1149,7 +1151,7 @@ func (w *workspace) readLines(path string) ([]string, bool, error) {
 // readFile returns the bytes of one scanned file.
 func (w *workspace) readFile(path string) ([]byte, error) {
 	if w.Sample {
-		sub, err := fs.Sub(sampleFiles, "testdata/sample")
+		sub, err := fs.Sub(owncode.SampleFiles, "testdata/sample")
 		if err != nil {
 			return nil, err
 		}

@@ -3,8 +3,10 @@ module github.com/chinmay-sawant/own-code
 go 1.26.10
 
 // Standalone copy of ownframe/examples/code-view. This pins ownframe at the
-// master commit f2f079065cfa (pseudo-version v0.0.3-0.20261030080535-f2f079065cfa)
-// with no local replace, so the pushed repo builds from the proxy.
+// master commit f2f079065cfa (pseudo-version v0.0.3-0.20261030080535-f2f079065cfa).
+// The local replace below points at the sibling checkout because the
+// upstream module zip at that commit is too large to download; keep an
+// ownframe checkout next to this repo.
 require (
 	github.com/chinmay-sawant/ownframe v0.0.3-0.20261030080535-f2f079065cfa
 	github.com/fsnotify/fsnotify v1.10.1

@@ -1,4 +1,4 @@
-package app
+package wsl
 
 import (
 	"testing"
@@ -156,18 +156,18 @@ func TestParseWSLRoot(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			distro, wslPath, ok := parseWSLRoot(tc.root)
+			distro, wslPath, ok := ParseWSLRoot(tc.root)
 			if ok != tc.ok {
-				t.Fatalf("parseWSLRoot(%q) ok = %v, want %v", tc.root, ok, tc.ok)
+				t.Fatalf("ParseWSLRoot(%q) ok = %v, want %v", tc.root, ok, tc.ok)
 			}
 			if !tc.ok {
 				return
 			}
 			if distro != tc.distro {
-				t.Errorf("parseWSLRoot(%q) distro = %q, want %q", tc.root, distro, tc.distro)
+				t.Errorf("ParseWSLRoot(%q) distro = %q, want %q", tc.root, distro, tc.distro)
 			}
 			if wslPath != tc.wslPath {
-				t.Errorf("parseWSLRoot(%q) wslPath = %q, want %q", tc.root, wslPath, tc.wslPath)
+				t.Errorf("ParseWSLRoot(%q) wslPath = %q, want %q", tc.root, wslPath, tc.wslPath)
 			}
 		})
 	}
@@ -278,15 +278,15 @@ func TestWindowsToWSLPath(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := windowsToWSLPath(tc.path)
+			got, ok := WindowsToWSLPath(tc.path)
 			if ok != tc.ok {
-				t.Fatalf("windowsToWSLPath(%q) ok = %v, want %v", tc.path, ok, tc.ok)
+				t.Fatalf("WindowsToWSLPath(%q) ok = %v, want %v", tc.path, ok, tc.ok)
 			}
 			if !tc.ok {
 				return
 			}
 			if got != tc.want {
-				t.Errorf("windowsToWSLPath(%q) = %q, want %q", tc.path, got, tc.want)
+				t.Errorf("WindowsToWSLPath(%q) = %q, want %q", tc.path, got, tc.want)
 			}
 		})
 	}

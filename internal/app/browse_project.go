@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/chinmay-sawant/own-code/internal/wsl"
 )
 
 // blockedProjectRoot reports whether root is a drive or filesystem root that
@@ -21,27 +23,22 @@ func blockedProjectRoot(root string) bool {
 	}
 
 	// Windows drive roots like C:, C:\, or C:/.
-	if len(trimmed) == 2 && isDriveLetter(trimmed[0]) && trimmed[1] == ':' {
+	if len(trimmed) == 2 && wsl.IsDriveLetter(trimmed[0]) && trimmed[1] == ':' {
 		return true
 	}
 
-	if len(trimmed) == 3 && isDriveLetter(trimmed[0]) && trimmed[1] == ':' &&
+	if len(trimmed) == 3 && wsl.IsDriveLetter(trimmed[0]) && trimmed[1] == ':' &&
 		(trimmed[2] == '\\' || trimmed[2] == '/') {
 		return true
 	}
 
 	// WSL drive mounts like /mnt/c.
 	if len(trimmed) == len("/mnt/c") && strings.HasPrefix(trimmed, "/mnt/") &&
-		isDriveLetter(trimmed[len(trimmed)-1]) {
+		wsl.IsDriveLetter(trimmed[len(trimmed)-1]) {
 		return true
 	}
 
 	return false
-}
-
-// isDriveLetter reports an ASCII drive letter.
-func isDriveLetter(c byte) bool {
-	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
 // browseStartRoot is the directory the folder browser opens on: the current
@@ -123,11 +120,11 @@ func (a *App) browseDisplayName() string {
 // Only drive roots step out to the virtual drives level on Up; the Unix
 // root / keeps its existing behavior and never becomes drives.
 func isBrowseDriveRoot(root string) bool {
-	if len(root) == 2 && isDriveLetter(root[0]) && root[1] == ':' {
+	if len(root) == 2 && wsl.IsDriveLetter(root[0]) && root[1] == ':' {
 		return true
 	}
 
-	if len(root) == 3 && isDriveLetter(root[0]) && root[1] == ':' &&
+	if len(root) == 3 && wsl.IsDriveLetter(root[0]) && root[1] == ':' &&
 		(root[2] == '\\' || root[2] == '/') {
 		return true
 	}
@@ -138,7 +135,7 @@ func isBrowseDriveRoot(root string) bool {
 // isWindowsDrivePath reports a path on a Windows drive (D:\, D:/, D:foo).
 // The check is textual so drive logic stays testable on every OS.
 func isWindowsDrivePath(path string) bool {
-	return len(path) >= 2 && isDriveLetter(path[0]) && path[1] == ':'
+	return len(path) >= 2 && wsl.IsDriveLetter(path[0]) && path[1] == ':'
 }
 
 // driveSepIndex is the separator position in a drive-rooted path: D:\x

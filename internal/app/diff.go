@@ -3,7 +3,8 @@ package app
 import (
 	"strconv"
 	"strings"
-	"unicode"
+
+	"github.com/chinmay-sawant/own-code/internal/edit"
 )
 
 // changeSet is the pending diff the Source Control view shows. Files is the
@@ -648,19 +649,19 @@ func emphasizePair(del, add *diffLine) {
 		return
 	}
 
-	if startA < len(a) && startA > 0 && isWordRune(a[startA-1]) && isWordRune(a[startA]) {
-		for startA > 0 && isWordRune(a[startA-1]) {
+	if startA < len(a) && startA > 0 && edit.IsWordRune(a[startA-1]) && edit.IsWordRune(a[startA]) {
+		for startA > 0 && edit.IsWordRune(a[startA-1]) {
 			startA--
 		}
 
 		startB = startA
 	}
 
-	for endA < len(a) && endA > startA && isWordRune(a[endA-1]) && isWordRune(a[endA]) {
+	for endA < len(a) && endA > startA && edit.IsWordRune(a[endA-1]) && edit.IsWordRune(a[endA]) {
 		endA++
 	}
 
-	for endB < len(b) && endB > startB && isWordRune(b[endB-1]) && isWordRune(b[endB]) {
+	for endB < len(b) && endB > startB && edit.IsWordRune(b[endB-1]) && edit.IsWordRune(b[endB]) {
 		endB++
 	}
 
@@ -671,11 +672,6 @@ func emphasizePair(del, add *diffLine) {
 	if endB > startB {
 		add.Emph, add.EmphAt, add.EmphTo = true, startB, endB
 	}
-}
-
-// isWordRune reports whether a rune continues an identifier-like word.
-func isWordRune(r rune) bool {
-	return r == '_' || r == '$' || unicode.IsLetter(r) || unicode.IsDigit(r)
 }
 
 // expandTabs replaces tabs with four spaces and strips a trailing CR. Tabs

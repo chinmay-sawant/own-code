@@ -97,7 +97,7 @@ func TestGitignoreRows(t *testing.T) {
 		}
 	}
 
-	cssBytes, err := os.ReadFile(filepath.Join("components", "sidebar.css"))
+	cssBytes, err := os.ReadFile(filepath.Join("..", "..", "components", "sidebar.css"))
 	if err != nil {
 		t.Fatalf("read sidebar.css: %v", err)
 	}

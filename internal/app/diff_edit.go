@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/chinmay-sawant/own-code/internal/edit"
 	"github.com/chinmay-sawant/ownframe"
 )
 
@@ -230,7 +231,7 @@ func (a *App) saveDirtyActive() {
 		return
 	}
 
-	data := []byte(joinEditLines(doc.Lines))
+	data := []byte(edit.JoinLines(doc.Lines))
 	if err := a.ws.writeFile(path, data); err != nil {
 		a.showToast("error", "Save failed", err.Error())
 		a.refresh()

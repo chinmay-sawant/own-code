@@ -1,4 +1,4 @@
-package app
+package edit
 
 import "testing"
 
@@ -13,18 +13,18 @@ func TestSelectionRangeClamps(t *testing.T) {
 
 	cases := []struct {
 		name  string
-		sel   textSelection
+		sel   TextSelection
 		n     int
 		start int
 		end   int
 	}{
-		{name: "empty buffer", sel: textSelection{}, n: 0, start: 0, end: 0},
-		{name: "collapsed", sel: textSelection{Anchor: 4, Caret: 4}, n: limit, start: 4, end: 4},
-		{name: "forward", sel: textSelection{Anchor: 1, Caret: 5}, n: limit, start: 1, end: 5},
-		{name: "backward", sel: textSelection{Anchor: 7, Caret: 2}, n: limit, start: 2, end: 7},
-		{name: "past the end", sel: textSelection{Anchor: 3, Caret: 40}, n: limit, start: 3, end: limit},
-		{name: "negative anchor", sel: textSelection{Anchor: -6, Caret: 3}, n: limit, start: 0, end: 3},
-		{name: "both outside", sel: textSelection{Anchor: -6, Caret: 40}, n: limit, start: 0, end: limit},
+		{name: "empty buffer", sel: TextSelection{}, n: 0, start: 0, end: 0},
+		{name: "collapsed", sel: TextSelection{Anchor: 4, Caret: 4}, n: limit, start: 4, end: 4},
+		{name: "forward", sel: TextSelection{Anchor: 1, Caret: 5}, n: limit, start: 1, end: 5},
+		{name: "backward", sel: TextSelection{Anchor: 7, Caret: 2}, n: limit, start: 2, end: 7},
+		{name: "past the end", sel: TextSelection{Anchor: 3, Caret: 40}, n: limit, start: 3, end: limit},
+		{name: "negative anchor", sel: TextSelection{Anchor: -6, Caret: 3}, n: limit, start: 0, end: 3},
+		{name: "both outside", sel: TextSelection{Anchor: -6, Caret: 40}, n: limit, start: 0, end: limit},
 	}
 
 	for _, tc := range cases {
@@ -47,62 +47,62 @@ func TestSelectionFromPoints(t *testing.T) {
 		text                string
 		startLine, startCol int
 		endLine, endCol     int
-		want                textSelection
+		want                TextSelection
 	}{
 		{
 			name: "collapsed", text: selectionTestText,
 			startLine: 1, startCol: 2, endLine: 1, endCol: 2,
-			want: textSelection{Anchor: 8, Caret: 8},
+			want: TextSelection{Anchor: 8, Caret: 8},
 		},
 		{
 			name: "inside one line", text: selectionTestText,
 			startLine: 0, startCol: 0, endLine: 0, endCol: 3,
-			want: textSelection{Anchor: 0, Caret: 3},
+			want: TextSelection{Anchor: 0, Caret: 3},
 		},
 		{
 			name: "forward across lines", text: selectionTestText,
 			startLine: 0, startCol: 2, endLine: 2, endCol: 3,
-			want: textSelection{Anchor: 2, Caret: 14},
+			want: TextSelection{Anchor: 2, Caret: 14},
 		},
 		{
 			name: "backward across lines", text: selectionTestText,
 			startLine: 2, startCol: 3, endLine: 0, endCol: 2,
-			want: textSelection{Anchor: 14, Caret: 2},
+			want: TextSelection{Anchor: 14, Caret: 2},
 		},
 		{
 			name: "column past line end", text: selectionTestText,
 			startLine: 0, startCol: 99, endLine: 1, endCol: 99,
-			want: textSelection{Anchor: 5, Caret: 10},
+			want: TextSelection{Anchor: 5, Caret: 10},
 		},
 		{
 			name: "line past buffer", text: selectionTestText,
 			startLine: 9, startCol: 0, endLine: 9, endCol: 9,
-			want: textSelection{Anchor: 11, Caret: 16},
+			want: TextSelection{Anchor: 11, Caret: 16},
 		},
 		{
 			name: "negative point", text: selectionTestText,
 			startLine: -2, startCol: -3, endLine: -1, endCol: -1,
-			want: textSelection{Anchor: 0, Caret: 0},
+			want: TextSelection{Anchor: 0, Caret: 0},
 		},
 		{
 			name: "whole buffer", text: selectionTestText,
 			startLine: 0, startCol: 0, endLine: 2, endCol: 5,
-			want: textSelection{Anchor: 0, Caret: 16},
+			want: TextSelection{Anchor: 0, Caret: 16},
 		},
 		{
 			name: "empty buffer", text: "",
 			startLine: 0, startCol: 0, endLine: 0, endCol: 0,
-			want: textSelection{Anchor: 0, Caret: 0},
+			want: TextSelection{Anchor: 0, Caret: 0},
 		},
 		{
 			name: "crlf pair is one break", text: "a\r\nb",
 			startLine: 0, startCol: 1, endLine: 1, endCol: 1,
-			want: textSelection{Anchor: 1, Caret: 4},
+			want: TextSelection{Anchor: 1, Caret: 4},
 		},
 		{
 			name: "lone cr is line text", text: "a\rb",
 			startLine: 0, startCol: 3, endLine: 0, endCol: 2,
-			want: textSelection{Anchor: 3, Caret: 2},
+			want: TextSelection{Anchor: 3, Caret: 2},
 		},
 	}
 
@@ -110,9 +110,9 @@ func TestSelectionFromPoints(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := selectionFromPoints(tc.text, tc.startLine, tc.startCol, tc.endLine, tc.endCol)
+			got := SelectionFromPoints(tc.text, tc.startLine, tc.startCol, tc.endLine, tc.endCol)
 			if got != tc.want {
-				t.Fatalf("selectionFromPoints(%q, %d, %d, %d, %d) = %+v, want %+v",
+				t.Fatalf("SelectionFromPoints(%q, %d, %d, %d, %d) = %+v, want %+v",
 					tc.text, tc.startLine, tc.startCol, tc.endLine, tc.endCol, got, tc.want)
 			}
 		})
@@ -127,30 +127,30 @@ func TestSelectionLineRange(t *testing.T) {
 	cases := []struct {
 		name string
 		text string
-		sel  textSelection
+		sel  TextSelection
 		line int
 		from int
 		to   int
 		ok   bool
 	}{
-		{name: "whole buffer line 0", text: selectionTestText, sel: textSelection{Anchor: 0, Caret: n}, line: 0, from: 0, to: 5, ok: true},
-		{name: "whole buffer line 1", text: selectionTestText, sel: textSelection{Anchor: 0, Caret: n}, line: 1, from: 0, to: 4, ok: true},
-		{name: "whole buffer line 2", text: selectionTestText, sel: textSelection{Anchor: 0, Caret: n}, line: 2, from: 0, to: 5, ok: true},
-		{name: "first partial", text: selectionTestText, sel: textSelection{Anchor: 0, Caret: 3}, line: 0, from: 0, to: 3, ok: true},
-		{name: "stops at line start", text: selectionTestText, sel: textSelection{Anchor: 3, Caret: 6}, line: 0, from: 3, to: 5, ok: true},
-		{name: "line after the end", text: selectionTestText, sel: textSelection{Anchor: 3, Caret: 6}, line: 1},
-		{name: "into next line", text: selectionTestText, sel: textSelection{Anchor: 3, Caret: 7}, line: 1, from: 0, to: 1, ok: true},
-		{name: "reversed", text: selectionTestText, sel: textSelection{Anchor: 10, Caret: 6}, line: 1, from: 0, to: 4, ok: true},
-		{name: "collapsed", text: selectionTestText, sel: textSelection{Anchor: 6, Caret: 6}, line: 1},
-		{name: "break only", text: selectionTestText, sel: textSelection{Anchor: 5, Caret: 6}, line: 0},
-		{name: "clamped", text: selectionTestText, sel: textSelection{Anchor: -5, Caret: n + 20}, line: 2, from: 0, to: 5, ok: true},
-		{name: "negative line", text: selectionTestText, sel: textSelection{Anchor: 0, Caret: n}, line: -1},
-		{name: "line past buffer", text: selectionTestText, sel: textSelection{Anchor: 0, Caret: n}, line: 3},
-		{name: "crlf first line", text: "a\r\nb", sel: textSelection{Anchor: 0, Caret: 4}, line: 0, from: 0, to: 1, ok: true},
-		{name: "crlf second line", text: "a\r\nb", sel: textSelection{Anchor: 0, Caret: 4}, line: 1, from: 0, to: 1, ok: true},
-		{name: "crlf before the break", text: "a\r\nb", sel: textSelection{Anchor: 0, Caret: 2}, line: 1},
-		{name: "trailing empty line", text: "a\n", sel: textSelection{Anchor: 0, Caret: 2}, line: 1},
-		{name: "lone cr is line text", text: "a\rb", sel: textSelection{Anchor: 0, Caret: 3}, line: 0, from: 0, to: 3, ok: true},
+		{name: "whole buffer line 0", text: selectionTestText, sel: TextSelection{Anchor: 0, Caret: n}, line: 0, from: 0, to: 5, ok: true},
+		{name: "whole buffer line 1", text: selectionTestText, sel: TextSelection{Anchor: 0, Caret: n}, line: 1, from: 0, to: 4, ok: true},
+		{name: "whole buffer line 2", text: selectionTestText, sel: TextSelection{Anchor: 0, Caret: n}, line: 2, from: 0, to: 5, ok: true},
+		{name: "first partial", text: selectionTestText, sel: TextSelection{Anchor: 0, Caret: 3}, line: 0, from: 0, to: 3, ok: true},
+		{name: "stops at line start", text: selectionTestText, sel: TextSelection{Anchor: 3, Caret: 6}, line: 0, from: 3, to: 5, ok: true},
+		{name: "line after the end", text: selectionTestText, sel: TextSelection{Anchor: 3, Caret: 6}, line: 1},
+		{name: "into next line", text: selectionTestText, sel: TextSelection{Anchor: 3, Caret: 7}, line: 1, from: 0, to: 1, ok: true},
+		{name: "reversed", text: selectionTestText, sel: TextSelection{Anchor: 10, Caret: 6}, line: 1, from: 0, to: 4, ok: true},
+		{name: "collapsed", text: selectionTestText, sel: TextSelection{Anchor: 6, Caret: 6}, line: 1},
+		{name: "break only", text: selectionTestText, sel: TextSelection{Anchor: 5, Caret: 6}, line: 0},
+		{name: "clamped", text: selectionTestText, sel: TextSelection{Anchor: -5, Caret: n + 20}, line: 2, from: 0, to: 5, ok: true},
+		{name: "negative line", text: selectionTestText, sel: TextSelection{Anchor: 0, Caret: n}, line: -1},
+		{name: "line past buffer", text: selectionTestText, sel: TextSelection{Anchor: 0, Caret: n}, line: 3},
+		{name: "crlf first line", text: "a\r\nb", sel: TextSelection{Anchor: 0, Caret: 4}, line: 0, from: 0, to: 1, ok: true},
+		{name: "crlf second line", text: "a\r\nb", sel: TextSelection{Anchor: 0, Caret: 4}, line: 1, from: 0, to: 1, ok: true},
+		{name: "crlf before the break", text: "a\r\nb", sel: TextSelection{Anchor: 0, Caret: 2}, line: 1},
+		{name: "trailing empty line", text: "a\n", sel: TextSelection{Anchor: 0, Caret: 2}, line: 1},
+		{name: "lone cr is line text", text: "a\rb", sel: TextSelection{Anchor: 0, Caret: 3}, line: 0, from: 0, to: 3, ok: true},
 	}
 
 	for _, tc := range cases {
@@ -174,18 +174,18 @@ func TestSelectionText(t *testing.T) {
 	cases := []struct {
 		name string
 		text string
-		sel  textSelection
+		sel  TextSelection
 		want string
 	}{
-		{name: "first line", text: selectionTestText, sel: textSelection{Anchor: 0, Caret: 5}, want: "alpha"},
-		{name: "second line", text: selectionTestText, sel: textSelection{Anchor: 6, Caret: 10}, want: "beta"},
-		{name: "whole buffer", text: selectionTestText, sel: textSelection{Anchor: 0, Caret: n}, want: selectionTestText},
-		{name: "reversed", text: selectionTestText, sel: textSelection{Anchor: 10, Caret: 6}, want: "beta"},
-		{name: "clamped", text: selectionTestText, sel: textSelection{Anchor: -4, Caret: n + 30}, want: selectionTestText},
-		{name: "collapsed", text: selectionTestText, sel: textSelection{Anchor: 4, Caret: 4}, want: ""},
-		{name: "newline only", text: selectionTestText, sel: textSelection{Anchor: 5, Caret: 6}, want: "\n"},
-		{name: "crlf kept", text: "a\r\nb", sel: textSelection{Anchor: 0, Caret: 4}, want: "a\r\nb"},
-		{name: "empty buffer", text: "", sel: textSelection{Anchor: 0, Caret: 9}, want: ""},
+		{name: "first line", text: selectionTestText, sel: TextSelection{Anchor: 0, Caret: 5}, want: "alpha"},
+		{name: "second line", text: selectionTestText, sel: TextSelection{Anchor: 6, Caret: 10}, want: "beta"},
+		{name: "whole buffer", text: selectionTestText, sel: TextSelection{Anchor: 0, Caret: n}, want: selectionTestText},
+		{name: "reversed", text: selectionTestText, sel: TextSelection{Anchor: 10, Caret: 6}, want: "beta"},
+		{name: "clamped", text: selectionTestText, sel: TextSelection{Anchor: -4, Caret: n + 30}, want: selectionTestText},
+		{name: "collapsed", text: selectionTestText, sel: TextSelection{Anchor: 4, Caret: 4}, want: ""},
+		{name: "newline only", text: selectionTestText, sel: TextSelection{Anchor: 5, Caret: 6}, want: "\n"},
+		{name: "crlf kept", text: "a\r\nb", sel: TextSelection{Anchor: 0, Caret: 4}, want: "a\r\nb"},
+		{name: "empty buffer", text: "", sel: TextSelection{Anchor: 0, Caret: 9}, want: ""},
 	}
 
 	for _, tc := range cases {
@@ -312,9 +312,9 @@ func TestPointForOffset(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			line, col := pointForOffset(tc.text, tc.offset)
+			line, col := PointForOffset(tc.text, tc.offset)
 			if line != tc.line || col != tc.col {
-				t.Fatalf("pointForOffset(%q, %d) = (%d, %d), want (%d, %d)",
+				t.Fatalf("PointForOffset(%q, %d) = (%d, %d), want (%d, %d)",
 					tc.text, tc.offset, line, col, tc.line, tc.col)
 			}
 		})
@@ -325,8 +325,8 @@ func TestPointForOffset(t *testing.T) {
 
 		text := "one\nbc\nd"
 		for offset := 0; offset <= len([]rune(text)); offset++ {
-			line, col := pointForOffset(text, offset)
-			if got := selectionFromPoints(text, line, col, line, col).Anchor; got != offset {
+			line, col := PointForOffset(text, offset)
+			if got := SelectionFromPoints(text, line, col, line, col).Anchor; got != offset {
 				t.Fatalf("offset %d became line %d column %d and back to %d", offset, line, col, got)
 			}
 		}

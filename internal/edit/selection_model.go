@@ -1,4 +1,4 @@
-package app
+package edit
 
 import (
 	"strings"
@@ -8,18 +8,18 @@ import (
 
 const crlfLen = 2
 
-// textSelection is the anchor and caret of an editor selection. The anchor is
+// TextSelection is the anchor and caret of an editor selection. The anchor is
 // where the drag started and the caret is where it now ends, so a drag up or
 // left has its anchor after its caret. Both are rune offsets into the buffer.
-type textSelection struct {
+type TextSelection struct {
 	Anchor int
 	Caret  int
 }
 
 // Range returns the selection as ordered, clamped rune offsets.
-func (s textSelection) Range(n int) (start, end int) {
-	start = clampEditPos(s.Anchor, n)
-	end = clampEditPos(s.Caret, n)
+func (s TextSelection) Range(n int) (start, end int) {
+	start = ClampPos(s.Anchor, n)
+	end = ClampPos(s.Caret, n)
 
 	if start > end {
 		start, end = end, start
@@ -28,65 +28,65 @@ func (s textSelection) Range(n int) (start, end int) {
 	return start, end
 }
 
-// selectionLine is one line's start offset and its text without the break.
-type selectionLine struct {
+// SelectionLine is one line's start offset and its text without the break.
+type SelectionLine struct {
 	Start int
 	Text  string
 }
 
-// selectionLines splits text into lines and the rune offset where each line
+// SelectionLines splits text into lines and the rune offset where each line
 // starts. A CRLF pair ends a line and belongs to neither side, while a lone CR
 // stays in its line as text. The result always holds at least one line, so the
 // empty buffer has a line 0.
-func selectionLines(text string) []selectionLine {
+func SelectionLines(text string) []SelectionLine {
 	runes := []rune(text)
-	lines := make([]selectionLine, 0, strings.Count(text, "\n")+1)
+	lines := make([]SelectionLine, 0, strings.Count(text, "\n")+1)
 	start := 0
 
 	for i := 0; i < len(runes); i++ {
 		switch {
 		case runes[i] == '\r' && i+1 < len(runes) && runes[i+1] == '\n':
-			lines = append(lines, selectionLine{Start: start, Text: string(runes[start:i])})
+			lines = append(lines, SelectionLine{Start: start, Text: string(runes[start:i])})
 			i++
 			start = i + 1
 		case runes[i] == '\n':
-			lines = append(lines, selectionLine{Start: start, Text: string(runes[start:i])})
+			lines = append(lines, SelectionLine{Start: start, Text: string(runes[start:i])})
 			start = i + 1
 		}
 	}
 
-	return append(lines, selectionLine{Start: start, Text: string(runes[start:])})
+	return append(lines, SelectionLine{Start: start, Text: string(runes[start:])})
 }
 
-// selectionFromPoints converts a drag's start and end line and column pairs to
+// SelectionFromPoints converts a drag's start and end line and column pairs to
 // a selection. The start pair becomes the anchor and the end pair the caret, so
 // a drag up or left keeps its direction. Columns count runes, not display
 // cells, and a column past the line end clamps to that line's end.
-func selectionFromPoints(text string, startLine, startCol, endLine, endCol int) textSelection {
-	lines := selectionLines(text)
+func SelectionFromPoints(text string, startLine, startCol, endLine, endCol int) TextSelection {
+	lines := SelectionLines(text)
 
-	return textSelection{
-		Anchor: offsetAtPoint(lines, startLine, startCol),
-		Caret:  offsetAtPoint(lines, endLine, endCol),
+	return TextSelection{
+		Anchor: OffsetAtPoint(lines, startLine, startCol),
+		Caret:  OffsetAtPoint(lines, endLine, endCol),
 	}
 }
 
-// offsetAtPoint returns the rune offset of one line and column. Both clamp to
+// OffsetAtPoint returns the rune offset of one line and column. Both clamp to
 // the nearest line and rune in the buffer, so a drag past either edge still
 // lands on a real offset.
-func offsetAtPoint(lines []selectionLine, line, col int) int {
-	row := lines[clampEditPos(line, len(lines)-1)]
+func OffsetAtPoint(lines []SelectionLine, line, col int) int {
+	row := lines[ClampPos(line, len(lines)-1)]
 
-	return row.Start + clampEditPos(col, utf8.RuneCountInString(row.Text))
+	return row.Start + ClampPos(col, utf8.RuneCountInString(row.Text))
 }
 
-// pointForOffset turns a rune offset into a zero-based line and column. The
+// PointForOffset turns a rune offset into a zero-based line and column. The
 // column counts runes in the line. A CRLF pair is one break, so an offset
 // inside the pair reports the start of the next line; a lone CR is a column on
 // its line. An offset past the buffer clamps to its last point.
-func pointForOffset(text string, offset int) (line, col int) {
+func PointForOffset(text string, offset int) (line, col int) {
 	runes := []rune(text)
-	offset = clampEditPos(offset, len(runes))
+	offset = ClampPos(offset, len(runes))
 
 	for i := 0; i < offset; i++ {
 		switch {
@@ -113,7 +113,7 @@ func pointForOffset(text string, offset int) (line, col int) {
 // selection only touches the break there, so a caller can skip an empty mark.
 // A selection that covers a whole line includes its break and marks every rune
 // on that line, but never the break itself.
-func selectionLineRange(text string, sel textSelection, line int) (from, to int, ok bool) {
+func selectionLineRange(text string, sel TextSelection, line int) (from, to int, ok bool) {
 	row, ok := selectionLineAt(text, line)
 	if !ok {
 		return 0, 0, false
@@ -142,9 +142,9 @@ func selectionLineRange(text string, sel textSelection, line int) (from, to int,
 // selectionLineAt returns one line without splitting the whole text, so a
 // caller decorating a visible row does not allocate every line above it. It
 // reports ok false when line is past the buffer.
-func selectionLineAt(text string, line int) (selectionLine, bool) {
+func selectionLineAt(text string, line int) (SelectionLine, bool) {
 	if line < 0 {
-		return selectionLine{}, false
+		return SelectionLine{}, false
 	}
 
 	startByte, startRune := 0, 0
@@ -154,7 +154,7 @@ func selectionLineAt(text string, line int) (selectionLine, bool) {
 		switch {
 		case r == '\r' && i+1 < len(text) && text[i+1] == '\n':
 			if lineCount == line {
-				return selectionLine{Start: startRune, Text: text[startByte:i]}, true
+				return SelectionLine{Start: startRune, Text: text[startByte:i]}, true
 			}
 
 			lineCount++
@@ -167,7 +167,7 @@ func selectionLineAt(text string, line int) (selectionLine, bool) {
 			}
 
 			if lineCount == line {
-				return selectionLine{Start: startRune, Text: text[startByte:i]}, true
+				return SelectionLine{Start: startRune, Text: text[startByte:i]}, true
 			}
 
 			lineCount++
@@ -180,15 +180,15 @@ func selectionLineAt(text string, line int) (selectionLine, bool) {
 	}
 
 	if lineCount == line {
-		return selectionLine{Start: startRune, Text: text[startByte:]}, true
+		return SelectionLine{Start: startRune, Text: text[startByte:]}, true
 	}
 
-	return selectionLine{}, false
+	return SelectionLine{}, false
 }
 
 // selectionText returns the buffer text a selection covers, ordered and clamped
 // to the buffer.
-func selectionText(text string, sel textSelection) string {
+func selectionText(text string, sel TextSelection) string {
 	runes := []rune(text)
 	start, end := sel.Range(len(runes))
 
@@ -201,7 +201,7 @@ func selectionText(text string, sel textSelection) string {
 // An empty range means the offset sits on a blank line.
 func wordSelection(text string, offset int) (start, end int) {
 	runes := []rune(text)
-	offset = clampEditPos(offset, len(runes))
+	offset = ClampPos(offset, len(runes))
 	if len(runes) == 0 {
 		return 0, 0
 	}
@@ -216,14 +216,14 @@ func wordSelection(text string, offset int) (start, end int) {
 	}
 
 	switch {
-	case isWordRune(runes[i]):
+	case IsWordRune(runes[i]):
 		start, end = i, i+1
 
-		for start > 0 && isWordRune(runes[start-1]) {
+		for start > 0 && IsWordRune(runes[start-1]) {
 			start--
 		}
 
-		for end < len(runes) && isWordRune(runes[end]) {
+		for end < len(runes) && IsWordRune(runes[end]) {
 			end++
 		}
 	case selectionSpaceRune(runes, i):
@@ -247,7 +247,7 @@ func wordSelection(text string, offset int) (start, end int) {
 // without the line break. An offset at the end of a line reports that line, so
 // a line select from the caret stays on the visible line.
 func lineSelection(text string, offset int) (start, end int) {
-	line, _ := pointForOffset(text, offset)
+	line, _ := PointForOffset(text, offset)
 	row, ok := selectionLineAt(text, line)
 	if !ok {
 		return 0, 0
@@ -278,4 +278,9 @@ func selectionSpaceRune(runes []rune, i int) bool {
 	}
 
 	return !selectionBreakRune(runes, i) && unicode.IsSpace(runes[i])
+}
+
+// IsWordRune reports whether a rune continues an identifier-like word.
+func IsWordRune(r rune) bool {
+	return r == '_' || r == '$' || unicode.IsLetter(r) || unicode.IsDigit(r)
 }
