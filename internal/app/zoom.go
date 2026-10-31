@@ -249,6 +249,17 @@ func zoomFontTable() []zoomFont {
 		{".file-nav-pos, .file-nav-stats", 9.5},
 		{".file-nav-current", 11},
 		{".file-nav-dir", 9},
+		// Embedded terminal.
+		{".term-body", 12},
+		{".term-tab-name", 9.5},
+		{".term-tab-shell", 7.5},
+		{".term-kicker", 8.5},
+		{".term-foot", 8.5},
+		{".term-note", 9},
+		// Merge editor.
+		{".mrow", 12},
+		{".merge-head", 9.5},
+		{".merge-btn", 8.5},
 	}
 }
 
@@ -280,6 +291,17 @@ func zoomOverrideCSS(z float64) string {
 
 	// Core rows.
 	fmt.Fprintf(&b, ".trow { height:%s !important; }", px(treeRowH))
+
+	// The terminal grid uses the same rounded row height as the Go geometry,
+	// so windowing and the painted rows stay aligned at every zoom.
+	fmt.Fprintf(&b, ".term-resize { height:%s !important; flex-basis:%s !important; }", px(termResizeH), px(termResizeH))
+	fmt.Fprintf(&b, ".term-head { height:%s !important; flex-basis:%s !important; }", px(termHeadH), px(termHeadH))
+	fmt.Fprintf(&b, ".term-foot { height:%s !important; flex-basis:%s !important; }", px(termFootH), px(termFootH))
+	fmt.Fprintf(&b, ".term-note { height:%s !important; flex-basis:%s !important; line-height:%s !important; }", px(termNoteH), px(termNoteH), px(termNoteH))
+	fmt.Fprintf(&b, ".term-body { padding:%s %s !important; }", px(termBodyPad/2), px(termWidthPad/2))
+	fmt.Fprintf(&b, ".term-row { height:%s !important; min-height:%s !important; max-height:%s !important; flex-basis:%s !important; line-height:%s !important; }",
+		px(termRowH), px(termRowH), px(termRowH), px(termRowH), px(termRowH))
+	fmt.Fprintf(&b, ".term-tab, .term-tab .term-pick { height:%s !important; }", px(termHeadH))
 
 	histH := px(histRowH)
 	fmt.Fprintf(&b, ".hist-row { height:%s !important; min-height:%s !important; max-height:%s !important; }", histH, histH, histH)

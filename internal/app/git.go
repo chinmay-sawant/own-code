@@ -9,12 +9,17 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/chinmay-sawant/own-code/internal/merge"
 )
 
 const (
 	gitTimeout = 3 * time.Second
 	// untrackedLimit is the largest untracked file the diff view synthesizes.
 	untrackedLimit = 256 << 10
+	// conflictReadLimit caps the working file read while counting conflict
+	// markers. A larger file is reported unmerged without a marker count.
+	conflictReadLimit = 1 << 20
 )
 
 // loadLiveChanges reads the working tree diff for -root. It keeps the
@@ -74,15 +79,142 @@ func loadLiveChanges(ctx context.Context, root string) (changeSet, error) {
 		}
 	}
 
+	// Conflict detection is best-effort: a failed `git status` or an
+	// unreadable file must never hide the ordinary working-tree diff.
+	cs.Conflicts = scanConflicts(ctx, root)
+	cs.Files = withoutUnmerged(cs.Files, cs.Conflicts)
+	cs.Staged = withoutUnmerged(cs.Staged, cs.Conflicts)
+	cs.Unstaged = withoutUnmerged(cs.Unstaged, cs.Conflicts)
+
 	sortChangeFiles(cs.Files)
 	sortChangeFiles(cs.Staged)
 	sortChangeFiles(cs.Unstaged)
+	sortChangeFiles(cs.Conflicts)
 
-	if len(cs.Files) == 0 {
+	switch {
+	case len(cs.Files) == 0 && len(cs.Conflicts) > 0:
+		cs.Note = "Resolve the merge conflicts before committing."
+	case len(cs.Files) == 0 && len(cs.Conflicts) == 0:
 		cs.Note = "The working tree is clean. Make a change and refresh."
 	}
 
 	return cs, nil
+}
+
+// unmergedCodes are the two-letter `git status --porcelain` states that mark
+// a path as unmerged.
+var unmergedCodes = map[string]bool{
+	"UU": true, "AA": true, "DD": true,
+	"AU": true, "UA": true, "DU": true, "UD": true,
+}
+
+// scanConflicts lists unmerged paths and counts the conflict blocks in each
+// readable text file. Paths are relative to the git root. Failures are silent
+// so Source Control still loads when conflict inspection is unavailable.
+func scanConflicts(ctx context.Context, root string) []changedFile {
+	raw, err := gitBytes(ctx, root, "status", "--porcelain", "-z")
+	if err != nil {
+		return nil
+	}
+
+	var out []changedFile
+	entries := strings.Split(string(raw), "\x00")
+
+	for i := 0; i < len(entries); i++ {
+		entry := entries[i]
+		if len(entry) < 4 {
+			continue
+		}
+
+		code := entry[:2]
+		path := entry[3:]
+
+		// Rename and copy entries carry the original path as the next
+		// NUL-separated field. Unmerged codes never use R or C, but the
+		// field must still be consumed to keep the walk aligned.
+		if code[0] == 'R' || code[0] == 'C' {
+			i++
+
+			continue
+		}
+
+		if !unmergedCodes[code] || !validWorkspacePath(path) {
+			continue
+		}
+
+		file := changedFile{
+			Path:         path,
+			Status:       code,
+			Unmerged:     true,
+			ConflictCode: code,
+		}
+
+		full := filepath.Join(root, filepath.FromSlash(path))
+
+		info, statErr := os.Stat(full)
+		if statErr != nil {
+			out = append(out, file)
+
+			continue
+		}
+
+		if info.Size() > conflictReadLimit {
+			file.Oversized = true
+			out = append(out, file)
+
+			continue
+		}
+
+		text, readErr := os.ReadFile(full) //nolint:gosec // path came from git status under the scanned root
+		if readErr != nil {
+			out = append(out, file)
+
+			continue
+		}
+
+		if isBinary(text) {
+			file.Binary = true
+			out = append(out, file)
+
+			continue
+		}
+
+		file.Conflicts = merge.Parse(string(text)).Count()
+		out = append(out, file)
+	}
+
+	return out
+}
+
+// withoutUnmerged drops conflict paths from an ordinary change list.
+func withoutUnmerged(files, conflicts []changedFile) []changedFile {
+	if len(files) == 0 || len(conflicts) == 0 {
+		return files
+	}
+
+	blocked := make(map[string]bool, len(conflicts))
+	for _, file := range conflicts {
+		blocked[file.Path] = true
+	}
+
+	out := files[:0]
+	for _, file := range files {
+		if !blocked[file.Path] {
+			out = append(out, file)
+		}
+	}
+
+	return out
+}
+
+// validWorkspacePath rejects absolute paths and paths that escape the root.
+func validWorkspacePath(path string) bool {
+	clean := filepath.Clean(filepath.FromSlash(path))
+	if clean == "" || clean == "." || filepath.IsAbs(clean) {
+		return false
+	}
+
+	return clean != ".." && !strings.HasPrefix(clean, ".."+string(filepath.Separator))
 }
 
 // sortChangeFiles orders files case-insensitively by path.

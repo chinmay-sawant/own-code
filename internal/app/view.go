@@ -105,7 +105,9 @@ type View struct {
 	Second     secondaryView
 
 	Diff          diffView
+	Merge         mergeView
 	History       historyView
+	Terminal      terminalView
 	Outline       []symbolRow
 	Toast         toastView
 	Confirm       confirmView
@@ -324,9 +326,14 @@ type recentRow struct {
 
 // diffView is the Source Control panel and the diff header.
 type diffView struct {
-	Files         []diffFileRow
-	Staged        []diffFileRow
-	Unstaged      []diffFileRow
+	Files    []diffFileRow
+	Staged   []diffFileRow
+	Unstaged []diffFileRow
+	// Conflicts holds unmerged paths shown above the staged and unstaged
+	// sections. ConflictCount is included in Count and HasChanges.
+	Conflicts     []diffFileRow
+	ConflictCount int
+	HasConflicts  bool
 	Selected      string
 	SelectedCount int
 	Split         bool
@@ -485,6 +492,44 @@ type diffFileRow struct {
 	Selected    bool
 	Staged      bool
 	Multi       bool
+	// Conflicts is the number of marker blocks in an unmerged path.
+	Conflicts int
+}
+
+// mergeView is the merge editor header and its windowed rows.
+type mergeView struct {
+	Open        bool
+	Unavailable bool
+	Path        string
+	Name        string
+	Dir         string
+	NameShort   string
+	DirShort    string
+	// Index is 1-based and only meaningful when Total is greater than zero.
+	Index      int
+	Total      int
+	Compare    bool
+	Dirty      bool
+	CanStage   bool
+	HasMarkers bool
+	// Narrow shortens the header controls in the split-width editor.
+	Narrow     bool
+	BaseSource string
+	Note       string
+	TrackTop   int
+	Rows       []mergeRow
+}
+
+// mergeRow is one fixed-height row in the merge editor: a conflict header,
+// one side's source line, an action row, or a fallback note.
+type mergeRow struct {
+	Kind     string
+	Side     string
+	Conflict int
+	Current  bool
+	Label    string
+	No       string
+	Text     string
 }
 
 // symbolRow is one outline entry in the details panel.

@@ -29,7 +29,42 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 
 	action := box.Action
 
+	// Clicking outside the panel returns the keyboard to the editor. The
+	// terminal body, tabs, tools, and resize strip keep focus.
+	if a.termFocus && !strings.HasPrefix(box.ID, "term") && action != "terminal-toggle" {
+		a.termFocus = false
+		a.refresh()
+	}
+
 	switch {
+	case action == "terminal-toggle":
+		a.toggleTerminal(ctx)
+	case action == "term-focus":
+		a.focusTerminal(ctx)
+	case action == "term-new":
+		a.startTerminalSession(ctx)
+	case strings.HasPrefix(action, "term-pick:"):
+		if id, ok := actionIndex(action, "term-pick:"); ok {
+			a.pickTerminal(ctx, id)
+		}
+	case strings.HasPrefix(action, "term-close:"):
+		if id, ok := actionIndex(action, "term-close:"); ok {
+			a.closeTerminal(ctx, id)
+		}
+	case action == "term-copy":
+		if err := a.copyTerminal(ctx); err != nil {
+			return err
+		}
+	case action == "term-clear":
+		a.clearTerminal(ctx)
+	case action == "term-scroll-up":
+		if err := a.scrollTerminal(ctx, 3); err != nil {
+			return err
+		}
+	case action == "term-scroll-down":
+		if err := a.scrollTerminal(ctx, -3); err != nil {
+			return err
+		}
 	case action == "":
 		if box.ID == "filter" || box.ID == "palette" || box.ID == "find" || box.ID == "branch-filter" ||
 			box.ID == "workspace-search" || box.ID == "editor" || box.ID == "edit-surface" || box.ID == "project-path" ||
@@ -354,6 +389,36 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		return a.closePalette(ctx)
 	case action == "diff-refresh":
 		a.ReloadChanges(ctx, true)
+	case strings.HasPrefix(action, "merge-open:"):
+		a.openMergeConflict(ctx, strings.TrimPrefix(action, "merge-open:"))
+	case action == "merge-close":
+		a.closeMergeEditor()
+	case action == "merge-prev":
+		a.mergeStep(-1)
+	case action == "merge-next":
+		a.mergeStep(1)
+	case action == "merge-compare":
+		a.toggleMergeCompare()
+	case action == "merge-save":
+		a.saveMergeEditor(ctx)
+	case action == "merge-stage":
+		a.stageMergeConflict(ctx)
+	case action == "merge-edit":
+		a.editMergeResult()
+	case strings.HasPrefix(action, "merge-stage-file:"):
+		a.stageConflictPath(ctx, strings.TrimPrefix(action, "merge-stage-file:"))
+	case strings.HasPrefix(action, "merge-accept:"):
+		rest := strings.TrimPrefix(action, "merge-accept:")
+		name, indexText, ok := strings.Cut(rest, ":")
+		if !ok {
+			break
+		}
+
+		index, indexOK := actionIndex(indexText, "")
+		choice, choiceOK := parseMergeChoice(name)
+		if indexOK && choiceOK {
+			a.mergeAccept(choice, index)
+		}
 	case action == "stage-all":
 		if err := a.stageAll(ctx); err != nil {
 			return err
@@ -709,6 +774,17 @@ func (a *App) onWheel(ctx context.Context, x, y, dx, dy float64) (bool, error) {
 	scrollX, scrollY := a.page.Scroll().ScrollOffset()
 	x -= float64(scrollX)
 	y -= float64(scrollY)
+
+	if a.termOpen && dy != 0 {
+		box, ok := findBoxID(a.page.Boxes(), "term-body")
+		if ok && x >= box.X && x <= box.X+box.W && y >= box.Y && y <= box.Y+box.H {
+			delta := int(-dy * treeWheelRows)
+			a.termScroll = terminalScrollBy(a.termScroll, a.terminalMaxScroll(), delta)
+			a.refresh()
+
+			return true, a.page.Redraw(ctx)
+		}
+	}
 
 	if handled, err := a.browseWheelAt(ctx, x, y, dy); handled || err != nil {
 		return handled, err
@@ -1107,6 +1183,14 @@ func (a *App) onDragStart(ctx context.Context, box ownframe.Box) (bool, error) {
 		a.cardStartTop = a.inlineCard.Top
 		return true, nil
 	}
+	if box.ID == "term-resize" && a.termOpen {
+		a.termDrag = true
+		a.termDragStartH = a.termHeight
+		a.termDragDy = 0
+		a.termFocus = true
+
+		return true, nil
+	}
 	if box.ID == "editor-scroll-thumb" || box.ID == "editor-scroll-thumb-2" {
 		group := 0
 		if box.ID == "editor-scroll-thumb-2" {
@@ -1208,6 +1292,19 @@ func (a *App) onDragStart(ctx context.Context, box ownframe.Box) (bool, error) {
 
 // onDragMove resizes the panes or moves the explorer thumb.
 func (a *App) onDragMove(ctx context.Context, dx, dy float64) error {
+	if a.termDrag {
+		a.termDragDy += dy
+		maxBase := max(termMinHeight, int(float64(a.termMaxHeight())/a.uiZoom()))
+		h := a.termDragStartH - int(a.termDragDy/a.uiZoom())
+		h = max(termMinHeight, min(h, maxBase))
+		if h != a.termHeight {
+			a.termHeight = h
+			a.syncTerminalSize(ctx)
+			a.refresh()
+		}
+
+		return a.page.Redraw(ctx)
+	}
 	if a.cardDrag {
 		a.cardDx += dx
 		a.cardDy += dy
@@ -1331,6 +1428,15 @@ func (a *App) onDragMove(ctx context.Context, dx, dy float64) error {
 
 // onDragEnd releases the history divider.
 func (a *App) onDragEnd(ctx context.Context) error {
+	if a.termDrag {
+		a.termDrag = false
+		a.termDragDy = 0
+		a.syncTerminalSize(ctx)
+		a.refresh()
+
+		return a.page.Redraw(ctx)
+	}
+
 	a.editorDrag.active = false
 	wasSelect := a.dragSelect
 	wasSearch := a.searchDrag
@@ -1392,6 +1498,23 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 			return a.zoomOut(ctx)
 		case "0", "kp0":
 			return a.resetZoom(ctx)
+		}
+	}
+
+	// Ctrl+` toggles the terminal from anywhere, including while the shell
+	// has focus.
+	if a.ctrl && !a.shift && (key == "backquote" || key == "grave" || key == "`") {
+		a.toggleTerminal(ctx)
+
+		return a.page.Redraw(ctx)
+	}
+
+	// The shell owns the keyboard while the terminal is focused. This sits
+	// before every global shortcut so typing w, r, n, or a navigation chord
+	// reaches the shell instead of closing tabs or moving the editor.
+	if !a.confirmOpen {
+		if handled, err := a.handleTerminalKey(ctx, key); handled || err != nil {
+			return err
 		}
 	}
 
@@ -1517,6 +1640,27 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 
 	if a.editing {
 		return a.editKey(ctx, key)
+	}
+
+	// Merge mode owns Ctrl+S and n/p while the result is not in the text
+	// editor. The editing branch above already returned, so keys typed into
+	// the result buffer are never stolen. Text fields and overlays keep
+	// their own keys.
+	if a.mode == "merge" && !mergeTextFocus(a.page.Form().FocusID()) {
+		switch {
+		case a.ctrl && key == "s":
+			a.saveMergeEditor(ctx)
+
+			return a.page.Redraw(ctx)
+		case !a.ctrl && !a.shift && key == "n":
+			a.mergeStep(1)
+
+			return a.page.Redraw(ctx)
+		case !a.ctrl && !a.shift && key == "p":
+			a.mergeStep(-1)
+
+			return a.page.Redraw(ctx)
+		}
 	}
 
 	if a.ctrl && key == "a" && !a.shift {
@@ -1960,6 +2104,18 @@ func isTreeRowID(id string) bool {
 	}
 
 	return true
+}
+
+// mergeTextFocus reports whether a text field or search overlay owns the
+// keyboard, so merge n/p shortcuts do not steal typed characters.
+func mergeTextFocus(focus string) bool {
+	switch focus {
+	case "filter", "palette", "find", "branch-filter", "workspace-search",
+		"project-path", "drawer-path", "editor", "edit-surface":
+		return true
+	default:
+		return false
+	}
 }
 
 // actionIndex parses the number after an action prefix.

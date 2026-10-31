@@ -1,0 +1,239 @@
+/* Merge conflict viewer/resolver ------------------------------------------
+   Every merge row is exactly var(--row-h) tall. The page windowing math and
+   contentHeight depend on that fixed height, so nothing here changes it. */
+
+.st-uu, .st-aa, .st-dd, .st-au, .st-ua, .st-du, .st-ud {
+  background: rgba(248, 81, 73, 0.16);
+  color: var(--red);
+}
+
+.fstat.st-uu, .fstat.st-aa, .fstat.st-dd, .fstat.st-au,
+.fstat.st-ua, .fstat.st-du, .fstat.st-ud { color: var(--red); }
+
+/* Source Control conflict section ----------------------------------------- */
+
+.conflict-head { border-top: 0; color: var(--red); }
+.conflict-head .changes-count { color: var(--red); }
+
+.change-wrap.conflict { border-left-color: rgba(248, 81, 73, 0.65); }
+.change-wrap.conflict.on { border-left-color: var(--red); }
+.change-wrap.conflict:hover { background-color: rgba(248, 81, 73, 0.08); }
+
+.conflict-row .change-name { color: var(--text); }
+.conflict-mark {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: rgba(248, 81, 73, 0.16);
+  color: var(--red);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.merge-conflict-badge {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border: 1px solid rgba(248, 81, 73, 0.4);
+  border-radius: 4px;
+  background: rgba(248, 81, 73, 0.1);
+  color: #ff9b94;
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+/* Merge editor ------------------------------------------------------------- */
+
+.merge-tab-mark {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: rgba(248, 81, 73, 0.18);
+  color: var(--red);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+/* Keep the path at its text width instead of letting it claim half of the
+   free space and run under the conflict counter. */
+.merge-path { flex: 0 1 auto; max-width: 42%; }
+.merge-path b { color: var(--text); }
+/* The path can paint past its measured box; the count and note carry the
+   crumbs background so the path ink never mixes with their labels. */
+.merge-count {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 11;
+  padding-left: 4px;
+  background-color: var(--bg);
+  color: var(--red);
+  font-size: 9px;
+}
+.merge-note {
+  position: relative;
+  z-index: 11;
+  background-color: var(--bg);
+  flex: 0 1 180px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dim);
+  font-size: 9px;
+}
+
+.crumb-btn.stage {
+  border-color: rgba(63, 185, 80, 0.35);
+  color: var(--green);
+}
+.crumb-btn.stage:hover { border-color: rgba(63, 185, 80, 0.6); background: var(--green-bg); }
+.crumb-btn.off, .crumb-btn:disabled { opacity: 0.45; }
+
+.merge-editor { position: relative; min-height: 100%; }
+.merge-track { position: absolute; left: 0; right: 0; }
+.merge-editor.unavailable .merge-track { opacity: 0.95; }
+
+.mrow {
+  height: var(--row-h);
+  min-height: var(--row-h);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: var(--row-h);
+  color: var(--text);
+  box-sizing: border-box;
+}
+
+.merge-head {
+  padding: 0 10px;
+  border-top: 1px solid rgba(248, 81, 73, 0.25);
+  border-bottom: 1px solid rgba(248, 81, 73, 0.18);
+  background: rgba(248, 81, 73, 0.11);
+  color: #ffb4ae;
+  font-size: 9.5px;
+}
+
+.merge-head.current {
+  border-left: 2px solid var(--red);
+  background: rgba(248, 81, 73, 0.2);
+  color: var(--text);
+}
+
+.merge-head-label { flex: 0 0 auto; font-weight: 800; letter-spacing: 0.02em; }
+.merge-head-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--dim);
+  font-size: 9px;
+}
+
+.merge-line { padding: 0 10px; }
+.merge-line.ours { background: var(--green-bg); }
+.merge-line.theirs { background: rgba(122, 162, 247, 0.12); }
+.merge-line.base { background: var(--amber-soft); }
+.merge-line.current.ours { background: var(--green-active); }
+.merge-line.current.theirs { background: rgba(122, 162, 247, 0.24); }
+.merge-line.current.base { background: rgba(240, 183, 90, 0.2); }
+
+.merge-side {
+  flex: 0 0 62px;
+  width: 62px;
+  color: var(--dim);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.merge-line.ours .merge-side { color: var(--green); }
+.merge-line.theirs .merge-side { color: var(--accent); }
+.merge-line.base .merge-side { color: var(--amber); }
+
+.merge-no {
+  flex: 0 0 40px;
+  width: 40px;
+  padding-right: 8px;
+  text-align: right;
+  color: var(--dim);
+  font-size: 9.5px;
+}
+
+.merge-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+.merge-line.base .merge-text { color: var(--muted); }
+
+.merge-meta {
+  padding: 0 10px;
+  background: rgba(240, 183, 90, 0.07);
+  color: var(--amber);
+  font-size: 9.5px;
+}
+.merge-meta.side-base { color: var(--amber); }
+.merge-meta-label {
+  flex: 0 0 auto;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.merge-actions {
+  gap: 4px;
+  padding: 0 10px;
+  background: var(--panel-2);
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+.merge-actions.current { box-shadow: inset 2px 0 0 var(--red); }
+
+.merge-btn {
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 8.5px;
+  line-height: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.merge-btn:hover { border-color: #2b3240; background: var(--panel-3); }
+.merge-btn.ours { border-color: rgba(63, 185, 80, 0.35); color: var(--green); }
+.merge-btn.theirs { border-color: rgba(122, 162, 247, 0.4); color: var(--accent); }
+.merge-btn.both { border-color: rgba(192, 132, 252, 0.4); color: var(--purple); }
+.merge-btn.stage { border-color: rgba(63, 185, 80, 0.45); color: var(--green); }
+.merge-btn.compare.on { border-color: rgba(240, 183, 90, 0.6); background: var(--amber-soft); color: var(--amber); }
+.merge-btn:disabled { opacity: 0.45; cursor: default; }
+.merge-btn:focus { outline: 0; }
+.merge-btn:focus-visible { outline: 1px solid var(--accent); }
+
+@media (max-width: 1120px) {
+  .merge-note { display: none; }
+}

@@ -7,7 +7,7 @@ const shellHead = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Code Review</title><style>`
 
 // shellBody opens the app shell after the styles.
-const shellBody = `</style></head><body class="mode-{{.Mode}}{{if .Details}} with-details{{end}}"><div class="app" id="app-shell">`
+const shellBody = `</style></head><body class="mode-{{.Mode}}{{if .Details}} with-details{{end}}{{if .Terminal.Open}} term-open{{end}}" style="--term-h:{{.Terminal.Height}}px"><div class="app" id="app-shell">`
 
 // buildHTML assembles the code view from its component fragments.
 func buildHTML() string {
@@ -17,7 +17,7 @@ func buildHTML() string {
 
 	for _, name := range []string{
 		"base.css", "window-control.css", "sidebar.css",
-		"settings.css", "editor.css", "diff.css", "history.css", "scrollrails.css", "details.css", "palette.css", "preview.css", "file_nav.css", "inline_card.css", "motion.css",
+		"settings.css", "editor.css", "diff.css", "history.css", "scrollrails.css", "details.css", "palette.css", "preview.css", "file_nav.css", "inline_card.css", "merge.css", "terminal.css", "motion.css",
 	} {
 		b.WriteString(file("components/css/" + name))
 	}
@@ -37,6 +37,7 @@ func buildHTML() string {
 	b.WriteString(file("components/html/context_menu.html"))
 	b.WriteString(file("components/html/confirm.html"))
 	b.WriteString(file("components/html/file_menu.html"))
+	b.WriteString(file("components/html/terminal.html"))
 	b.WriteString(`</div></body></html>`)
 
 	return b.String()

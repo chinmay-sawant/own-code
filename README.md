@@ -100,6 +100,8 @@ your `PATH`, and run `own-code`.
 - Markdown preview (`Ctrl+Shift+V`) with tables and Mermaid flowcharts, in fixed rows.
 - Highlighting for Go, Python, JavaScript/TypeScript, Markdown, CSS, JSON, HTML, YAML, and shell.
 - Details drawer with outline, status bar, persisted sessions, soft wrap (`Z`), desktop file watcher.
+- Embedded terminal panel with tabs, a resizable split, and shell selection through `OWN_CODE_SHELL`. See [docs/terminal.md](docs/terminal.md).
+- Git merge conflict resolver with conflict badges, Current/Incoming/Both/Compare actions, conflict navigation, and explicit staging. See [docs/merge-conflicts.md](docs/merge-conflicts.md).
 
 ## Versus VS Code
 

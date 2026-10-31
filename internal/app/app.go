@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/chinmay-sawant/own-code/internal/edit"
+	"github.com/chinmay-sawant/own-code/internal/merge"
+	"github.com/chinmay-sawant/own-code/internal/terminal"
 	"github.com/chinmay-sawant/ownframe"
 	"github.com/fsnotify/fsnotify"
 )
@@ -205,6 +207,24 @@ type App struct {
 	diffSource    string
 	selected      map[string]bool
 
+	// Merge editor state. The result text is the source of truth; parsed
+	// conflicts and the current index are derived from it after every change.
+	// mergeStamp guards against another process rewriting the working file.
+	mergeOpen        bool
+	mergePath        string
+	mergeResult      string
+	mergeConflicts   []merge.Conflict
+	mergeIndex       int
+	mergeCompare     bool
+	mergeDirty       bool
+	mergeStamp       mergeFileStamp
+	mergeBase        string
+	mergeBaseSource  string
+	mergeBaseLines   int
+	mergeUnavailable bool
+	mergeNote        string
+	mergeRows        []mergeRow
+
 	confirmOpen  bool
 	confirmKind  string
 	confirmPaths []string
@@ -311,6 +331,26 @@ type App struct {
 	watchNote    string
 	watchErr     *AppError
 
+	// Embedded terminal panel. Hiding the panel keeps its shells running;
+	// project switches close them and leave the panel empty.
+	term               *terminal.Manager
+	termOpen           bool
+	termFocus          bool
+	termHeight         int
+	termDrag           bool
+	termDragStartH     int
+	termDragDy         float64
+	termScroll         int
+	termTotalLines     int
+	termVersion        uint64
+	termRunning        bool
+	termNote           string
+	termShell          string
+	termCols           int
+	termRows           int
+	termAppCursor      bool
+	termBracketedPaste bool
+
 	sessionPath     string
 	sessionLast     string
 	sessionReady    bool
@@ -364,6 +404,8 @@ func NewWithLimit(root string, limit int) (*App, error) {
 		historyLimit:  maxCommits,
 		historyScroll: historyScroll{Limit: maxCommits},
 		historyLoad:   make(chan historyLoadReply, 1),
+		term:          terminal.NewManager(),
+		termHeight:    termDefaultHeight,
 	}
 
 	if ws.Sample {
@@ -732,6 +774,7 @@ func (a *App) switchProject(ctx context.Context, root string) error {
 	}
 
 	a.StopWatcher()
+	a.closeTerminalSessions()
 	a.ws = ws
 	a.docs = map[string]*fileDoc{}
 	a.dirty = map[string]bool{}
@@ -842,7 +885,7 @@ func (a *App) buildView() View {
 		MenuX:         a.menuX,
 		MenuY:         a.menuY,
 		MenuRows:      append([]menuViewRow(nil), a.menuItems...),
-		Modal:         a.paletteOpen || a.branchOpen || a.searchOpen || a.settingsOpen || a.confirmOpen || a.fileMenu || a.browseOpen,
+		Modal:         a.paletteOpen || a.branchOpen || a.searchOpen || a.settingsOpen || a.confirmOpen || a.fileMenu || a.browseOpen || a.termFocus,
 		SettingsOpen:  a.settingsOpen,
 		FileMenu:      a.fileMenu,
 		ProjectOpen:   a.projectOpen,
@@ -861,7 +904,7 @@ func (a *App) buildView() View {
 		Themes:        a.themeRows(),
 		Workspace:     baseName(a.ws.Root),
 		Branch:        a.changes.Branch,
-		Changed:       len(a.changes.Files),
+		Changed:       len(a.changes.Files) + len(a.changes.Conflicts),
 		DevNote:       a.changes.Note,
 		ScanBudget:    a.ws.ScanBudget(),
 		WatchNote:     a.watchNote,
@@ -926,9 +969,13 @@ func (a *App) buildView() View {
 		}
 	}
 
-	if a.mode == "changes" {
+	if a.mode == "changes" || a.mode == "merge" {
 		a.fillDiff(&v)
 		a.fillHistory(&v)
+
+		if a.mode == "merge" {
+			a.fillMerge(&v)
+		}
 	} else {
 		a.fillCode(&v)
 
@@ -950,13 +997,16 @@ func (a *App) buildView() View {
 	v.ZoomLabel = a.zoomLabel()
 
 	v.CmdTitle = "Search files"
-	if a.mode == "changes" {
+	switch {
+	case a.mode == "merge" && a.mergePath != "":
+		v.CmdTitle = a.mergePath
+	case a.mode == "changes":
 		if v.Diff.Selected != "" {
 			v.CmdTitle = v.Diff.Selected
 		} else {
 			v.CmdTitle = "Working tree"
 		}
-	} else if v.Active != "" {
+	case v.Active != "":
 		v.CmdTitle = v.Active
 	}
 
@@ -973,6 +1023,7 @@ func (a *App) buildView() View {
 	}
 	v.CommitTip = a.commitTip
 	v.InlineCard = a.inlineCard
+	v.Terminal = a.terminalView()
 	v.SpaceHeight = a.contentHeight()
 	a.fillDrawer(&v)
 
@@ -1174,6 +1225,11 @@ func (a *App) fillDiff(v *View) {
 		unstagedAll = nil
 	}
 
+	conflictAll := []changedFile(nil)
+	if sectioned && a.diffSource == "working" {
+		conflictAll = active.Conflicts
+	}
+
 	files := a.sidebarChangeFiles()
 	d := diffView{
 		Split:      a.diffSplit,
@@ -1187,6 +1243,9 @@ func (a *App) fillDiff(v *View) {
 	add, del := active.totals()
 	d.TotalAdd, d.TotalDel = add, del
 	selected := a.diffPath
+	if a.mode == "merge" {
+		selected = ""
+	}
 	if a.diffSource == "branch" {
 		selected = a.branchPath
 	}
@@ -1201,15 +1260,33 @@ func (a *App) fillDiff(v *View) {
 	}
 
 	if sectioned {
+		d.ConflictCount = len(conflictAll)
+		d.HasConflicts = len(conflictAll) > 0
 		d.StagedCount = len(stagedAll)
 		d.UnstagedCount = len(unstagedAll)
 		d.HasStaged = len(stagedAll) > 0
 		d.HasUnstaged = len(unstagedAll) > 0
-		d.HasChanges = len(stagedAll)+len(unstagedAll) > 0
-		d.Count = len(stagedAll) + len(unstagedAll)
+		d.HasChanges = len(stagedAll)+len(unstagedAll)+len(conflictAll) > 0
+		d.Count = len(stagedAll) + len(unstagedAll) + len(conflictAll)
 		d.SelectedCount = a.selectedCount()
 
-		total := d.Count
+		// Conflicts stay pinned above the windowed staged and unstaged
+		// sections, so a scroll can never hide an unresolved path.
+		for _, file := range conflictAll {
+			d.Conflicts = append(d.Conflicts, diffFileRow{
+				Path:        file.Path,
+				Name:        baseName(file.Path),
+				Dir:         dirName(file.Path),
+				Status:      file.Status,
+				StatusClass: "st-" + strings.ToLower(file.Status),
+				Lang:        languageOf(file.Path),
+				Badge:       languageInfo(languageOf(file.Path)).Badge,
+				Selected:    a.mode == "merge" && a.mergePath == file.Path,
+				Conflicts:   file.Conflicts,
+			})
+		}
+
+		total := len(stagedAll) + len(unstagedAll)
 		visible := a.changeVisibleRows()
 		from, to := a.changesScroll.Rows(total, visible)
 
@@ -1251,6 +1328,7 @@ func (a *App) fillDiff(v *View) {
 				Selected:    file.Path == selected,
 				Staged:      from+i < len(stagedAll),
 				Multi:       a.selected[file.Path],
+				Conflicts:   file.Conflicts,
 			}
 			d.Files = append(d.Files, row)
 
@@ -1306,7 +1384,18 @@ func (a *App) fillDiff(v *View) {
 	d.Source = a.diffSource
 	d.HasFiles = len(active.Files) > 0
 
+	if a.mode == "merge" {
+		v.Diff = d
+
+		return
+	}
+
 	if !d.HasFiles {
+		if d.HasConflicts {
+			d.EmptyTitle = "Resolve merge conflicts"
+			d.Note = "Select a Merge Conflicts row above to open the merge editor."
+		}
+
 		v.Diff = d
 
 		return
@@ -1557,6 +1646,10 @@ func (a *App) findCommit(hash string) *gitCommit {
 // bodyHeight is the editor body below the tab strip and breadcrumbs.
 func (a *App) bodyHeight() int {
 	h := a.viewportH - a.zx(editorBodyTop) - a.zx(windowControlBottom)
+	if a.termOpen {
+		h -= a.termPanelHeight()
+	}
+
 	if h < a.zx(rowH) {
 		h = a.zx(rowH)
 	}
@@ -1882,9 +1975,12 @@ func (a *App) windowSlice(total int) (int, int, int) {
 func (a *App) contentHeight() int {
 	rows := 0
 
-	if a.mode == "changes" {
+	switch a.mode {
+	case "merge":
+		rows = len(a.mergeRows)
+	case "changes":
 		rows = len(a.diffDisplayRows())
-	} else {
+	default:
 		rows = a.paneRowCount(0, a.groupDoc(0))
 
 		if a.split {
@@ -1893,6 +1989,10 @@ func (a *App) contentHeight() int {
 	}
 
 	h := a.zx(editorBodyTop) + rows*a.zx(rowH) + a.zx(windowControlBottom)
+	if a.termOpen {
+		h += a.termPanelHeight()
+	}
+
 	if h < a.viewportH {
 		h = a.viewportH
 	}
@@ -2426,6 +2526,10 @@ func (a *App) openFileAt(group int, path string, record bool) {
 		}
 	}
 
+	if a.mode == "merge" {
+		a.leaveMergeMode()
+	}
+
 	a.finishEdit()
 	a.firstChangePending = ""
 
@@ -2687,6 +2791,10 @@ func (a *App) setMode(_ context.Context, mode string) {
 		return
 	}
 
+	if a.mode == "merge" {
+		a.leaveMergeMode()
+	}
+
 	a.mode = mode
 	a.inlineCard = inlineCard{}
 	if mode == "changes" && a.diffPath != "" && a.fileNav != nil {
@@ -2801,6 +2909,7 @@ func (a *App) ReloadChanges(ctx context.Context, announce bool) {
 	a.selectFirstDiff()
 	a.rebuildDiffRows()
 	a.resetScroll()
+	a.reconcileMergeAfterReload()
 
 	if announce {
 		switch {
@@ -2907,6 +3016,11 @@ func (a *App) readBranchChanges(ctx context.Context) (changeSet, error) {
 }
 
 func (a *App) showBranchChanges(ctx context.Context) {
+	if a.mode == "merge" {
+		a.leaveMergeMode()
+		a.mode = "changes"
+	}
+
 	changes, err := a.readBranchChanges(ctx)
 	if err != nil {
 		a.showToast("error", "Branch changes unavailable", err.Error())
@@ -2944,6 +3058,11 @@ func (a *App) refreshBranchChanges(ctx context.Context) {
 }
 
 func (a *App) selectBranchFile(path string) {
+	if a.mode == "merge" {
+		a.leaveMergeMode()
+		a.mode = "changes"
+	}
+
 	if findFile(a.branchChanges.Files, path) == nil {
 		return
 	}
@@ -2957,6 +3076,11 @@ func (a *App) selectBranchFile(path string) {
 
 // pickBranch loads history for a ref without changing the checkout.
 func (a *App) pickBranch(ctx context.Context, ref string) {
+	if a.mode == "merge" {
+		a.leaveMergeMode()
+		a.mode = "changes"
+	}
+
 	if ref != "" {
 		if _, ok := branchByRef(a.branches, ref); !ok {
 			return
@@ -2998,6 +3122,10 @@ func (a *App) pickBranch(ctx context.Context, ref string) {
 
 // selectDiff shows one file's working-tree diff.
 func (a *App) selectDiff(path string) {
+	if a.mode == "merge" {
+		a.leaveMergeMode()
+	}
+
 	if _, ok := a.scmChangeFile(path); !ok {
 		if findFile(a.changes.Files, path) == nil {
 			return
@@ -3024,6 +3152,10 @@ func (a *App) selectDiff(path string) {
 // toggleDiff previews one file while flipping its multi-select state for
 // Ctrl-click.
 func (a *App) toggleDiff(path string) {
+	if a.mode == "merge" {
+		a.leaveMergeMode()
+	}
+
 	if _, ok := a.scmChangeFile(path); !ok {
 		if findFile(a.changes.Files, path) == nil {
 			return
@@ -3049,6 +3181,11 @@ func (a *App) toggleDiff(path string) {
 
 // showWorkingDiff returns the lower pane to the working tree.
 func (a *App) showWorkingDiff() {
+	if a.mode == "merge" {
+		a.leaveMergeMode()
+		a.mode = "changes"
+	}
+
 	a.firstChangePending = ""
 	a.changeNav = changeNavigation{}
 	a.diffSource = "working"
@@ -3060,6 +3197,11 @@ func (a *App) showWorkingDiff() {
 
 // toggleCommit expands one commit in the history rail.
 func (a *App) toggleCommit(ctx context.Context, hash string) {
+	if a.mode == "merge" {
+		a.leaveMergeMode()
+		a.mode = "changes"
+	}
+
 	a.firstChangePending = ""
 	commit := a.findCommit(hash)
 	if commit == nil {
@@ -3114,6 +3256,11 @@ func (a *App) toggleCommit(ctx context.Context, hash string) {
 
 // selectCommitFile selects one file inside an expanded commit.
 func (a *App) selectCommitFile(ctx context.Context, hash, path string) {
+	if a.mode == "merge" {
+		a.leaveMergeMode()
+		a.mode = "changes"
+	}
+
 	a.firstChangePending = ""
 	if a.findCommit(hash) == nil {
 		return
@@ -3136,6 +3283,11 @@ func (a *App) selectCommitFile(ctx context.Context, hash, path string) {
 
 // openCommitDiff puts the selected commit file in the lower diff pane.
 func (a *App) openCommitDiff(ctx context.Context, hash string) {
+	if a.mode == "merge" {
+		a.leaveMergeMode()
+		a.mode = "changes"
+	}
+
 	commit := a.findCommit(hash)
 	if commit == nil {
 		return
@@ -3388,9 +3540,13 @@ func (a *App) toggleDetails() {
 
 // statusMap turns the change list into the badges the explorer shows.
 func statusMap(cs changeSet) map[string]string {
-	out := make(map[string]string, len(cs.Files))
+	out := make(map[string]string, len(cs.Files)+len(cs.Conflicts))
 
 	for _, file := range cs.Files {
+		out[file.Path] = file.Status
+	}
+
+	for _, file := range cs.Conflicts {
 		out[file.Path] = file.Status
 	}
 
