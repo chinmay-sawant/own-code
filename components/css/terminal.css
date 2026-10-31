@@ -1,0 +1,307 @@
+/* Embedded terminal -------------------------------------------------------- */
+
+.terminal {
+  position: fixed;
+  left: calc(var(--activity-w) + var(--side-w));
+  right: 0;
+  bottom: var(--status-h);
+  z-index: 20;
+  height: var(--term-h, 240px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--panel);
+  border-top: 1px solid var(--line);
+}
+
+/* The panel overlays the bottom of the editor. Tell the editor and both split
+   groups to stop above it. The body class and --term-h travel together. */
+.term-open .editor,
+.term-open .editor-second {
+  height: calc(100vh - var(--titlebar-h) - var(--status-h) - var(--term-h, 240px));
+}
+
+/* Resize handle ------------------------------------------------------------ */
+
+.term-resize {
+  width: 100%;
+  height: 5px;
+  flex: 0 0 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  cursor: ns-resize;
+}
+
+.term-resize:hover { background-color: rgba(122, 162, 247, 0.10); }
+.term-grip { width: 42px; height: 2px; display: block; border-radius: 1px; background-color: #4a5466; pointer-events: none; }
+.term-resize:hover .term-grip { background-color: var(--accent); }
+.terminal .term-resize:focus,
+.terminal .term-resize:focus-visible { outline: 0; background-color: transparent; }
+
+/* Header ------------------------------------------------------------------- */
+
+.term-head {
+  height: 30px;
+  flex: 0 0 30px;
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line-soft);
+  background-color: var(--panel-2);
+}
+
+.term-kicker {
+  flex: 0 0 auto;
+  align-self: center;
+  padding: 0 9px 0 11px;
+  border-right: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-size: 8.5px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  line-height: 28px;
+  white-space: nowrap;
+}
+
+.term-tabs { flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; overflow: hidden; }
+
+.term-tab {
+  height: 30px;
+  max-width: 250px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  border-top: 2px solid transparent;
+  border-right: 1px solid var(--line-soft);
+  color: var(--muted);
+}
+
+.term-tab.on { border-top-color: var(--accent); background-color: var(--bg); color: var(--text); }
+
+.term-pick {
+  min-width: 0;
+  max-width: 205px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 3px 0 8px;
+  overflow: hidden;
+  color: inherit;
+  white-space: nowrap;
+}
+
+.term-pick:hover { color: var(--text); }
+.term-dot { width: 6px; height: 6px; flex: 0 0 6px; display: inline-block; border-radius: 50%; background-color: var(--dim); }
+.term-dot.live { background-color: var(--green); }
+
+.term-tab-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 112px;
+  overflow: hidden;
+  color: inherit;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.term-tab-shell {
+  max-width: 68px;
+  height: 14px;
+  flex: 0 1 auto;
+  display: inline-block;
+  overflow: hidden;
+  padding: 0 4px;
+  border-radius: 3px;
+  background-color: rgba(255, 255, 255, 0.045);
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 7.5px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.term-tab.on .term-tab-shell { background-color: var(--panel-3); color: var(--muted); }
+
+.term-x {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  align-self: center;
+  margin-right: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.term-x:hover { background-color: var(--panel-3); color: var(--text); }
+
+.term-tools { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; padding: 0 4px; }
+
+.term-tool {
+  width: 21px;
+  height: 21px;
+  flex: 0 0 21px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.term-tool:hover { background-color: var(--panel-3); color: var(--text); }
+.term-tool:disabled { color: #3a4152; }
+.term-tool.term-text { width: auto; flex: 0 0 auto; padding: 0 5px; font-size: 8.5px; }
+.term-add { font-size: 15px; font-weight: 500; }
+
+/* Note --------------------------------------------------------------------- */
+
+.term-note {
+  height: 18px;
+  flex: 0 0 18px;
+  padding: 0 10px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line-soft);
+  background-color: var(--panel-2);
+  color: var(--amber);
+  font-family: var(--mono);
+  font-size: 9px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Output ------------------------------------------------------------------- */
+
+.term-body {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 6px 10px;
+  border: 0;
+  background-color: #080a10;
+  color: var(--text);
+  cursor: text;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 16px;
+  text-align: left;
+  white-space: pre;
+}
+
+.terminal .term-body:focus,
+.terminal .term-body:focus-visible { outline: 0; background-color: #080a10; }
+.term-body.focus { box-shadow: inset 0 0 0 1px rgba(122, 162, 247, 0.45); }
+
+.term-row {
+  height: 16px;
+  flex: 0 0 16px;
+  overflow: hidden;
+  line-height: 16px;
+  white-space: pre;
+}
+
+.term-space { display: inline-block; }
+
+.term-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 2px;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+/* Footer ------------------------------------------------------------------- */
+
+.term-foot {
+  height: 18px;
+  flex: 0 0 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  overflow: hidden;
+  border-top: 1px solid var(--line-soft);
+  background-color: var(--panel);
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 8.5px;
+}
+
+.term-foot-shell { min-width: 0; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.term-foot-fill { flex: 1; }
+.term-foot-state { flex: 0 0 auto; color: var(--muted); }
+.term-foot-state.live { color: var(--green); }
+
+/* ANSI palette ------------------------------------------------------------- */
+
+/* Terminal segments arrive as space-separated names such as
+   "fg1 bg4 bold cursor". The fragment prefixes the class list once, so style
+   both the prefixed names and the remaining bare tokens inside a terminal
+   row. Scoping every rule to .term-row keeps the shared t- names in
+   base.css out of the editor and diff renderers. */
+.term-row .t-fg0, .term-row .fg0 { color: #1b1f27; }
+.term-row .t-fg1, .term-row .fg1 { color: #f07178; }
+.term-row .t-fg2, .term-row .fg2 { color: #c3e88d; }
+.term-row .t-fg3, .term-row .fg3 { color: #ffcb6b; }
+.term-row .t-fg4, .term-row .fg4 { color: #82aaff; }
+.term-row .t-fg5, .term-row .fg5 { color: #c792ea; }
+.term-row .t-fg6, .term-row .fg6 { color: #89ddff; }
+.term-row .t-fg7, .term-row .fg7 { color: #c5cad6; }
+.term-row .t-fg8, .term-row .fg8 { color: #4a5262; }
+.term-row .t-fg9, .term-row .fg9 { color: #ff8b92; }
+.term-row .t-fg10, .term-row .fg10 { color: #b9f18d; }
+.term-row .t-fg11, .term-row .fg11 { color: #ffe0a3; }
+.term-row .t-fg12, .term-row .fg12 { color: #9ab8ff; }
+.term-row .t-fg13, .term-row .fg13 { color: #d7b4ff; }
+.term-row .t-fg14, .term-row .fg14 { color: #b6f2ff; }
+.term-row .t-fg15, .term-row .fg15 { color: #f7f9ff; }
+
+.term-row .t-bg0, .term-row .bg0 { background-color: #1b1f27; }
+.term-row .t-bg1, .term-row .bg1 { background-color: #f07178; }
+.term-row .t-bg2, .term-row .bg2 { background-color: #c3e88d; }
+.term-row .t-bg3, .term-row .bg3 { background-color: #ffcb6b; }
+.term-row .t-bg4, .term-row .bg4 { background-color: #82aaff; }
+.term-row .t-bg5, .term-row .bg5 { background-color: #c792ea; }
+.term-row .t-bg6, .term-row .bg6 { background-color: #89ddff; }
+.term-row .t-bg7, .term-row .bg7 { background-color: #c5cad6; }
+.term-row .t-bg8, .term-row .bg8 { background-color: #4a5262; }
+.term-row .t-bg9, .term-row .bg9 { background-color: #ff8b92; }
+.term-row .t-bg10, .term-row .bg10 { background-color: #b9f18d; }
+.term-row .t-bg11, .term-row .bg11 { background-color: #ffe0a3; }
+.term-row .t-bg12, .term-row .bg12 { background-color: #9ab8ff; }
+.term-row .t-bg13, .term-row .bg13 { background-color: #d7b4ff; }
+.term-row .t-bg14, .term-row .bg14 { background-color: #b6f2ff; }
+.term-row .t-bg15, .term-row .bg15 { background-color: #f7f9ff; }
+
+.term-row .t-bold, .term-row .bold { font-weight: 700; }
+.term-row .t-dim, .term-row .dim { opacity: 0.65; }
+.term-row .t-italic, .term-row .italic { font-style: italic; }
+.term-row .t-underline, .term-row .underline { text-decoration: underline; }
+
+/* Cursor comes last so its inverse block wins over every foreground and
+   background token on the same cell. */
+.term-row .t-cursor, .term-row .cursor { background-color: var(--accent); color: var(--bg); opacity: 1; }

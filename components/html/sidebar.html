@@ -1,6 +1,6 @@
 <aside class="sidebar" id="sidebar" style="width:{{.SideW}}px">
   <header class="side-head">
-    <span class="side-title">{{if eq .Mode "changes"}}Source control{{else}}Explorer{{end}}</span>
+    <span class="side-title">{{if or (eq .Mode "changes") (eq .Mode "merge")}}Source control{{else}}Explorer{{end}}</span>
     <span class="side-tools">
       {{if eq .Mode "explorer"}}
       <span class="side-count mono">{{.TreeCount}}</span>
@@ -100,6 +100,28 @@
 
     {{if .Diff.HasChanges}}
     <div class="changes{{if .Diff.Scroll}} scroll-fade{{end}}{{if .Diff.AtTop}} at-top{{end}}{{if .Diff.AtEnd}} at-end{{end}}" id="changes-list">
+      {{if .Diff.HasConflicts}}
+      <div class="changes-section-head conflict-head" id="changes-conflicts-head">
+        <span class="changes-section-title">Merge Conflicts</span>
+        <span class="changes-count mono">{{.Diff.ConflictCount}}</span>
+      </div>
+      {{range .Diff.Conflicts}}
+      <div class="change-wrap conflict{{if .Selected}} on{{end}}" id="merge-conflict-{{.Path}}" data-action="merge-open:{{.Path}}" title="{{.Path}} (merge conflict)">
+        <button class="change conflict-row{{if .Selected}} on{{end}}" id="merge-open-{{.Path}}" data-action="merge-open:{{.Path}}" type="button" title="{{.Path}} (merge conflict)"{{if .Selected}} aria-current="true"{{end}}{{if $.Modal}} tabindex="-1"{{end}}>
+          <span class="ficon conflict-mark">!</span>
+          <span class="change-text">
+            <span class="change-name">{{.Name}}</span>
+            <span class="change-dir">{{.Dir}}</span>
+          </span>
+        </button>
+        <span class="merge-conflict-badge">{{if .Conflicts}}{{.Conflicts}} {{if eq .Conflicts 1}}conflict{{else}}conflicts{{end}}{{else}}conflict{{end}}</span>
+        <span class="change-tools">
+          <button class="change-tool" id="merge-stage-{{.Path}}" data-action="merge-stage-file:{{.Path}}" type="button" title="Stage resolved conflict {{.Path}}" aria-label="Stage resolved conflict {{.Path}}"{{if $.Modal}} tabindex="-1"{{end}}>+</button>
+        </span>
+        <span class="cstat {{.StatusClass}}">{{.Status}}</span>
+      </div>
+      {{end}}
+      {{end}}
       {{if .Diff.HasStaged}}
       <div class="changes-section-head" id="changes-staged-head">
         <span class="changes-section-title">Staged Changes</span>

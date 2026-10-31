@@ -6,7 +6,16 @@
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>
     </button>{{end}}
     <div class="tabs">
-      {{if eq .Mode "changes"}}
+      {{if eq .Mode "merge"}}
+      <div class="tab on diff-tab merge-tab">
+        <button class="tab-main" id="tab-merge" data-action="history-working" type="button" title="{{.Merge.Path}}"{{if .Modal}} tabindex="-1"{{end}}>
+          <span class="merge-tab-mark">!</span>
+          <span class="tab-name">Merge: {{.Merge.Name}}</span>
+          {{if .Merge.Dirty}}<span class="tab-dot" id="tab-dot-merge"></span>{{end}}
+        </button>
+        <button class="tab-x" id="tab-close-merge" data-action="merge-close" type="button" title="Close merge editor" aria-label="Close merge editor"{{if .Modal}} tabindex="-1"{{end}}>×</button>
+      </div>
+      {{else if eq .Mode "changes"}}
       <div class="tab on diff-tab">
         <button class="tab-main" id="tab-working" data-action="history-working" type="button" title="{{if .Diff.CommitShort}}{{.Diff.CommitSubject}}{{else}}Working tree{{end}}"{{if .Modal}} tabindex="-1"{{end}}>
           <svg width="12" height="13" viewBox="0 0 12 14" fill="none" stroke-width="1.4" stroke-linecap="round"><circle cx="2.6" cy="2.8" r="1.7"/><circle cx="2.6" cy="11.2" r="1.7"/><circle cx="9.4" cy="5" r="1.7"/><path d="M2.6 4.5v5M9.4 6.7c0 2.2-2.4 2.4-4.4 3"/></svg>
@@ -42,7 +51,19 @@
   </div>
 
   <div class="crumbs" id="crumbs">
-    {{if eq .Mode "changes"}}
+    {{if eq .Mode "merge"}}
+      <span class="cstat st-uu">UU</span>
+      <span class="crumb-path diff-path merge-path" id="merge-path" title="{{.Merge.Path}}">{{if .Merge.DirShort}}<span class="diff-dir">{{.Merge.DirShort}}/</span>{{end}}<b>{{.Merge.NameShort}}</b></span>
+      <span class="tabs-fill"></span>
+      <span class="merge-count mono" id="merge-count">{{if .Merge.Total}}Conflict {{.Merge.Index}} of {{.Merge.Total}}{{else}}No conflicts{{end}}</span>
+      <button class="crumb-btn{{if le .Merge.Index 1}} off{{end}}" id="merge-prev" data-action="merge-prev" type="button" title="Previous conflict (p)" aria-label="Previous conflict"{{if le .Merge.Index 1}} disabled{{end}}{{if .Modal}} tabindex="-1"{{end}}>↑</button>
+      <button class="crumb-btn{{if ge .Merge.Index .Merge.Total}} off{{end}}" id="merge-next" data-action="merge-next" type="button" title="Next conflict (n)" aria-label="Next conflict"{{if ge .Merge.Index .Merge.Total}} disabled{{end}}{{if .Modal}} tabindex="-1"{{end}}>↓</button>
+      <button class="crumb-btn{{if .Merge.Compare}} on{{end}}" id="merge-compare" data-action="merge-compare" type="button" title="Compare the common base" aria-pressed="{{if .Merge.Compare}}true{{else}}false{{end}}"{{if .Modal}} tabindex="-1"{{end}}>{{if .Merge.Narrow}}Compare{{else}}Compare Base{{end}}</button>
+      <button class="crumb-btn{{if .Merge.Dirty}} on{{end}}" id="merge-save" data-action="merge-save" type="button" title="Save the merge result (Ctrl+S)"{{if .Modal}} tabindex="-1"{{end}}>Save{{if .Merge.Dirty}} ·{{end}}</button>
+      <button class="crumb-btn stage{{if not .Merge.CanStage}} off{{end}}" id="merge-stage" data-action="merge-stage" type="button" title="Resolve and stage this file"{{if not .Merge.CanStage}} disabled{{end}}{{if .Modal}} tabindex="-1"{{end}}>{{if .Merge.Narrow}}Stage{{else}}Mark Resolved &amp; Stage{{end}}</button>
+      <button class="crumb-btn" id="merge-edit" data-action="merge-edit" type="button" title="Edit the merge result in the text editor"{{if .Modal}} tabindex="-1"{{end}}>{{if .Merge.Narrow}}Edit{{else}}Edit Result{{end}}</button>
+      <span class="merge-note" title="{{.Merge.Note}}">{{.Merge.Note}}</span>
+    {{else if eq .Mode "changes"}}
       {{if .Diff.HasFiles}}
       {{if .Diff.CommitShort}}<span class="crumb-commit mono" id="crumb-commit">{{.Diff.CommitShort}}</span><span class="crumb-subject">{{.Diff.CommitSubject}}</span>
       <button class="crumb-btn" id="commit-copy-message" data-action="copy-commit-message:{{.Diff.CommitHash}}" type="button" title="Copy commit message" aria-label="Copy commit message"{{if .Modal}} tabindex="-1"{{end}}>Copy message</button>
@@ -101,7 +122,44 @@
   </div>
 
   <div class="code-body{{if .Editing}} editing{{end}}" id="code-body">
-    {{if eq .Mode "changes"}}
+    {{if eq .Mode "merge"}}
+    <div class="merge-editor{{if .Merge.Unavailable}} unavailable{{end}}" id="merge-editor">
+      <div class="track merge-track" style="top:{{.Merge.TrackTop}}px">
+        {{range .Merge.Rows}}
+          {{if eq .Kind "header"}}
+          <div class="mrow merge-head{{if .Current}} current{{end}}" id="merge-c-{{.Conflict}}">
+            <span class="merge-head-label">{{.Label}}</span>
+            <span class="merge-head-meta">{{.Text}}</span>
+          </div>
+          {{else if eq .Kind "action"}}
+          <div class="mrow merge-actions{{if .Current}} current{{end}}" id="merge-actions-{{.Conflict}}">
+            {{if ge .Conflict 0}}
+            <button class="merge-btn ours" id="merge-ours-{{.Conflict}}" data-action="merge-accept:ours:{{.Conflict}}" type="button" title="Accept the current-branch lines"{{if $.Modal}} tabindex="-1"{{end}}>Accept Current</button>
+            <button class="merge-btn theirs" id="merge-theirs-{{.Conflict}}" data-action="merge-accept:theirs:{{.Conflict}}" type="button" title="Accept the incoming-branch lines"{{if $.Modal}} tabindex="-1"{{end}}>Accept Incoming</button>
+            <button class="merge-btn both" id="merge-both-{{.Conflict}}" data-action="merge-accept:both:{{.Conflict}}" type="button" title="Keep both sides"{{if $.Modal}} tabindex="-1"{{end}}>Accept Both</button>
+            <button class="merge-btn compare{{if $.Merge.Compare}} on{{end}}" id="merge-compare-{{.Conflict}}" data-action="merge-compare" type="button" title="Show the common base"{{if $.Modal}} tabindex="-1"{{end}}>Compare</button>
+            {{else}}
+            <button class="merge-btn" id="merge-save-footer" data-action="merge-save" type="button"{{if $.Modal}} tabindex="-1"{{end}}>Save</button>
+            <button class="merge-btn stage" id="merge-stage-footer" data-action="merge-stage" type="button"{{if not $.Merge.CanStage}} disabled{{end}}{{if $.Modal}} tabindex="-1"{{end}}>{{if $.Merge.Narrow}}Stage{{else}}Mark Resolved &amp; Stage{{end}}</button>
+            <button class="merge-btn" id="merge-edit-footer" data-action="merge-edit" type="button"{{if $.Modal}} tabindex="-1"{{end}}>{{if $.Merge.Narrow}}Edit{{else}}Edit Result{{end}}</button>
+            {{end}}
+          </div>
+          {{else if eq .Kind "meta"}}
+          <div class="mrow merge-meta{{if .Side}} side-{{.Side}}{{end}}"{{if ge .Conflict 0}} id="merge-side-{{.Conflict}}-meta"{{end}}>
+            {{if .Label}}<span class="merge-meta-label">{{.Label}}</span>{{end}}
+            <span class="merge-text">{{.Text}}</span>
+          </div>
+          {{else}}
+          <div class="mrow merge-line {{.Side}}{{if .Current}} current{{end}}" id="merge-side-{{.Conflict}}-{{if .No}}{{.No}}{{else}}meta{{end}}">
+            <span class="merge-side">{{if eq .Side "ours"}}Current{{else if eq .Side "theirs"}}Incoming{{else}}Base{{end}}</span>
+            <span class="merge-no">{{.No}}</span>
+            <span class="merge-text">{{.Text}}</span>
+          </div>
+          {{end}}
+        {{end}}
+      </div>
+    </div>
+    {{else if eq .Mode "changes"}}
       {{if .Diff.HasFiles}}
       <div class="track{{if .Diff.Split}} split-track{{end}}" style="top:{{.Diff.TrackTop}}px">
         {{range .Diff.Rows}}
@@ -243,28 +301,28 @@
 {{if .Split}}
 <section class="editor editor-second{{if eq .FocusGroup 1}} focus{{end}}" id="editor-window-2" style="left:{{.Second.Left}}px;width:{{.Second.Width}}px">
   <div class="tabstrip" id="tabstrip-2">
-    {{if .Second.TabsPrev}}<button class="tab-nav" id="tabs2-prev" data-action="tabs2-prev" type="button" title="Earlier tabs" aria-label="Earlier tabs">
+    {{if .Second.TabsPrev}}<button class="tab-nav" id="tabs2-prev" data-action="tabs2-prev" type="button" title="Earlier tabs" aria-label="Earlier tabs"{{if $.Terminal.Focus}} tabindex="-1"{{end}}>
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>
     </button>{{end}}
     <div class="tabs">
       {{range $t := .Second.Tabs}}
       <div class="tab{{if $t.Active}} on{{end}}">
-        <button class="tab-main" id="tab2-{{$t.Index}}" data-action="tab2:{{$t.Index}}" type="button" title="{{$t.Path}}">
+        <button class="tab-main" id="tab2-{{$t.Index}}" data-action="tab2:{{$t.Index}}" type="button" title="{{$t.Path}}"{{if $.Terminal.Focus}} tabindex="-1"{{end}}>
           <span class="ficon sm lang-{{$t.Lang}}">{{$t.Badge}}</span>
           <span class="tab-name">{{$t.Name}}</span>
           {{if $t.Dirty}}<span class="tab-dot" id="tab2-dot-{{$t.Index}}"></span>{{end}}
           <span class="tab-status {{$t.StatusClass}}">{{$t.Status}}</span>
         </button>
-        <button class="tab-x" id="tab2-close-{{$t.Index}}" data-action="tab2-close:{{$t.Index}}" type="button" title="Close {{$t.Path}}" aria-label="Close {{$t.Name}}">×</button>
+        <button class="tab-x" id="tab2-close-{{$t.Index}}" data-action="tab2-close:{{$t.Index}}" type="button" title="Close {{$t.Path}}" aria-label="Close {{$t.Name}}"{{if $.Terminal.Focus}} tabindex="-1"{{end}}>×</button>
       </div>
       {{end}}
     </div>
     <span class="tabs-fill"></span>
-    {{if .Second.TabsNext}}<button class="tab-nav" id="tabs2-next" data-action="tabs2-next" type="button" title="Later tabs" aria-label="Later tabs">
+    {{if .Second.TabsNext}}<button class="tab-nav" id="tabs2-next" data-action="tabs2-next" type="button" title="Later tabs" aria-label="Later tabs"{{if $.Terminal.Focus}} tabindex="-1"{{end}}>
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>
     </button>{{end}}
-    <button class="tab-tool" id="pane-left" data-action="focus-group:0" type="button" title="Focus the left editor" aria-label="Focus the left editor">L</button>
-    <button class="tab-tool on" id="split-close" data-action="split-toggle" type="button" title="Close the split editor" aria-label="Close the split editor">▥</button>
+    <button class="tab-tool" id="pane-left" data-action="focus-group:0" type="button" title="Focus the left editor" aria-label="Focus the left editor"{{if $.Terminal.Focus}} tabindex="-1"{{end}}>L</button>
+    <button class="tab-tool on" id="split-close" data-action="split-toggle" type="button" title="Close the split editor" aria-label="Close the split editor"{{if $.Terminal.Focus}} tabindex="-1"{{end}}>▥</button>
   </div>
 
   <div class="crumbs" id="crumbs-2">

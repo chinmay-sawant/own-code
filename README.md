@@ -100,6 +100,8 @@ your `PATH`, and run `own-code`.
 - Markdown preview (`Ctrl+Shift+V`) with tables and Mermaid flowcharts, in fixed rows.
 - Highlighting for Go, Python, JavaScript/TypeScript, Markdown, CSS, JSON, HTML, YAML, and shell.
 - Details drawer with outline, status bar, persisted sessions, soft wrap (`Z`), desktop file watcher.
+- Embedded terminal panel with tabs, a resizable split, and shell selection through `OWN_CODE_SHELL`. See [docs/terminal.md](docs/terminal.md).
+- Git merge conflict resolver with conflict badges, Current/Incoming/Both/Compare actions, conflict navigation, and explicit staging. See [docs/merge-conflicts.md](docs/merge-conflicts.md).
 
 ## Versus VS Code
 
@@ -173,7 +175,7 @@ Chrome's browser and GPU processes alone, 347 MB PSS, are larger than the entire
 - The History pane loads 20 commits, then grows the page as the rail crosses half the loaded rows, up to 500. Patches load on a background worker.
 - This app targets desktop. There is no phone layout or mobile path.
 - The fsnotify watcher is desktop only. `-web` keeps the manual Refresh and `R` path.
-- Quick open searches file names. `Ctrl+Shift+F` searches file contents.
+- Quick open searches file names. Paste an absolute path to open that file, even outside the workspace. `Ctrl+Shift+F` searches file contents.
 - The Markdown preview uses fixed rows. It is an approximation, not a browser DOM. Mermaid covers basic flowcharts and sequence diagrams, not subgraphs.
 - Gutter marks and line cards cover working tree changes only. A commit patch keeps its unified or split diff view.
 - Editing is a simple buffer. It has no multi cursor, no language server, and no unsaved change prompt when a tab closes.

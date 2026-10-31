@@ -478,6 +478,7 @@ func (a *App) tickWatch(ctx context.Context) error {
 	default:
 	}
 
+	a.pollTerminal(ctx)
 	a.pollPatches(ctx)
 	a.receiveSearch(ctx)
 	a.receiveHistoryLoad(ctx)
@@ -667,6 +668,7 @@ func (a *App) applyWatchChanges(ctx context.Context, changes changeSet) {
 
 	a.rebuildDiffRows()
 	a.scrollY = a.clampScroll(a.scrollY)
+	a.reconcileMergeAfterReload()
 	a.view = a.buildView()
 	a.page.SetData(&a.view)
 	_ = a.page.Redraw(ctx)
@@ -753,6 +755,20 @@ func changeSetDelta(prev, next changeSet) bool {
 		if p.Path != n.Path || p.Status != n.Status || p.OldPath != n.OldPath ||
 			p.Add != n.Add || p.Del != n.Del || p.Binary != n.Binary ||
 			!hunksEqual(p.Hunks, n.Hunks) {
+			return true
+		}
+	}
+
+	if len(prev.Conflicts) != len(next.Conflicts) {
+		return true
+	}
+
+	for i := range prev.Conflicts {
+		p := &prev.Conflicts[i]
+		n := &next.Conflicts[i]
+
+		if p.Path != n.Path || p.Status != n.Status ||
+			p.Conflicts != n.Conflicts || p.Binary != n.Binary {
 			return true
 		}
 	}

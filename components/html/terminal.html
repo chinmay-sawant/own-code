@@ -1,0 +1,45 @@
+{{if .Terminal.Open}}
+<section class="terminal" id="terminal" style="height:{{.Terminal.Height}}px" aria-label="Terminal">
+  <button class="term-resize" id="term-resize" type="button" tabindex="-1" title="Drag to resize terminal" aria-label="Drag to resize terminal" tabindex="-1"><span class="term-grip" aria-hidden="true"></span></button>
+
+  <header class="term-head">
+    <span class="term-kicker">Terminal</span>
+    <div class="term-tabs" role="group" aria-label="Sessions">
+      {{range .Terminal.Sessions}}
+      <div class="term-tab{{if .Active}} on{{end}}">
+        <button class="term-pick" id="term-pick-{{.ID}}" data-action="term-pick:{{.ID}}" type="button" tabindex="-1" title="{{.Title}} ({{if .Running}}running{{else}}exited{{end}})" aria-label="Switch to {{.Title}}{{if .Running}}, running{{else}}, exited{{end}}"{{if .Active}} aria-current="true"{{end}}>
+          <span class="term-dot{{if .Running}} live{{end}}" aria-hidden="true"></span>
+          <span class="term-tab-name">{{.Title}}</span>
+          <span class="term-tab-shell" title="{{$.Terminal.Shell}}">{{$.Terminal.Shell}}</span>
+        </button>
+        <button class="term-x" id="term-close-{{.ID}}" data-action="term-close:{{.ID}}" type="button" tabindex="-1" title="Close {{.Title}}" aria-label="Close {{.Title}}">×</button>
+      </div>
+      {{end}}
+    </div>
+    <div class="term-tools">
+      {{if gt .Terminal.MaxScroll 0}}
+      <button class="term-tool" id="term-scroll-up" data-action="term-scroll-up" type="button" tabindex="-1" title="Scroll output up" aria-label="Scroll output up"{{if le .Terminal.Scroll 0}} disabled{{end}}>↑</button>
+      <button class="term-tool" id="term-scroll-down" data-action="term-scroll-down" type="button" tabindex="-1" title="Scroll output down" aria-label="Scroll output down"{{if ge .Terminal.Scroll .Terminal.MaxScroll}} disabled{{end}}>↓</button>
+      {{end}}
+      <button class="term-tool term-add" id="term-new" data-action="term-new" type="button" tabindex="-1" title="New session" aria-label="New terminal session">+</button>
+      <button class="term-tool" id="term-copy" data-action="term-copy" type="button" tabindex="-1" title="Copy output" aria-label="Copy terminal output"{{if not .Terminal.Sessions}} disabled{{end}}>
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="8" height="8" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>
+      </button>
+      <button class="term-tool term-text" id="term-clear" data-action="term-clear" type="button" tabindex="-1" title="Clear terminal" aria-label="Clear terminal"{{if not .Terminal.Sessions}} disabled{{end}}>Clear</button>
+      <button class="term-tool" id="term-hide" data-action="terminal-toggle" type="button" tabindex="-1" title="Hide panel" aria-label="Hide terminal panel">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.2 8 10.5l5-4.3"/></svg>
+      </button>
+    </div>
+  </header>
+
+  {{if .Terminal.Note}}<div class="term-note" title="{{.Terminal.Note}}">{{.Terminal.Note}}</div>{{end}}
+
+  <div class="term-body{{if .Terminal.Focus}} focus{{end}}" id="term-body" data-action="term-focus" role="log" tabindex="0" aria-label="Terminal output and input">{{if .Terminal.Sessions}}{{range .Terminal.Rows}}<div class="term-row">{{if .Empty}}<span class="term-space"> </span>{{else}}{{range .Segments}}<span class="t-{{.Class}}">{{.Text}}</span>{{end}}{{end}}</div>{{end}}{{else}}<span class="term-empty">Open a session with +</span>{{end}}</div>
+
+  <footer class="term-foot">
+    <span class="term-foot-shell" title="{{.Terminal.Shell}}">{{.Terminal.Shell}}</span>
+    <span class="term-foot-fill"></span>
+    {{if .Terminal.Sessions}}<span class="term-foot-state{{if .Terminal.Running}} live{{end}}" role="status" aria-live="polite">{{if .Terminal.Running}}Running{{else}}Exited{{end}}</span>{{end}}
+  </footer>
+</section>
+{{end}}

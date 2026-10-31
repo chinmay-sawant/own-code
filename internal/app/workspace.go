@@ -738,7 +738,8 @@ func (w *workspace) addFile(path, name string, size int64) {
 }
 
 // ensureFile registers a file into the workspace on demand using addFile if it
-// exists on disk or in the sample, adding it to ByPath and Files, and returns its metadata.
+// exists on disk or in the sample, adding it to ByPath and Files, and returns its
+// metadata. An absolute path registers as an external file in ByPath only.
 func (w *workspace) ensureFile(path string) (*fileMeta, error) {
 	if w == nil {
 		return nil, errors.New("nil workspace")
@@ -751,6 +752,9 @@ func (w *workspace) ensureFile(path string) (*fileMeta, error) {
 	}
 
 	clean := filepath.Clean(filepath.FromSlash(path))
+	if filepath.IsAbs(clean) {
+		return w.ensureExternalFile(clean)
+	}
 	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
 		return nil, fmt.Errorf("path escapes workspace: %s", path)
 	}
@@ -793,6 +797,39 @@ func (w *workspace) ensureFile(path string) (*fileMeta, error) {
 	}
 
 	return w.ByPath[normPath], nil
+}
+
+// ensureExternalFile registers one absolute file outside the scanned root. It
+// lives in ByPath so tabs and the palette can read it, but it never joins the
+// workspace Files list or tree.
+func (w *workspace) ensureExternalFile(path string) (*fileMeta, error) {
+	key := filepath.ToSlash(filepath.Clean(path))
+	if w.ByPath == nil {
+		w.ByPath = map[string]*fileMeta{}
+	}
+	if meta := w.ByPath[key]; meta != nil {
+		return meta, nil
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a file", path)
+	}
+
+	meta := &fileMeta{
+		Path: key,
+		Name: filepath.Base(path),
+		Dir:  filepath.ToSlash(filepath.Dir(path)),
+		Size: info.Size(),
+		Lang: languageOf(key),
+		Big:  info.Size() > maxFileBytes,
+	}
+	w.ByPath[key] = meta
+
+	return meta, nil
 }
 
 // finish sorts the files, builds the tree, and counts lines only for files
@@ -1026,7 +1063,7 @@ func (w *workspace) loadNode(node *fileNode) error {
 
 // ensureFileLoaded loads ancestor directories if needed so w.ByPath[path] is ready.
 func (w *workspace) ensureFileLoaded(path string) {
-	if w.Sample || w.Root == "" {
+	if w.Sample || w.Root == "" || filepath.IsAbs(filepath.FromSlash(path)) {
 		return
 	}
 	dir := dirName(path)
@@ -1148,9 +1185,25 @@ func (w *workspace) readLines(path string) ([]string, bool, error) {
 	return lines, truncated, nil
 }
 
+// diskPath maps a workspace path to the filesystem path behind it. Absolute
+// paths are external files and name themselves; relative paths stay under the
+// scanned root.
+func (w *workspace) diskPath(path string) (string, error) {
+	clean := filepath.Clean(filepath.FromSlash(path))
+	if filepath.IsAbs(clean) {
+		return clean, nil
+	}
+	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path escapes workspace: %s", path)
+	}
+
+	return filepath.Join(w.Root, clean), nil
+}
+
 // readFile returns the bytes of one scanned file.
 func (w *workspace) readFile(path string) ([]byte, error) {
-	if w.Sample {
+	clean := filepath.Clean(filepath.FromSlash(path))
+	if w.Sample && !filepath.IsAbs(clean) {
 		sub, err := fs.Sub(owncode.SampleFiles, "testdata/sample")
 		if err != nil {
 			return nil, err
@@ -1159,12 +1212,12 @@ func (w *workspace) readFile(path string) ([]byte, error) {
 		return fs.ReadFile(sub, path)
 	}
 
-	clean := filepath.Clean(filepath.FromSlash(path))
-	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return nil, fmt.Errorf("path escapes workspace: %s", path)
+	target, err := w.diskPath(path)
+	if err != nil {
+		return nil, err
 	}
 
-	return os.ReadFile(filepath.Join(w.Root, clean)) //nolint:gosec // path is checked against the scanned root above
+	return os.ReadFile(target) //nolint:gosec // absolute paths are explicit external files; relative paths are checked against the scanned root above
 }
 
 // ReadFile returns the bytes of one workspace file, handling sample files automatically.
@@ -1254,10 +1307,12 @@ func (w *workspace) openDoc(path string) *fileDoc {
 		return &fileDoc{Path: path, Err: "This file is not in the workspace."}
 	}
 
-	if !w.Sample {
-		if info, statErr := os.Stat(filepath.Join(w.Root, filepath.FromSlash(path))); statErr == nil {
-			meta.Size = info.Size()
-			meta.Big = meta.Size > maxFileBytes
+	if !w.Sample || filepath.IsAbs(filepath.FromSlash(path)) {
+		if target, err := w.diskPath(path); err == nil {
+			if info, statErr := os.Stat(target); statErr == nil {
+				meta.Size = info.Size()
+				meta.Big = meta.Size > maxFileBytes
+			}
 		}
 	}
 

@@ -100,6 +100,10 @@ func (a *App) scmChangeFile(path string) (changedFile, bool) {
 		return *file, true
 	}
 
+	if file := findFile(a.changes.Conflicts, clean); file != nil {
+		return *file, true
+	}
+
 	file := findFile(a.changes.Files, clean)
 	if file == nil {
 		return changedFile{}, false
@@ -279,7 +283,15 @@ func (a *App) discardPaths(ctx context.Context, paths []string) error {
 			restore = append(restore, file.OldPath)
 		}
 
-		args := append([]string{"restore", "--source=HEAD", "--staged", "--worktree", "--"}, restore...)
+		// git restore refuses an unmerged index entry, so conflicts reset
+		// through checkout of HEAD instead.
+		var args []string
+		if file.Unmerged {
+			args = append([]string{"checkout", "HEAD", "--"}, restore...)
+		} else {
+			args = append([]string{"restore", "--source=HEAD", "--staged", "--worktree", "--"}, restore...)
+		}
+
 		if _, err := gitBytes(ctx, a.ws.Root, args...); err != nil {
 			failed = append(failed, file.Path)
 		}
@@ -355,11 +367,15 @@ func (a *App) stageAll(ctx context.Context) error {
 		return nil
 	}
 
-	if len(a.changes.Files) == 0 {
+	paths := a.workingAllPaths()
+	if len(paths) == 0 {
 		return nil
 	}
 
-	if _, err := gitBytes(ctx, a.ws.Root, "add", "--all", "--", "."); err != nil {
+	// Stage explicit paths rather than `git add --all .` so an unresolved
+	// conflict can never be staged by the bulk action.
+	args := append([]string{"add", "--"}, paths...)
+	if _, err := gitBytes(ctx, a.ws.Root, args...); err != nil {
 		a.showToast("error", "Stage failed", err.Error())
 		a.refresh()
 
@@ -592,6 +608,11 @@ func (a *App) copyCommitID(hash string) {
 func (a *App) forgetSCMDoc(path string) {
 	if a.editing && a.editPath() == path {
 		a.finishEdit()
+	}
+
+	if a.mergeOpen && a.mergePath == path {
+		a.leaveMergeMode()
+		a.mode = "changes"
 	}
 
 	delete(a.docs, path)

@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/chinmay-sawant/own-code/internal/merge"
 	"github.com/chinmay-sawant/ownframe"
 )
 
@@ -47,6 +48,15 @@ const (
 	contextMenuCutID         = contextMenuIDPrefix + "cut:"
 	contextMenuCopyID        = contextMenuIDPrefix + "copy:"
 	contextMenuPasteID       = contextMenuIDPrefix + "paste:"
+
+	// Merge conflict rows in Source Control and merge-editor actions.
+	contextMenuMergeOpenID    = contextMenuIDPrefix + "merge-open:"
+	contextMenuMergeStageID   = contextMenuIDPrefix + "merge-stage:"
+	contextMenuMergeDiscardID = contextMenuIDPrefix + "merge-discard:"
+	contextMenuMergeOursID    = contextMenuIDPrefix + "merge-accept-ours:"
+	contextMenuMergeTheirsID  = contextMenuIDPrefix + "merge-accept-theirs:"
+	contextMenuMergeBothID    = contextMenuIDPrefix + "merge-accept-both:"
+	contextMenuMergeCompareID = contextMenuIDPrefix + "merge-compare"
 )
 
 // presentMenu paints the right-click rows in the page instead of the shell menu.
@@ -196,6 +206,9 @@ func (a *App) ContextMenuFor(id string) []contextMenuRow {
 			{ID: "redo", Label: "Redo", Enabled: len(a.editRedo) > 0},
 		}
 	}
+	if rows, ok := a.mergeContextMenu(id); ok {
+		return rows
+	}
 	if rows, ok := a.contextMenuForExplorer(id); ok {
 		return rows
 	}
@@ -232,11 +245,71 @@ func (a *App) ContextMenuFor(id string) []contextMenuRow {
 	}
 }
 
+// mergeContextMenu returns the actions for one conflict header or action row
+// in the merge editor.
+func (a *App) mergeContextMenu(id string) ([]contextMenuRow, bool) {
+	if a.mode != "merge" || !a.mergeOpen {
+		return nil, false
+	}
+
+	var rest string
+
+	for _, prefix := range []string{
+		"merge-c-", "merge-actions-", "merge-side-",
+		"merge-ours-", "merge-theirs-", "merge-both-", "merge-compare-",
+	} {
+		if strings.HasPrefix(id, prefix) {
+			rest = strings.TrimPrefix(id, prefix)
+
+			break
+		}
+	}
+
+	if rest == "" {
+		return nil, false
+	}
+
+	if cut := strings.IndexByte(rest, '-'); cut >= 0 {
+		rest = rest[:cut]
+	}
+
+	index, ok := contextMenuIndex(rest)
+	if !ok || index >= len(a.mergeConflicts) {
+		return nil, false
+	}
+
+	suffix := strconv.Itoa(index)
+
+	return []contextMenuRow{
+		{ID: contextMenuMergeOursID + suffix, Label: "Accept Current", Enabled: true},
+		{ID: contextMenuMergeTheirsID + suffix, Label: "Accept Incoming", Enabled: true},
+		{ID: contextMenuMergeBothID + suffix, Label: "Accept Both", Enabled: true},
+		{ID: contextMenuMergeCompareID, Label: "Compare Base", Enabled: true},
+	}, true
+}
+
 // scmContextMenu returns working-tree rows. Per-file ids offer stage or
 // unstage based on the section, plus discard; multi-select adds bulk rows.
 func (a *App) scmContextMenu(id string) ([]contextMenuRow, bool) {
-	if a.mode != "changes" {
+	if a.mode != "changes" && a.mode != "merge" {
 		return nil, false
+	}
+
+	for _, prefix := range []string{"merge-conflict-", "merge-open-", "merge-stage-"} {
+		if !strings.HasPrefix(id, prefix) {
+			continue
+		}
+
+		path := strings.TrimPrefix(id, prefix)
+		if path == "" || findFile(a.changes.Conflicts, path) == nil {
+			return nil, false
+		}
+
+		return []contextMenuRow{
+			{ID: contextMenuMergeOpenID + path, Label: "Resolve Conflicts", Enabled: true},
+			{ID: contextMenuMergeStageID + path, Label: "Stage Conflict", Enabled: true},
+			{ID: contextMenuMergeDiscardID + path, Label: "Discard Changes", Enabled: true},
+		}, true
 	}
 
 	for _, prefix := range []string{"discard-staged-", "wrap-staged-", "change-", "staged-", "stage-", "discard-", "unstage-", "wrap-"} {
@@ -356,6 +429,33 @@ func (a *App) historyContextMenu(id string) ([]contextMenuRow, bool) {
 // MenuAction handles tab-closing, working-tree, and history actions.
 func (a *App) MenuAction(ctx context.Context, id string) error {
 	switch {
+	case strings.HasPrefix(id, contextMenuMergeOpenID):
+		a.openMergeConflict(ctx, strings.TrimPrefix(id, contextMenuMergeOpenID))
+		return a.redrawMenuAction(ctx)
+	case strings.HasPrefix(id, contextMenuMergeStageID):
+		a.stageConflictPath(ctx, strings.TrimPrefix(id, contextMenuMergeStageID))
+		return a.redrawMenuAction(ctx)
+	case strings.HasPrefix(id, contextMenuMergeDiscardID):
+		a.openDiscardConfirm("discard-file", []string{strings.TrimPrefix(id, contextMenuMergeDiscardID)})
+		return a.redrawMenuAction(ctx)
+	case strings.HasPrefix(id, contextMenuMergeOursID):
+		if index, ok := contextMenuIndex(strings.TrimPrefix(id, contextMenuMergeOursID)); ok {
+			a.mergeAccept(merge.Ours, index)
+		}
+		return a.redrawMenuAction(ctx)
+	case strings.HasPrefix(id, contextMenuMergeTheirsID):
+		if index, ok := contextMenuIndex(strings.TrimPrefix(id, contextMenuMergeTheirsID)); ok {
+			a.mergeAccept(merge.Theirs, index)
+		}
+		return a.redrawMenuAction(ctx)
+	case strings.HasPrefix(id, contextMenuMergeBothID):
+		if index, ok := contextMenuIndex(strings.TrimPrefix(id, contextMenuMergeBothID)); ok {
+			a.mergeAccept(merge.Both, index)
+		}
+		return a.redrawMenuAction(ctx)
+	case id == contextMenuMergeCompareID:
+		a.toggleMergeCompare()
+		return a.redrawMenuAction(ctx)
 	case strings.HasPrefix(id, contextMenuDiscardFileID):
 		path := strings.TrimPrefix(id, contextMenuDiscardFileID)
 		a.openDiscardConfirm("discard-file", []string{path})
@@ -498,6 +598,15 @@ func (a *App) MenuAction(ctx context.Context, id string) error {
 	}
 
 	return nil
+}
+
+// redrawMenuAction repaints after a menu row that already refreshed the view.
+func (a *App) redrawMenuAction(ctx context.Context) error {
+	if a.page == nil {
+		return nil
+	}
+
+	return a.page.Redraw(ctx)
 }
 
 func (a *App) contextMenuCloseSide(ctx context.Context, group, index int, left bool) error {

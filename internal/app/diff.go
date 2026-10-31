@@ -13,9 +13,13 @@ import (
 // can show the two VS Code sections. A file with both staged and unstaged
 // edits appears in both lists with different hunks and once in Files merged.
 type changeSet struct {
-	Files      []changedFile
-	Staged     []changedFile
-	Unstaged   []changedFile
+	Files    []changedFile
+	Staged   []changedFile
+	Unstaged []changedFile
+	// Conflicts holds the unmerged paths git reports. They are removed from
+	// Files, Staged, and Unstaged so the Source Control panel shows them in
+	// their own section and never pretends they are ordinary edits.
+	Conflicts  []changedFile
 	Branch     string
 	Sample     bool
 	Note       string
@@ -32,6 +36,12 @@ type changedFile struct {
 	Hunks      []hunk
 	Binary     bool
 	TotalLines int
+	// Unmerged marks a path git reports in an unmerged state. ConflictCode is
+	// the two-letter porcelain code (UU, AA, DD, AU, UA, DU, UD) and
+	// Conflicts counts the merge marker blocks found in the working file.
+	Unmerged     bool
+	ConflictCode string
+	Conflicts    int
 	// DiffBytes and DiffLines measure the text the diff pane would render.
 	// Oversized marks a file over the same budget the editor admits, so a
 	// deleted or rewritten bundle cannot turn into thousands of wrapped rows.

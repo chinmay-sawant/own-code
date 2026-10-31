@@ -10,6 +10,9 @@
   {{if eq .Mode "changes"}}
   <span class="sb-item sb-extra">{{.Diff.Add}} additions</span>
   <span class="sb-item sb-extra">{{.Diff.Del}} deletions</span>
+  {{else if eq .Mode "merge"}}
+  <span class="sb-item sb-extra">{{if .Merge.Total}}Conflict {{.Merge.Index}} of {{.Merge.Total}}{{else}}Resolved{{end}}</span>
+  {{if .Merge.Dirty}}<span class="sb-item sb-dirty">unsaved merge result</span>{{end}}
   {{else if .Active}}
   <span class="sb-item sb-extra">{{.LineCount}} lines</span>
   <span class="sb-item sb-extra">{{.LangLabel}}</span>

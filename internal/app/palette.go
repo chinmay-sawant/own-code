@@ -32,8 +32,13 @@ type paletteRow struct {
 }
 
 // paletteRows returns the open tabs followed by workspace files for an empty
-// query, or path matches for a query. The list never leaves the open folder.
+// query, or path matches for a query. An absolute path resolves to that file,
+// even when it lives outside the open folder.
 func (a *App) paletteRows() []paletteRow {
+	if row, ok := a.absolutePaletteRow(a.paletteQuery); ok {
+		return []paletteRow{row}
+	}
+
 	query := strings.ToLower(strings.TrimSpace(a.paletteQuery))
 
 	if query == "" {

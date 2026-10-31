@@ -25,7 +25,19 @@ type editSnapshot struct {
 
 // onType inserts printable text at the edit caret.
 func (a *App) onType(ctx context.Context, text string) error {
-	if a.settingsOpen || !a.editing || a.edit == nil || text == "" {
+	if a.settingsOpen || text == "" {
+		return nil
+	}
+
+	// The shell receives the raw text; tabs and newlines must not become
+	// editor indentation.
+	if a.terminalOwnsKeys() {
+		a.writeTerminal([]byte(text))
+
+		return nil
+	}
+
+	if !a.editing || a.edit == nil {
 		return nil
 	}
 
@@ -38,7 +50,17 @@ func (a *App) onType(ctx context.Context, text string) error {
 
 // onBackspace deletes the selection or the rune before the caret.
 func (a *App) onBackspace(ctx context.Context) error {
-	if a.settingsOpen || !a.editing || a.edit == nil {
+	if a.settingsOpen {
+		return nil
+	}
+
+	if a.terminalOwnsKeys() {
+		a.writeTerminal([]byte{0x7f})
+
+		return nil
+	}
+
+	if !a.editing || a.edit == nil {
 		return nil
 	}
 
@@ -52,7 +74,17 @@ func (a *App) onBackspace(ctx context.Context) error {
 
 // onDeleteWord deletes the word behind the caret.
 func (a *App) onDeleteWord(ctx context.Context) error {
-	if a.settingsOpen || !a.editing || a.edit == nil {
+	if a.settingsOpen {
+		return nil
+	}
+
+	if a.terminalOwnsKeys() {
+		a.writeTerminal([]byte{0x17})
+
+		return nil
+	}
+
+	if !a.editing || a.edit == nil {
 		return nil
 	}
 
@@ -66,6 +98,16 @@ func (a *App) onDeleteWord(ctx context.Context) error {
 
 // onCopy returns the selected edit text.
 func (a *App) onCopy(context.Context) (string, bool, error) {
+	if a.terminalOwnsKeys() {
+		// Ctrl+C interrupts the shell. The window's copy chord must not also
+		// put the screen on the clipboard; Ctrl+Shift+C does that instead.
+		if a.ctrl && !a.shift {
+			return "", false, nil
+		}
+
+		return terminalCopyText(a.view.Terminal), true, nil
+	}
+
 	if a.settingsOpen || !a.editing || a.edit == nil {
 		return "", false, nil
 	}
@@ -80,6 +122,10 @@ func (a *App) onCopy(context.Context) (string, bool, error) {
 
 // onCut returns and removes the selected edit text.
 func (a *App) onCut(ctx context.Context) (string, bool, error) {
+	if a.terminalOwnsKeys() {
+		return "", false, nil
+	}
+
 	if a.settingsOpen || !a.editing || a.edit == nil {
 		return "", false, nil
 	}
@@ -106,6 +152,12 @@ func (a *App) onPaste(ctx context.Context, text string) error {
 		return nil
 	}
 
+	if a.terminalOwnsKeys() {
+		a.pasteTerminal(text)
+
+		return nil
+	}
+
 	if a.editing && a.edit != nil {
 		return a.onType(ctx, text)
 	}
@@ -125,6 +177,10 @@ func (a *App) onPaste(ctx context.Context, text string) error {
 
 // onSelectAll selects the whole edit buffer.
 func (a *App) onSelectAll(ctx context.Context) error {
+	if a.terminalOwnsKeys() {
+		return nil
+	}
+
 	if a.settingsOpen || !a.editing || a.edit == nil {
 		return nil
 	}
@@ -140,6 +196,10 @@ func (a *App) onSelectAll(ctx context.Context) error {
 // editor is closed. Hunk undo lives on its own stack so text and hunk
 // histories never clobber each other.
 func (a *App) onUndo(ctx context.Context) error {
+	if a.terminalOwnsKeys() {
+		return nil
+	}
+
 	if a.editing {
 		if len(a.editUndo) == 0 {
 			return nil
@@ -168,6 +228,10 @@ func (a *App) onUndo(ctx context.Context) error {
 // onRedo restores a snapshot taken by Undo, or re-applies an undone hunk
 // revert when the editor is closed.
 func (a *App) onRedo(ctx context.Context) error {
+	if a.terminalOwnsKeys() {
+		return nil
+	}
+
 	if a.editing {
 		if len(a.editRedo) == 0 {
 			return nil
