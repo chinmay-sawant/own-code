@@ -125,10 +125,6 @@ func (a *App) restoreState(state sessionState) {
 		a.tabs = append(a.tabs, path)
 	}
 
-	if len(a.tabs) > maxTabs {
-		a.tabs = a.tabs[:maxTabs]
-	}
-
 	if len(a.tabs) > 0 {
 		a.active = clampSessionIndex(state.Active, len(a.tabs))
 	}
@@ -146,10 +142,6 @@ func (a *App) restoreState(state sessionState) {
 		}
 
 		a.tabs2 = append(a.tabs2, path)
-	}
-
-	if len(a.tabs2) > maxTabs {
-		a.tabs2 = a.tabs2[:maxTabs]
 	}
 
 	if len(a.tabs2) > 0 {

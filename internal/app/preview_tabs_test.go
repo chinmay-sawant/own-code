@@ -74,34 +74,30 @@ func TestPinProtectsFromReplaceAndEvict(t *testing.T) {
 		t.Fatal("probe.go lost its pin")
 	}
 
-	// Fill the group to the cap with pinned tabs, then verify a preview
-	// open refuses instead of evicting.
+	// Tabs are unlimited: even an all-pinned group appends instead of
+	// refusing. Pin everything open, then verify a preview appends.
 	for _, path := range previewFiles {
 		if app.tabIndexIn(0, path) < 0 {
 			app.openFileAt(0, path, true)
 		}
 	}
 
-	// Pin every open tab: the fill loop skips files that arrived as
-	// previews, so pin explicitly for a true all-pinned group.
 	for i := range app.tabs {
 		app.pinTabByIndex(0, i)
 	}
 
-	for len(app.tabs) < maxTabs {
-		t.Fatalf("cannot fill the group: tabs = %v", app.tabs)
-	}
-
-	before := append([]string(nil), app.tabs...)
+	before := len(app.tabs)
 	app.openFileAtPreview(0, "tools/report.py", true)
 
-	if strings.Join(app.tabs, "\x00") != strings.Join(before, "\x00") {
-		t.Fatalf("tabs = %v, want no eviction when all pinned", app.tabs)
+	if len(app.tabs) != before+1 {
+		t.Fatalf("tabs = %v, want one appended preview on an all-pinned group", app.tabs)
 	}
 
-	if !app.View().Toast.Show {
-		t.Fatal("no toast when every tab is pinned")
+	if app.previewTab[0] != "tools/report.py" {
+		t.Fatalf("preview slot = %q, want tools/report.py", app.previewTab[0])
 	}
+
+	_ = strings.Join(app.tabs, "\x00")
 }
 
 func TestDoubleClickOrCtrlKPin(t *testing.T) {
@@ -296,29 +292,27 @@ func TestReopenClampsIndexAndFullGroup(t *testing.T) {
 		t.Fatalf("tabs = %v, want probe appended by clamp", app.tabs)
 	}
 
-	// A full group evicts the oldest unpinned tab, never a pinned one.
+	// Tabs are unlimited: reopening never evicts, pinned or not.
 	app.tabs = nil
 	app.closedTabs = nil
 
-	for _, path := range previewFiles[:maxTabs] {
+	for _, path := range previewFiles[:8] {
 		app.openFileAt(0, path, true)
 	}
 
-	if len(app.tabs) != maxTabs {
+	if len(app.tabs) != 8 {
 		t.Fatalf("tabs = %d, want a full group", len(app.tabs))
 	}
 
-	// Unpin the second tab so the reopen has a legal eviction target. The
-	// reopened path must not already be open: tools/report.py is real but
-	// outside the filled group.
-	victim := app.tabs[1]
-	app.unpinTabByIndex(0, 1)
+	kept := append([]string(nil), app.tabs...)
 
 	app.pushClosed(0, 0, "tools/report.py")
 	app.reopenClosedTab()
 
-	if app.tabIndexIn(0, victim) >= 0 {
-		t.Fatalf("tabs = %v, want %s evicted", app.tabs, victim)
+	for _, path := range kept {
+		if app.tabIndexIn(0, path) < 0 {
+			t.Fatalf("tabs = %v, want %s kept (no eviction)", app.tabs, path)
+		}
 	}
 
 	if !containsPath(app.tabs, "tools/report.py") {

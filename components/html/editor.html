@@ -25,7 +25,7 @@
       </div>
       {{end}}
       {{range $t := .Tabs}}
-      <div class="tab{{if $t.Active}} on{{end}}{{if $t.Preview}} preview{{end}}{{if $t.Pinned}} pinned{{end}}">
+      <div class="tab{{if $t.Active}} on{{end}}{{if $t.Preview}} preview-tab{{end}}{{if $t.Pinned}} pinned{{end}}">
         <button class="tab-main" id="tab-{{$t.Index}}" data-action="tab:{{$t.Index}}" type="button" title="{{$t.Path}}{{if $t.Preview}} (preview — Enter or Ctrl+K to pin){{end}}{{if $t.Pinned}} (pinned){{end}}"{{if $.Modal}} tabindex="-1"{{end}}>
           {{if $t.Pinned}}<span class="tab-pin" aria-hidden="true">•</span>{{end}}
           <span class="ficon sm lang-{{$t.Lang}}">{{$t.Badge}}</span>
@@ -336,7 +336,7 @@
     </button>{{end}}
     <div class="tabs">
       {{range $t := .Second.Tabs}}
-      <div class="tab{{if $t.Active}} on{{end}}{{if $t.Preview}} preview{{end}}{{if $t.Pinned}} pinned{{end}}">
+      <div class="tab{{if $t.Active}} on{{end}}{{if $t.Preview}} preview-tab{{end}}{{if $t.Pinned}} pinned{{end}}">
         <button class="tab-main" id="tab2-{{$t.Index}}" data-action="tab2:{{$t.Index}}" type="button" title="{{$t.Path}}{{if $t.Preview}} (preview — Ctrl+K to pin){{end}}{{if $t.Pinned}} (pinned){{end}}"{{if $.Terminal.Focus}} tabindex="-1"{{end}}>
           {{if $t.Pinned}}<span class="tab-pin" aria-hidden="true">•</span>{{end}}
           <span class="ficon sm lang-{{$t.Lang}}">{{$t.Badge}}</span>

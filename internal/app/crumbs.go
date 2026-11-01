@@ -261,7 +261,7 @@ func (a *App) openCrumbSibling(path string) {
 		return
 	}
 
-	a.openFile(path)
+	a.openFilePreview(path)
 }
 
 func fileCrumbBudget(paneWidth, winW int) int { return 80 }

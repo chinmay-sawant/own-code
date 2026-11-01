@@ -91,7 +91,7 @@ your `PATH`, and run `own-code`.
 ## Features
 
 - Explorer tree with filter, language badges, change letters, and sticky folders. Right click gives Copy Path, Copy File, Paste.
-- Up to eight tabs plus a split second editor group with independent scroll, click or `Ctrl+1`/`Ctrl+2` focus, a draggable divider, and close-one-side that merges tabs into the survivor.
+- Unlimited tabs plus a split second editor group with independent scroll, click or `Ctrl+1`/`Ctrl+2` focus, a draggable divider, and close-one-side that merges tabs into the survivor. Single-click previews at the back of the strip (italic); double-click, `Enter`, `Ctrl+K`, or editing pins the tab.
 - Click to edit in place with syntax colors, `Ctrl+S` saves. `Ctrl+A` select all, `Ctrl+C` copy, undo and redo.
 - Gutter marks on changed lines with line cards, plus a bottom bar to step through changed files.
 - Unified and split diffs with word emphasis, hunk stepping (`N`/`P`), and per-block revert.

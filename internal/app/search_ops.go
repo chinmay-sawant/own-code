@@ -391,6 +391,6 @@ func (a *App) openSearchHit(index int) {
 	a.searchTotal = 0
 	a.searchCapped = false
 	a.replaceCheck = nil
-	a.openFile(hit.Path)
+	a.openFilePreview(hit.Path)
 	a.scrollToSourceLine(hit.Line - 1)
 }

@@ -5,10 +5,51 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/chinmay-sawant/own-code/internal/wsl"
 	"github.com/chinmay-sawant/ownframe"
 )
+
+// doubleClickWindow is the max gap between two clicks on the same file or
+// tab that counts as a double-click (pin) instead of two single clicks
+// (preview). The engine has no press-count event, so the app tracks the
+// last click itself.
+const doubleClickWindow = 500 * time.Millisecond
+
+// isDoubleClickTarget reports whether action can complete a double-click:
+// a tree/welcome file open or a tab-strip focus.
+func isDoubleClickTarget(action string) bool {
+	return strings.HasPrefix(action, "open:") ||
+		strings.HasPrefix(action, "tab2:") ||
+		strings.HasPrefix(action, "tab:")
+}
+
+// clickIsDouble reports whether action repeats the previous click inside
+// the double-click window, then records this click for the next one. A
+// consumed double-click clears the record so a third fast click starts a
+// fresh single click.
+func (a *App) clickIsDouble(action string) bool {
+	now := time.Now()
+	double := a.lastClickAction == action && !a.lastClickAt.IsZero() &&
+		now.Sub(a.lastClickAt) < doubleClickWindow
+	if double {
+		a.lastClickAction = ""
+		a.lastClickAt = time.Time{}
+	} else {
+		a.lastClickAction = action
+		a.lastClickAt = now
+	}
+
+	return double
+}
+
+// clearDoubleClick drops a pending first click, e.g. when a click takes a
+// different path (multi-select) instead of opening or focusing.
+func (a *App) clearDoubleClick() {
+	a.lastClickAction = ""
+	a.lastClickAt = time.Time{}
+}
 
 // onClick routes every control. State changes end in one refresh; the page
 
@@ -40,6 +81,12 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 	}
 
 	action := box.Action
+
+	// A click anywhere else ends a pending double-click: only two
+	// consecutive clicks on the same file or tab pin.
+	if !isDoubleClickTarget(action) {
+		a.clearDoubleClick()
+	}
 
 	// Clicking outside the panel returns the keyboard to the editor. The
 	// terminal body, tabs, tools, and resize strip keep focus.
@@ -831,11 +878,17 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 	case strings.HasPrefix(action, "open:"):
 		path := strings.TrimPrefix(action, "open:")
 		if (a.ctrl || a.shift) && !a.editing {
+			a.clearDoubleClick()
 			return a.clickTreeSelect(ctx, path)
 		}
 		a.clearExplorerSel()
-		// Single-click tree / palette / welcome opens a new tab per file.
-		a.openFile(path)
+		if a.clickIsDouble(action) {
+			// Double-click pins: open-then-pin when not open yet.
+			a.pinPath(a.activeGroup(), path)
+		} else {
+			// Single-click previews: reuses the group preview slot.
+			a.openFilePreview(path)
+		}
 	case strings.HasPrefix(action, "dir:"):
 		path := strings.TrimPrefix(action, "dir:")
 		if (a.ctrl || a.shift) && !a.editing {
@@ -854,10 +907,18 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 	case strings.HasPrefix(action, "tab2:"):
 		if index, ok := actionIndex(action, "tab2:"); ok {
 			a.selectTabIn(1, index)
+			if a.clickIsDouble(action) {
+				// Double-click on an open tab pins it in place.
+				a.pinTabByIndex(1, index)
+			}
 		}
 	case strings.HasPrefix(action, "tab:"):
 		if index, ok := actionIndex(action, "tab:"); ok {
 			a.selectTab(index)
+			if a.clickIsDouble(action) {
+				// Double-click on an open tab pins it in place.
+				a.pinTabByIndex(0, index)
+			}
 		}
 	case strings.HasPrefix(action, "diff-file:"):
 		path := strings.TrimPrefix(action, "diff-file:")
@@ -1363,7 +1424,7 @@ func (a *App) treeKeyDown(ctx context.Context, key string) (bool, error) {
 			return true, a.page.Form().Focus(ctx, focus)
 		}
 
-		a.openFile(path)
+		a.openFilePreview(path)
 		if err := a.page.Redraw(ctx); err != nil {
 			return true, err
 		}
@@ -2968,14 +3029,14 @@ func (a *App) onSubmit(ctx context.Context) error {
 		}
 
 		if path != "" && (a.activeDoc() == nil || a.activeDoc().Path != path) {
-			a.openFileAt(a.activeGroup(), path, true)
+			a.openFileAtPreview(a.activeGroup(), path, true)
 		}
 
 		return a.gotoLine(ctx, line, 1)
 	}
 
-	// Palette Enter opens a new tab per file.
-	a.openFileAt(a.activeGroup(), row.Path, true)
+	// Palette Enter previews: reuses the preview slot instead of pinning.
+	a.openFileAtPreview(a.activeGroup(), row.Path, true)
 
 	if err := a.page.Form().Focus(ctx, ""); err != nil {
 		return err

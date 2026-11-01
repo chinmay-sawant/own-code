@@ -411,7 +411,7 @@ func (a *App) openSymbolAction(rest string) {
 		return
 	}
 
-	a.openFile(path)
+	a.openFilePreview(path)
 	a.outlineLine(line)
 }
 

@@ -234,7 +234,7 @@ func (a *App) openChangedPath(path string) {
 		}
 		a.selectDiff(path)
 	} else {
-		a.openFile(path)
+		a.openFilePreview(path)
 	}
 
 	if a.fileNav != nil {

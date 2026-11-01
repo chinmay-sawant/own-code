@@ -347,7 +347,7 @@ func (a *App) gotoDefinitionAtCaret(ctx context.Context) error {
 // behave like normal opens.
 func (a *App) jumpToDefinition(ctx context.Context, path string, line int) error {
 	if a.activeDocPath() != path {
-		a.openFile(path)
+		a.openFilePreview(path)
 	}
 
 	a.outlineLine(line)

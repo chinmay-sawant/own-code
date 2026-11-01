@@ -656,7 +656,7 @@ func (a *App) editMergeResult() {
 	result := a.mergeResult
 	a.leaveMergeMode()
 	a.mode = "changes"
-	a.openFile(path)
+	a.openFilePreview(path)
 
 	raw, err := a.ws.readFile(path)
 	if err != nil {

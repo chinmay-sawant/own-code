@@ -122,10 +122,8 @@ func loadSession(path string) (sessionState, error) {
 	}
 
 	state.Recents = capSessionPaths(state.Recents)
-	state.Tabs = capSessionPaths(state.Tabs)
-	state.Tabs2 = capSessionPaths(state.Tabs2)
-	state.Pinned = capSessionPaths(state.Pinned)
-	state.Pinned2 = capSessionPaths(state.Pinned2)
+	// Tab lists are unlimited: never truncate open tabs, pins, or preview
+	// slots here. Recents and nav history stay budgeted.
 	state.Nav = capNavPaths(state.Nav)
 
 	return state, nil
@@ -140,10 +138,8 @@ func saveSession(path string, state sessionState) error {
 	}
 
 	state.Recents = capSessionPaths(state.Recents)
-	state.Tabs = capSessionPaths(state.Tabs)
-	state.Tabs2 = capSessionPaths(state.Tabs2)
-	state.Pinned = capSessionPaths(state.Pinned)
-	state.Pinned2 = capSessionPaths(state.Pinned2)
+	// Tab lists are unlimited: persist every open tab. Recents and nav
+	// history stay budgeted.
 	state.Nav = capNavPaths(state.Nav)
 
 	data, err := json.MarshalIndent(state, "", "  ")
@@ -197,10 +193,11 @@ func (s sessionState) sanitize(root string) sessionState {
 	}
 
 	s.Recents = cleanSessionPaths(s.Recents)
-	s.Tabs = cleanSessionPaths(s.Tabs)
-	s.Tabs2 = cleanSessionPaths(s.Tabs2)
-	s.Pinned = cleanSessionPaths(s.Pinned)
-	s.Pinned2 = cleanSessionPaths(s.Pinned2)
+	// Tab lists are unlimited: clean without the 32-path budget.
+	s.Tabs = cleanTabPaths(s.Tabs)
+	s.Tabs2 = cleanTabPaths(s.Tabs2)
+	s.Pinned = cleanTabPaths(s.Pinned)
+	s.Pinned2 = cleanTabPaths(s.Pinned2)
 	s.Nav = cleanNavPaths(s.Nav)
 
 	// Pins and preview slots only survive for tabs that survived: drop pins
@@ -285,6 +282,38 @@ func keepSessionSlot(slot string, tabs, pins []string) string {
 	}
 
 	return slot
+}
+
+// cleanTabPaths trims, normalizes, and de-duplicates tab paths, drops
+// entries that are absolute or climb out of the workspace, and keeps every
+// entry: tabs are unlimited, so no budget applies.
+func cleanTabPaths(paths []string) []string {
+	if len(paths) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0, len(paths))
+	seen := make(map[string]struct{}, len(paths))
+
+	for _, raw := range paths {
+		path, ok := cleanSessionPath(raw)
+		if !ok {
+			continue
+		}
+
+		if _, dup := seen[path]; dup {
+			continue
+		}
+
+		seen[path] = struct{}{}
+		out = append(out, path)
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+
+	return out
 }
 
 // cleanSessionPaths trims, normalizes, and de-duplicates paths, drops entries

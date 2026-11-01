@@ -12,9 +12,10 @@ import "context"
 // `W` closes the focused group's active tab (not always group 0); see the
 // `w` branch in actions.go.
 //
-// Double-click: the window's Box carries no press count, so there is no
-// reliable double-click event to hook. Enter on a tree row, Ctrl+K, and the
-// tab context menu are the pin paths.
+// Double-click: the engine reports press-down and click-up with no press
+// count, so the app detects it in onClick (see doubleClickWindow): two fast
+// clicks on one tree file pin it, and two fast clicks on one tab pin the tab
+// in place. Enter on a tree row, Ctrl+K, and the tab context menu pin too.
 
 const (
 	// closedStackCap bounds the LIFO closed-tab stack.
@@ -232,21 +233,9 @@ func (a *App) autoPinForEdit(path string) {
 	}
 }
 
-// evictIndexForAppend returns the strip index to evict when group is full, or
-// -1 when there is nothing to evict (all pinned). Eviction skips pinned tabs
-// and takes the oldest unpinned tab.
+// evictIndexForAppend is kept for callers that probe eviction. Tabs are
+// unlimited, so there is never anything to evict.
 func (a *App) evictIndexForAppend(group int) int {
-	tabs := a.groupTabs(group)
-	if len(tabs) < maxTabs {
-		return -1
-	}
-
-	for i, path := range tabs {
-		if !a.isPinned(group, path) {
-			return i
-		}
-	}
-
 	return -1
 }
 
@@ -291,8 +280,8 @@ func (a *App) pushClosed(group, index int, path string) {
 
 // reopenClosedTab pops the last closed tab and restores it. An already-open
 // path focuses instead and discards the snapshot. Otherwise the tab inserts
-// at min(index,len) (evicting the oldest unpinned tab when full, never
-// pinned); a dirty snapshot wins over any docs/dirty leftover. A group-1
+// at min(index,len) (tabs are unlimited, so reopening never evicts);
+// a dirty snapshot wins over any docs/dirty leftover. A group-1
 // reopen with no split lands in group 0 plus a toast. The reopened tab is
 // pinned so it survives the preview slot.
 func (a *App) reopenClosedTab() {
@@ -353,35 +342,7 @@ func (a *App) reopenClosedTab() {
 		index = len(tabs)
 	}
 
-	if len(tabs) >= maxTabs {
-		evict := -1
-		for i, path := range tabs {
-			if !a.isPinned(group, path) {
-				evict = i
-
-				break
-			}
-		}
-
-		if evict < 0 {
-			a.showToast("info", "All tabs pinned", "Unpin a tab before reopening "+entry.Path+".")
-			a.refresh()
-
-			return
-		}
-
-		a.pushClosed(group, evict, tabs[evict])
-		a.clearTabState(group, tabs[evict])
-		tabs = append(append([]string(nil), tabs[:evict]...), tabs[evict+1:]...)
-
-		if index > evict {
-			index--
-		}
-
-		if index > len(tabs) {
-			index = len(tabs)
-		}
-	}
+	// Tabs are unlimited: reopening never evicts.
 
 	if a.ws != nil && a.ws.ByPath[entry.Path] == nil {
 		a.ws.ensureFileLoaded(entry.Path)
@@ -717,8 +678,9 @@ func (a *App) openFileAtPreview(group int, path string, record bool) {
 }
 
 // openFileAtMode is the shared opener. pinnedOpen selects the pinned matrix
-// (append + pin + eviction skipping pinned); preview reuses the group's
-// single preview slot in place.
+// (append + pin); preview opens the file at the back of the strip and moves
+// the group's single preview slot there, replacing the previous preview.
+// Tabs are unlimited in both matrices.
 func (a *App) openFileAtMode(group int, path string, record, pinnedOpen bool) {
 	if a.ws == nil {
 		a.showToast("error", "Not in workspace", path+" is not part of this workspace.")
@@ -805,12 +767,13 @@ func (a *App) openFileAtMode(group int, path string, record, pinnedOpen bool) {
 	}
 
 	if !pinnedOpen {
-		// Preview-replace: a live unpinned preview slot is reused in place.
+		// Preview-replace: the previous preview leaves and the new file
+		// opens at the back of the strip, like a pinned open. A dirty
+		// preview auto-pins in place instead of leaving, so its unsaved
+		// text is never silently dropped.
 		if slot := a.previewTab[group]; slot != "" && slot != path {
 			if slotIndex := a.tabIndexIn(group, slot); slotIndex >= 0 && !a.isPinned(group, slot) {
 				if a.isDirty(slot) {
-					// A dirty preview auto-pins instead of being replaced,
-					// so its unsaved text is never silently dropped.
 					a.pinned[group][slot] = true
 					a.previewTab[group] = ""
 				} else {
@@ -818,17 +781,14 @@ func (a *App) openFileAtMode(group int, path string, record, pinnedOpen bool) {
 					a.clearTabState(group, slot)
 
 					updated := append([]string(nil), a.groupTabs(group)...)
-					updated[slotIndex] = path
+					updated = append(updated[:slotIndex], updated[slotIndex+1:]...)
 					if group == 1 {
 						a.tabs2 = updated
 					} else {
 						a.tabs = updated
 					}
 
-					a.previewTab[group] = path
-					a.finishOpenCommon(group, path, slotIndex, record)
-
-					return
+					a.previewTab[group] = ""
 				}
 			} else if slotIndex < 0 {
 				a.previewTab[group] = ""
@@ -836,53 +796,10 @@ func (a *App) openFileAtMode(group int, path string, record, pinnedOpen bool) {
 		}
 	}
 
-	// Append path (both matrices). Eviction skips pinned tabs.
+	// Append path (both matrices). Tabs are unlimited: the strip windows
+	// full-width tabs with scroll arrows, so overflow scrolls instead of
+	// evicting.
 	current := a.groupTabs(group)
-	if len(current) >= maxTabs {
-		evict := -1
-		for i, open := range current {
-			if !a.isPinned(group, open) {
-				evict = i
-
-				break
-			}
-		}
-
-		if evict < 0 {
-			a.showToast("info", "All tabs pinned", "Unpin a tab before opening "+path+".")
-			a.refresh()
-
-			return
-		}
-
-		if a.autoSave == autoSaveOnFocusChange {
-			a.autosaveFocusSave()
-		}
-
-		if a.isDirty(current[evict]) {
-			a.confirmMerge = false
-			a.confirmBulkGroup = 0
-			a.confirmBulkPaths = nil
-			a.confirmProceed = nil
-			a.openUnsavedConfirm(unsavedCloseOne, []tabRef{{Group: group, Path: current[evict]}}, "evict-open")
-			a.confirmEvictGroup = group
-			a.confirmEvictPath = path
-			a.confirmEvictPinned = pinnedOpen
-			grp, pth, pin := group, path, pinnedOpen
-			a.confirmProceed = func(ctx context.Context) error {
-				a.openFileAtMode(grp, pth, true, pin)
-
-				return nil
-			}
-
-			return
-		}
-
-		a.pushClosed(group, evict, current[evict])
-		a.clearTabState(group, current[evict])
-		current = append(append([]string(nil), current[:evict]...), current[evict+1:]...)
-	}
-
 	current = append(current, path)
 	found = len(current) - 1
 

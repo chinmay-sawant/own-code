@@ -234,14 +234,15 @@ func TestUnsavedCloseMany(t *testing.T) {
 	}
 }
 
-// TestEvictDirtyTabPrompts checks opening past maxTabs prompts for the
-// dirty oldest tab instead of dropping it silently.
+// TestEvictDirtyTabPrompts checks tabs are unlimited: opening beyond the
+// old cap appends without evicting or prompting, keeping dirty tabs intact.
 func TestEvictDirtyTabPrompts(t *testing.T) {
 	dir := t.TempDir()
 
 	var names []string
 
-	for i := 0; i < maxTabs+1; i++ {
+	const n = 9
+	for i := 0; i < n; i++ {
 		name := string(rune('a'+i)) + ".go"
 		names = append(names, name)
 		writeFile(t, dir, name, "package p\n")
@@ -257,13 +258,12 @@ func TestEvictDirtyTabPrompts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Open exactly maxTabs files; tabs[0] is the oldest.
-	for _, name := range names[:maxTabs] {
+	for _, name := range names[:n-1] {
 		app.openFile(name)
 	}
 
-	if len(app.tabs) != maxTabs {
-		t.Fatalf("tabs = %d, want %d", len(app.tabs), maxTabs)
+	if len(app.tabs) != n-1 {
+		t.Fatalf("tabs = %d, want %d", len(app.tabs), n-1)
 	}
 
 	oldest := app.tabs[0]
@@ -275,44 +275,34 @@ func TestEvictDirtyTabPrompts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Typing auto-pins the tab; unpin everything after dirtying so the
-	// open below reaches the eviction path with a dirty oldest.
-	for i := range app.tabs {
-		app.unpinTabByIndex(0, i)
+	app.openFile(names[n-1])
+
+	if app.confirmOpen {
+		t.Fatal("unlimited tabs opened a dirty-evict prompt")
 	}
 
-	app.openFile(names[maxTabs])
-
-	if !app.confirmOpen {
-		t.Fatal("evicting a dirty tab did not prompt")
+	if !app.isDirty(oldest) {
+		t.Fatal("dirty oldest lost its flag after an unlimited open")
 	}
 
-	if len(app.confirmPending) != 1 || app.confirmPending[0].Path != oldest {
-		t.Fatalf("pending = %+v, want evicted %s", app.confirmPending, oldest)
-	}
-
-	if err := app.confirmUnsavedDontSave(ctx); err != nil {
-		t.Fatal(err)
-	}
-
-	if app.isDirty(oldest) {
-		t.Fatal("evicted tab stayed dirty after Don't Save")
-	}
-
-	found := false
+	foundOld, foundNew := false, false
 
 	for _, tab := range app.tabs {
-		if tab == names[maxTabs] {
-			found = true
+		if tab == names[n-1] {
+			foundNew = true
 		}
 
 		if tab == oldest {
-			t.Fatalf("evicted tab still open: %v", app.tabs)
+			foundOld = true
 		}
 	}
 
-	if !found {
-		t.Fatalf("new file not open after evict: %v", app.tabs)
+	if !foundNew {
+		t.Fatalf("new file not open: %v", app.tabs)
+	}
+
+	if !foundOld {
+		t.Fatalf("oldest tab evicted despite unlimited tabs: %v", app.tabs)
 	}
 }
 

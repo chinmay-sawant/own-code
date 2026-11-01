@@ -87,7 +87,7 @@ func (a *App) editDiffFileAt(line, displayCol int) {
 	}
 
 	path := file.Path
-	a.openFile(path)
+	a.openFilePreview(path)
 
 	if line < 0 {
 		if lines := inlineChangeLines(a.changedLinesFor(path)); len(lines) > 0 {

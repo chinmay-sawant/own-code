@@ -361,7 +361,7 @@
 
 /* Preview tabs render italic; pinned tabs carry a pin marker. Dirty stays
    orthogonal: the dot renders alongside either state. */
-.tab.preview .preview-name { font-style: italic; }
+.tab.preview-tab .preview-name { font-style: italic; }
 .tab-pin {
   flex: 0 0 auto;
   color: var(--accent);

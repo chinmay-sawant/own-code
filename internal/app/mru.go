@@ -91,7 +91,7 @@ func (a *App) mruToggleLastTwo() bool {
 		return false
 	}
 
-	a.openFile(rows[1].Path)
+	a.openFilePreview(rows[1].Path)
 
 	return true
 }

@@ -96,7 +96,6 @@ const (
 	roundHalf            = 0.5
 	treeWheelRows        = 3.0
 
-	maxTabs   = 8
 	maxRecent = 4
 	// maxFieldLen caps every single-line search/filter input (palette,
 	// workspace search/replace, find, explorer filter, branch, browse, and
@@ -531,6 +530,12 @@ type App struct {
 	navAt      int
 	ctrl       bool
 	shift      bool
+	// lastClickAction/lastClickAt detect double-clicks app-side: the engine
+	// reports press-down and click-up with no press count, so two clicks on
+	// the same file or tab inside doubleClickWindow pin instead of
+	// previewing. Runtime only, never persisted.
+	lastClickAction string
+	lastClickAt     time.Time
 	// pasteStaged is one in-app file copy staged for Ctrl+V. It is the
 	// Task 3 seam: the explorer Copy menu row stages here (see
 	// stageExplorerCopy), and the Ctrl+V/menu paste path consumes it
@@ -3061,47 +3066,10 @@ func (a *App) openFileAt(group int, path string, record bool) {
 	}
 
 	if found < 0 {
+		// Tabs are unlimited: every new path appends. The strip windows
+		// full-width tabs with scroll arrows, so overflow scrolls instead
+		// of evicting.
 		*tabs = append(*tabs, path)
-		if len(*tabs) > maxTabs {
-			// Eviction skips pinned tabs; a full-pinned group refuses the
-			// open instead of dropping work.
-			evict := -1
-			for i := range (*tabs)[:len(*tabs)-1] {
-				if !a.isPinned(group, (*tabs)[i]) {
-					evict = i
-
-					break
-				}
-			}
-			if evict < 0 {
-				*tabs = (*tabs)[:len(*tabs)-1]
-				a.showToast("info", "All tabs pinned", "Unpin a tab before opening "+path+".")
-				a.refresh()
-
-				return
-			}
-			if a.autoSave == autoSaveOnFocusChange {
-				a.autosaveFocusSave()
-			}
-			if a.isDirty((*tabs)[evict]) {
-				// Roll back the append; the dialog re-opens after Save/Discard.
-				*tabs = (*tabs)[:len(*tabs)-1]
-				a.confirmMerge = false
-				a.confirmBulkGroup = 0
-				a.confirmBulkPaths = nil
-				a.confirmProceed = nil
-				a.openUnsavedConfirm(unsavedCloseOne, []tabRef{{Group: group, Path: (*tabs)[evict]}}, "evict-open")
-				a.confirmEvictGroup = group
-				a.confirmEvictPath = path
-				a.confirmEvictPinned = false
-
-				return
-			}
-			a.pushClosed(group, evict, (*tabs)[evict])
-			a.clearTabState(group, (*tabs)[evict])
-			*tabs = append((*tabs)[:evict], (*tabs)[evict+1:]...)
-		}
-
 		found = len(*tabs) - 1
 	}
 
@@ -4140,7 +4108,7 @@ func (a *App) togglePreview() {
 // mode the outline belongs to the selected diff file, so open it first.
 func (a *App) outlineLine(line int) {
 	if a.mode == "changes" && a.diffPath != "" {
-		a.openFile(a.diffPath)
+		a.openFilePreview(a.diffPath)
 	}
 
 	a.scrollToSourceLine(line)

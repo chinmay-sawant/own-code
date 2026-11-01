@@ -303,10 +303,13 @@ func (a *App) finishUnsavedAfter(after string, pending []tabRef, bulkGroup int, 
 	case "evict-open":
 		// Save/Discard cleared the evicted tab's dirtiness, so reopening
 		// now evicts it without a second prompt. Pinned re-opens stay
-		// pinned; preview re-opens reuse the preview slot (openFileAt is
-		// the pinned matrix, so previews route explicitly).
+		// pinned; preview re-opens reuse the preview slot.
 		if evictPath != "" {
-			a.openFileAt(evictGroup, evictPath, true)
+			if evictPinned {
+				a.openFileAt(evictGroup, evictPath, true)
+			} else {
+				a.openFileAtPreview(evictGroup, evictPath, true)
+			}
 		} else {
 			a.refresh()
 		}

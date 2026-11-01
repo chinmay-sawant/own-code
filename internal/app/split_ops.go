@@ -261,7 +261,7 @@ func (a *App) adoptRightGroup() {
 }
 
 // closeSplitSide closes one split side. Merge mode folds the closing side's
-// tabs into the survivor (deduped, capped at maxTabs with a toast); drop
+// tabs into the survivor (deduped, unlimited); drop
 // mode discards them but aborts with a toast when a closing tab is dirty.
 // Closing side 0 renumbers the survivor to group 0 so single-pane
 // invariants hold, and focus lands on the survivor.
@@ -298,12 +298,6 @@ func (a *App) closeSplitSide(side int, mode splitCloseMode) {
 				kept = append(kept, path)
 			}
 		}
-	}
-
-	dropped := 0
-	if len(kept) > maxTabs {
-		dropped = len(kept) - maxTabs
-		kept = kept[:maxTabs]
 	}
 
 	survivorActivePath := ""
@@ -353,10 +347,6 @@ func (a *App) closeSplitSide(side int, mode splitCloseMode) {
 
 	if len(a.tabs) == 0 {
 		a.openInitial()
-	}
-
-	if dropped > 0 {
-		a.showToast("info", "Pane closed", "Tabs merged; oldest tabs dropped at the tab cap.")
 	}
 
 	a.ensureTabVisible(0)

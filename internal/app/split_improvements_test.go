@@ -421,14 +421,15 @@ func TestSplitCloseSideDrop(t *testing.T) {
 	}
 }
 
-// TestSplitCloseMergeCap checks merging past the tab cap keeps the first
-// maxTabs tabs and toasts.
+// TestSplitCloseMergeCap checks merging keeps every tab: tabs are
+// unlimited, so no cap toast applies.
 func TestSplitCloseMergeCap(t *testing.T) {
 	app := newTestApp(t)
 
-	left := make([]string, 0, maxTabs)
-	right := make([]string, 0, maxTabs)
-	for i := 0; i < maxTabs; i++ {
+	const n = 8
+	left := make([]string, 0, n)
+	right := make([]string, 0, n)
+	for i := 0; i < n; i++ {
 		left = append(left, fmt.Sprintf("left-file-%02d.go", i))
 		right = append(right, fmt.Sprintf("right-file-%02d.go", i))
 	}
@@ -444,13 +445,10 @@ func TestSplitCloseMergeCap(t *testing.T) {
 	app.closeSplitSide(1, splitCloseMerge)
 
 	if app.split {
-		t.Fatal("split still open after capped merge")
+		t.Fatal("split still open after merge")
 	}
-	if len(app.tabs) != maxTabs {
-		t.Fatalf("merged tabs = %d, want cap %d", len(app.tabs), maxTabs)
-	}
-	if !app.View().Toast.Show {
-		t.Fatal("capped merge showed no toast")
+	if len(app.tabs) != 2*n {
+		t.Fatalf("merged tabs = %d, want %d", len(app.tabs), 2*n)
 	}
 }
 
