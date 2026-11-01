@@ -242,6 +242,7 @@ type App struct {
 	branchQuery      string
 	commitDetails    map[string]*changedFile
 	commitKeys       []string
+	commitErrors     map[string]string
 	commitOpen       string
 	commitFile       string
 	commitRows       []diffRow
@@ -396,6 +397,7 @@ func NewWithLimit(root string, limit int) (*App, error) {
 		folders:       map[string]bool{},
 		statuses:      map[string]string{},
 		commitDetails: map[string]*changedFile{},
+		commitErrors:  map[string]string{},
 		selected:      map[string]bool{},
 		mode:          "explorer",
 		diffSource:    "working",
@@ -729,6 +731,44 @@ func (a *App) switchProject(ctx context.Context, root string) error {
 	a.recentRoots = rememberRecentProject(a.recentRoots, ws.Root)
 	saveRecentProjects(a.recentRoots)
 
+	// The patch worker closes over its root, so a switch must retire it:
+	// otherwise commit patches keep running git in the previous project and
+	// the pane spins on "Loading" (or reports the wrong repo's error).
+	// Commit, history, and branch state belong to the old root too.
+	if a.patchLoader != nil {
+		a.patchLoader.Close()
+		a.patchLoader = nil
+	}
+	if !ws.Sample {
+		a.patchLoader = NewCommitPatchLoader(ws.Root, maxCommitPatchCache)
+	}
+	a.commitDetails = map[string]*changedFile{}
+	a.commitKeys = nil
+	a.commitErrors = map[string]string{}
+	a.commitOpen = ""
+	a.commitFile = ""
+	a.commitRows = nil
+	a.commitPreview = nil
+	a.firstChangePending = ""
+	a.diffSource = "working"
+	a.diffPath = ""
+	a.diffRows = nil
+	a.branchChanges = changeSet{}
+	a.branchPath = ""
+	a.commits = commitLog{}
+	a.branches = nil
+	a.headBranch = ""
+	a.historyRef = ""
+	a.historyLabel = ""
+	a.branchLogs = newBranchLogCache(branchLogLimit)
+	a.historyLimit = maxCommits
+	a.historyDone = false
+	a.historyToken++
+	a.historyScroll = historyScroll{Limit: maxCommits}
+	a.hoverCommit = ""
+	a.branchOpen = false
+	a.branchQuery = ""
+
 	if ws.Sample {
 		a.changes = sampleChangeSet()
 		a.useSampleHistory()
@@ -750,6 +790,11 @@ func (a *App) switchProject(ctx context.Context, root string) error {
 		a.setWatchError(err)
 		a.refresh()
 	}
+
+	// Load the new root's working tree and history right away so the Source
+	// Control rail never shows the previous project's commits (or an empty
+	// rail) until the watcher happens to fire.
+	a.ReloadChanges(ctx, false)
 
 	return nil
 }
@@ -1398,6 +1443,13 @@ func (a *App) fillCommitDiff(v *View, d *diffView) {
 
 	file := a.commitDetails[commitDetailKey(commit.Hash, path)]
 	if file == nil {
+		if msg, failed := a.commitErrors[commitDetailKey(commit.Hash, path)]; failed {
+			d.Note = "Couldn't load the patch for " + path + ": " + msg + ". Reselect the file or press R to retry."
+			d.EmptyTitle = "Commit diff"
+			d.Loading = false
+
+			return
+		}
 		if !a.ws.Sample && path != "" {
 			d.Note = "Loading the patch for " + path + "…"
 			d.Loading = true
@@ -2644,6 +2696,7 @@ func (a *App) useSampleHistory() {
 	a.headBranch = history.Branch
 	a.commitDetails = details
 	a.commitKeys = nil
+	a.commitErrors = map[string]string{}
 	a.commitOpen = ""
 	a.commitFile = ""
 	a.commitRows = nil
@@ -2812,6 +2865,7 @@ func (a *App) ReloadChanges(ctx context.Context, announce bool) {
 		if history.Head != a.commits.Head {
 			a.commitDetails = map[string]*changedFile{}
 			a.commitKeys = nil
+			a.commitErrors = map[string]string{}
 		}
 
 		a.commits = history
@@ -2839,6 +2893,13 @@ func (a *App) ReloadChanges(ctx context.Context, announce bool) {
 	a.changesScroll.SetOffset(0, len(a.sidebarChangeFiles()), a.changeVisibleRows())
 	if a.diffSource == "commit" {
 		a.revealChangePath(a.commitFile)
+		// Refresh (R) retries a failed patch instead of leaving the pane on
+		// its error note: ensureCommitFile clears the stored error and asks
+		// the worker again.
+		if a.commitOpen != "" && a.commitFile != "" &&
+			a.commitDetails[commitDetailKey(a.commitOpen, a.commitFile)] == nil {
+			a.ensureCommitFile(ctx, a.commitOpen, a.commitFile)
+		}
 	}
 	if a.diffSource == "branch" {
 		a.refreshBranchChanges(ctx)
@@ -3045,6 +3106,7 @@ func (a *App) pickBranch(ctx context.Context, ref string) {
 	a.commitFile = ""
 	a.commitRows = nil
 	a.commitPreview = nil
+	a.commitErrors = map[string]string{}
 	a.historyLimit = maxCommits
 	a.historyDone = len(history.Commits) < maxCommits
 	a.historyScroll.SetOffset(0, len(history.Commits), a.historyVisibleRows())
@@ -3254,6 +3316,10 @@ func (a *App) ensureCommitFile(_ context.Context, hash, path string) {
 		return
 	}
 
+	// A previous failure for this file must not block a retry: reselecting
+	// the file or pressing R clears the error below and asks again.
+	delete(a.commitErrors, key)
+
 	if a.patchLoader == nil {
 		// This fallback exists for an App built by a test without New. The
 		// worker lives for the app and Close cancels its in-flight read.
@@ -3283,6 +3349,7 @@ func (a *App) pollPatches(ctx context.Context) bool {
 			if result.Key == a.firstChangePending {
 				a.firstChangePending = ""
 			}
+			a.storeCommitError(result.Key, result.Err.Error())
 			a.showToast("error", "Commit diff unavailable", result.Err.Error())
 			changed = true
 
@@ -3293,6 +3360,7 @@ func (a *App) pollPatches(ctx context.Context) bool {
 			continue
 		}
 
+		delete(a.commitErrors, result.Key)
 		a.commitDetails[result.Key] = result.File
 		a.commitKeys = append(a.commitKeys, result.Key)
 
@@ -3321,6 +3389,25 @@ func (a *App) pollPatches(ctx context.Context) bool {
 	}
 
 	return changed
+}
+
+// storeCommitError remembers one failed patch so the commit pane shows the
+// failure instead of spinning on "Loading" forever. The map stays bounded
+// like the patch cache; eviction drops an arbitrary oldest entry.
+func (a *App) storeCommitError(key, msg string) {
+	if a.commitErrors == nil {
+		a.commitErrors = map[string]string{}
+	}
+
+	if _, seen := a.commitErrors[key]; !seen && len(a.commitErrors) >= maxCommitPatchCache {
+		for old := range a.commitErrors {
+			delete(a.commitErrors, old)
+
+			break
+		}
+	}
+
+	a.commitErrors[key] = msg
 }
 
 // focusCommitPage scrolls the history rail to the commit with hash.

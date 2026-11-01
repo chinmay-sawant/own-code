@@ -17,7 +17,7 @@ import (
 func main() {
 	webMode := flag.Bool("web", false, "serve the picture in a browser on -addr")
 	addr := flag.String("addr", "127.0.0.1:8145", "listen address for -web")
-	root := flag.String("root", ".", "directory to browse; defaults to the current directory")
+	root := flag.String("root", ".", "directory to browse; when omitted the last opened project reopens")
 	files := flag.Int("files", app.MaxWorkspaceFiles, "maximum files to scan; raise it for a large repository")
 	dev := flag.Bool("dev", false, "open the developer tools dock at startup")
 	perf := flag.Bool("perf", true, "enable pipeline sampling for the devtools Frame tab")
@@ -28,7 +28,14 @@ func main() {
 		return
 	}
 
-	a, err := app.NewWithLimit(*root, *files)
+	rootExplicit := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "root" {
+			rootExplicit = true
+		}
+	})
+
+	a, err := app.NewWithLimit(app.ResolveStartupRoot(rootExplicit, *root), *files)
 	if err != nil {
 		log.Fatal(err)
 	}

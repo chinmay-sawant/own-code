@@ -27,10 +27,18 @@ const (
 	termTopGap   = 80
 )
 
-// Close stops every terminal shell. It is safe to call more than once and
-// when New never ran.
+// Close stops every terminal shell and the commit patch worker. It is safe
+// to call more than once and when New never ran.
 func (a *App) Close() {
-	if a == nil || a.term == nil {
+	if a == nil {
+		return
+	}
+
+	if a.patchLoader != nil {
+		a.patchLoader.Close()
+	}
+
+	if a.term == nil {
 		return
 	}
 
