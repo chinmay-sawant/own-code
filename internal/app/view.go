@@ -147,6 +147,8 @@ type View struct {
 	Search         searchView
 	FileNav        fileNavView
 	ChangeLabel    string
+	CommitMessage  string
+	CommitDialog   commitDialogView
 	CommitTip      commitFloatView
 	InlineCard     inlineCard
 	FileMenu       bool
@@ -663,6 +665,19 @@ type symbolRow struct {
 	Line  int
 	No    int
 	Depth int
+}
+
+// commitDialogView is the commit dialog: staged files with stats, the
+// shortstat line, the message draft, and the inline error. Message is the
+// draft text; the template binds the textarea to the top-level
+// CommitMessage field because data-bind only addresses top-level fields.
+type commitDialogView struct {
+	Show      bool
+	Message   string
+	Files     []diffFileRow
+	FileCount int
+	Shortstat string
+	Error     string
 }
 
 // toastView is the transient message card.

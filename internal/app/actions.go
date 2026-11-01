@@ -29,6 +29,16 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		}
 	}
 
+	if a.commitDialogOpen && !a.confirmOpen {
+		switch box.Action {
+		case "commit-dialog", "commit-confirm", "commit-cancel":
+		default:
+			if box.ID != "commit-backdrop" && box.ID != "commit-message" {
+				return nil
+			}
+		}
+	}
+
 	action := box.Action
 
 	// Clicking outside the panel returns the keyboard to the editor. The
@@ -70,7 +80,7 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 	case action == "":
 		if box.ID == "filter" || box.ID == "palette" || box.ID == "find" || box.ID == "find-replace" || box.ID == "branch-filter" ||
 			box.ID == "workspace-search" || box.ID == "workspace-replace" || box.ID == "editor" || box.ID == "edit-surface" || box.ID == "project-path" ||
-			box.ID == "drawer-path" || box.ID == "browse-filter" {
+			box.ID == "drawer-path" || box.ID == "browse-filter" || box.ID == "commit-message" {
 			return nil
 		}
 
@@ -568,6 +578,12 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		}
 	case action == "discard-all":
 		a.openDiscardConfirm("discard-all", a.workingAllPaths())
+	case action == "commit-dialog":
+		return a.openCommitDialog(ctx)
+	case action == "commit-cancel":
+		a.closeCommitDialog()
+	case action == "commit-confirm":
+		return a.submitCommitDialog(ctx)
 	case action == "stage-selected":
 		if err := a.stageSelected(ctx); err != nil {
 			return err
@@ -933,6 +949,14 @@ func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 
 		a.browseFilter = next
 		a.browseList.reset()
+		a.refresh()
+	case "commit-message":
+		next := a.view.CommitMessage
+		if next == a.commitDialogMsg {
+			return nil
+		}
+
+		a.commitDialogMsg = next
 		a.refresh()
 	}
 
@@ -1955,6 +1979,19 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 		return a.page.Redraw(ctx)
 	}
 
+	if a.commitDialogOpen && !a.confirmOpen {
+		switch {
+		case key == "escape":
+			a.closeCommitDialog()
+
+			return a.page.Redraw(ctx)
+		case key == "enter" && a.ctrl:
+			return a.submitCommitDialog(ctx)
+		}
+
+		return nil
+	}
+
 	if a.confirmOpen {
 		return nil
 	}
@@ -2627,6 +2664,15 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 			a.reloadActive(ctx)
 		}
 	case "s":
+		if a.shift && !a.ctrl && a.keymapAllows("stage-hunk", key) {
+			if a.mode == "changes" {
+				if err := a.stageHunkAtCursor(ctx); err != nil {
+					return err
+				}
+			}
+
+			return a.page.Redraw(ctx)
+		}
 		if a.mode == "changes" {
 			a.setSplit(true)
 		}
@@ -2685,6 +2731,14 @@ func (a *App) onKeyUp(ctx context.Context, key string) error {
 // onSubmit opens the selected palette row or advances find. Enter and
 // NumpadEnter arrive here.
 func (a *App) onSubmit(ctx context.Context) error {
+	if a.commitDialogOpen && !a.confirmOpen {
+		if a.ctrl {
+			return a.submitCommitDialog(ctx)
+		}
+
+		return nil
+	}
+
 	// Goto and symbol overlays submit from the palette input in or out of
 	// edit mode; they route before the editing branch so Enter jumps
 	// instead of inserting a newline.

@@ -38,6 +38,8 @@ const (
 	contextMenuDiscardFileID = contextMenuIDPrefix + "discard-file:"
 	contextMenuStageFileID   = contextMenuIDPrefix + "stage-file:"
 	contextMenuUnstageFileID = contextMenuIDPrefix + "unstage-file:"
+	contextMenuStageHunkID   = contextMenuIDPrefix + "stage-hunk:"
+	contextMenuRevertHunkID  = contextMenuIDPrefix + "revert-hunk:"
 	contextMenuDiscardAllID  = contextMenuIDPrefix + "discard-all"
 	contextMenuStageAllID    = contextMenuIDPrefix + "stage-all"
 	contextMenuUnstageAllID  = contextMenuIDPrefix + "unstage-all"
@@ -220,6 +222,9 @@ func (a *App) ContextMenuFor(id string) []contextMenuRow {
 		return rows
 	}
 	if rows, ok := a.scmContextMenu(id); ok {
+		return rows
+	}
+	if rows, ok := a.hunkContextMenu(id); ok {
 		return rows
 	}
 	if rows, ok := a.historyContextMenu(id); ok {
@@ -461,6 +466,41 @@ func (a *App) scmContextMenu(id string) ([]contextMenuRow, bool) {
 	return nil, false
 }
 
+// hunkContextMenu returns the per-hunk rows for a diff revert button: stage
+// the block next to discarding it. Binary, oversized, and renamed files
+// carry no revert button, so they never reach this menu; untracked and
+// conflicted files reach stageHunk through the row and get its explicit
+// note instead of a guessed stage.
+func (a *App) hunkContextMenu(id string) ([]contextMenuRow, bool) {
+	if a.mode != "changes" || a.diffSource != "working" {
+		return nil, false
+	}
+
+	rest, ok := strings.CutPrefix(id, "revert-line-")
+	if !ok {
+		return nil, false
+	}
+
+	index, _, _, ok := parseHunkMenuRest(rest)
+	if !ok {
+		return nil, false
+	}
+
+	file := findFile(a.changes.Files, a.diffPath)
+	if file == nil || index < 0 || index >= len(file.Hunks) {
+		return nil, false
+	}
+
+	if file.Binary || file.Oversized || file.Status == "R" {
+		return nil, false
+	}
+
+	return []contextMenuRow{
+		{ID: contextMenuStageHunkID + rest, Label: "Stage Hunk", Enabled: true},
+		{ID: contextMenuRevertHunkID + rest, Label: "Discard Hunk", Enabled: true},
+	}, true
+}
+
 // historyContextMenu returns commit rows. Each commit offers its message and
 // ID on the clipboard. It never returns the working-tree rows.
 func (a *App) historyContextMenu(id string) ([]contextMenuRow, bool) {
@@ -537,6 +577,26 @@ func (a *App) MenuAction(ctx context.Context, id string) error {
 		}
 
 		return a.page.Redraw(ctx)
+	case strings.HasPrefix(id, contextMenuStageHunkID):
+		if index, oldNo, newNo, ok := parseHunkMenuRest(strings.TrimPrefix(id, contextMenuStageHunkID)); ok {
+			if sel, found := a.hunkBlockSelection(index, oldNo, newNo); found {
+				if err := a.stageHunk(ctx, index, sel); err != nil {
+					return err
+				}
+			}
+		}
+
+		return a.redrawMenuAction(ctx)
+	case strings.HasPrefix(id, contextMenuRevertHunkID):
+		if index, oldNo, newNo, ok := parseHunkMenuRest(strings.TrimPrefix(id, contextMenuRevertHunkID)); ok {
+			if sel, found := a.hunkBlockSelection(index, oldNo, newNo); found {
+				if err := a.revertHunk(ctx, index, sel); err != nil {
+					return err
+				}
+			}
+		}
+
+		return a.redrawMenuAction(ctx)
 	case strings.HasPrefix(id, contextMenuStageFileID):
 		path := strings.TrimPrefix(id, contextMenuStageFileID)
 		if err := a.stageFile(ctx, path); err != nil {

@@ -256,6 +256,13 @@ type App struct {
 	confirmPaths []string
 	confirmTitle string
 	confirmMsg   string
+	// commitDialogOpen shows the commit dialog over the working tree.
+	// commitDialogMsg is the message draft: cancel and failure keep it,
+	// only a successful commit clears it. commitDialogErr is the inline
+	// error for an empty message or a failed git commit.
+	commitDialogOpen bool
+	commitDialogMsg  string
+	commitDialogErr  string
 	// confirmPending holds the dirty tabs a Save/Don't Save choice acts on.
 	// Paths are stored instead of indices because indices shift as tabs
 	// close; the arms resolve the index at execution and close descending.
@@ -1082,7 +1089,7 @@ func (a *App) buildView() View {
 		MenuX:         a.menuX,
 		MenuY:         a.menuY,
 		MenuRows:      append([]menuViewRow(nil), a.menuItems...),
-		Modal:         a.paletteOpen || a.branchOpen || a.searchOpen || a.settingsOpen || a.confirmOpen || a.fileMenu || a.browseOpen || a.termFocus,
+		Modal:         a.paletteOpen || a.branchOpen || a.searchOpen || a.settingsOpen || a.confirmOpen || a.commitDialogOpen || a.fileMenu || a.browseOpen || a.termFocus,
 		SettingsOpen:  a.settingsOpen,
 		FileMenu:      a.fileMenu,
 		ProjectOpen:   a.projectOpen,
@@ -1177,6 +1184,8 @@ func (a *App) buildView() View {
 	v.FileNav = a.fileNavViewState()
 	v.ChangeLabel = a.fileNavSummary()
 	v.Confirm = a.confirmViewState()
+	v.CommitMessage = a.commitDialogMsg
+	v.CommitDialog = a.commitDialogViewState()
 
 	v.PaneLeft, v.PaneWidth = a.paneGeometry()
 	if v.Split {

@@ -637,6 +637,7 @@ func keymapCatalog() []keymapEntry {
 		{"reload-file", "Reload file", "R", false},
 		{"hunk-next", "Next hunk/change", "N", false},
 		{"hunk-prev", "Previous hunk/change", "P", false},
+		{"stage-hunk", "Stage hunk", "Shift+S", false},
 		{"history-back", "Navigate back", "Alt+ArrowLeft", false},
 		{"history-forward", "Navigate forward", "Alt+ArrowRight", false},
 		// Window-owned and always fixed: listed read-only, never rebindable.
@@ -1036,6 +1037,13 @@ func (a *App) runKeymapAction(ctx context.Context, action string) error {
 	case "hunk-prev":
 		if a.mode == "changes" {
 			a.jumpHunk(-1)
+		}
+		return a.page.Redraw(ctx)
+	case "stage-hunk":
+		if a.mode == "changes" {
+			if err := a.stageHunkAtCursor(ctx); err != nil {
+				return err
+			}
 		}
 		return a.page.Redraw(ctx)
 	case "history-back":
