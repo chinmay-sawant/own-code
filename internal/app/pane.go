@@ -147,7 +147,18 @@ func (a *App) codeColsForGroup(group int) int {
 		return a.previewColsForDoc(width, doc)
 	}
 
-	return a.codeColsFor(width)
+	cols := a.codeColsFor(width)
+	// The blame column takes horizontal room like the number gutter, so the
+	// wrap budget shrinks while it shows and wrapped rows never slide under
+	// the annotations.
+	if doc := a.groupDoc(group); a.blameShows(doc) {
+		cols -= int(float64(a.zx(blameGutterW)) / a.zf(codeCellW))
+		if cols < wrapMinCols {
+			cols = wrapMinCols
+		}
+	}
+
+	return cols
 }
 
 // previewCols is the column budget for rendered Markdown.
@@ -232,7 +243,7 @@ func hasWideHeading(lines []string, cols int) bool {
 
 // secondView builds the right-hand editor pane.
 func (a *App) secondView() secondaryView {
-	s := secondaryView{Open: true, ActiveTab: a.active2}
+	s := secondaryView{Open: true, ActiveTab: a.active2, Focused: a.focusGroup == 1}
 	s.Left, s.Width = a.secondGeometry()
 	s.Tabs, s.TabsPrev, s.TabsNext = a.windowTabRows(1)
 	doc := a.groupDoc(1)
@@ -247,6 +258,7 @@ func (a *App) secondView() secondaryView {
 	s.ActiveName = baseName(doc.Path)
 	winW, _ := a.page.Size()
 	s.ActiveNameShort, s.ActiveDirShort = clipSecondCrumbPath(s.Width, winW, s.ActiveName, s.ActiveDir)
+	s.BlameNote, s.BlameShow = a.blameStatus(doc)
 	s.Lang = doc.Lang
 	s.LangLabel = languageInfo(doc.Lang).Label
 	s.Badge = languageInfo(doc.Lang).Badge
@@ -257,7 +269,7 @@ func (a *App) secondView() secondaryView {
 	s.Truncated = doc.Truncated
 	s.CanEdit = doc.Err == "" && !doc.Binary
 	s.Editing = a.editing && a.editPath() == doc.Path
-	s.EditDirty = a.dirty[doc.Path]
+	s.EditDirty = a.isDirty(doc.Path)
 
 	if doc.Err != "" {
 		s.Empty = true
@@ -283,6 +295,7 @@ func (a *App) secondView() secondaryView {
 	cols := a.codeColsForGroup(1)
 
 	if s.Preview {
+		s.BlameNote, s.BlameShow = "", false
 		doc.ensurePreview(cols)
 		start, end, track := a.windowSliceForGroup(1, len(doc.Preview))
 		s.TrackTop = track
@@ -294,9 +307,16 @@ func (a *App) secondView() secondaryView {
 		return s
 	}
 
+	// Like the first pane, the sticky block takes headroom above the
+	// windowed rows so the pane stays exactly full.
+	sticky := a.stickyForGroup(1)
+	s.Sticky = sticky
+	reserve := len(sticky)
+	s.TrackTop = reserve * a.zx(rowH)
+
 	if a.wrap {
 		plan := doc.wrapped(cols)
-		start, end, track := a.windowSliceForGroup(1, len(plan.Rows))
+		start, end, _ := a.windowSliceReserve(1, len(plan.Rows), reserve)
 		if len(plan.Rows) > 0 && start > 0 && start < len(plan.Rows) {
 			if lineStart := plan.firstRow(plan.lineAt(start)); lineStart < start {
 				shift := start - lineStart
@@ -307,29 +327,29 @@ func (a *App) secondView() secondaryView {
 				}
 			}
 		}
-		s.TrackTop = track
 		s.Rows = cloneCodeRows(plan.Rows[start:end])
 		a.decorateCodeRows(doc, s.Rows, 1)
+		a.decorateBlame(doc, s.Rows, 1)
 
 		return s
 	}
 
-	start, end, track := a.windowSliceForGroup(1, len(doc.Lines))
-	s.TrackTop = track
+	start, end, _ := a.windowSliceReserve(1, len(doc.Lines), reserve)
 	if !a.wrap {
-		s.ScrollX = a.scrollX
+		s.ScrollX = a.scrollXFor(1)
 	}
 
 	for i := start; i < end; i++ {
 		row := codeRow{No: i + 1, Line: i, Segments: doc.Tokens[i]}
 		if !a.wrap {
-			row.ScrollX = a.scrollX
+			row.ScrollX = a.scrollXFor(1)
 		}
 		s.Rows = append(s.Rows, row)
 	}
 
 	a.decorateCodeRows(doc, s.Rows, 1)
-	a.sliceUnwrappedCodeRows(s.Rows, cols)
+	a.decorateBlame(doc, s.Rows, 1)
+	a.sliceUnwrappedCodeRowsFor(s.Rows, cols, 1)
 
 	return s
 }

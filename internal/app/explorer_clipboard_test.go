@@ -34,28 +34,37 @@ func TestExplorerMenuFileRows(t *testing.T) {
 
 	app := newTestApp(t)
 
-	labels := []string{"Cut", "Copy", "Copy Path", "Copy Absolute Path", "Paste"}
+	labels := []string{"New File", "New Folder", "-", "Cut", "Copy", "Copy Path", "Copy Absolute Path", "Paste", "-", "Duplicate", "Rename", "Delete"}
 	rows := wantExplorerRows(t, app, "tree-backend/probe.go", labels)
 
 	wantIDs := []string{
+		"code-view:new-file:backend",
+		"code-view:new-folder:backend",
+		"",
 		"code-view:cut:backend/probe.go",
 		"code-view:copy:backend/probe.go",
 		"code-view:copy-path:backend/probe.go",
 		"code-view:copy-abs:backend/probe.go",
 		"code-view:paste:backend/probe.go",
+		"",
+		"code-view:duplicate:backend/probe.go",
+		"code-view:rename:backend/probe.go",
+		"code-view:delete:backend/probe.go",
 	}
 
 	for i, want := range wantIDs {
 		if rows[i].ID != want {
 			t.Fatalf("row %d = %+v, want id %q", i, rows[i], want)
 		}
+	}
 
-		if i < 4 && !rows[i].Enabled {
+	for _, i := range []int{0, 1, 3, 4, 5, 6, 9, 10, 11} {
+		if !rows[i].Enabled {
 			t.Fatalf("row %d = %+v, want enabled", i, rows[i])
 		}
 	}
 
-	if rows[4].Enabled {
+	if rows[7].Enabled {
 		t.Fatal("paste is enabled with nothing staged")
 	}
 }
@@ -66,19 +75,27 @@ func TestExplorerMenuDirRows(t *testing.T) {
 
 	app := newTestApp(t)
 
-	labels := []string{"Cut", "Copy", "Copy Path", "Copy Absolute Path", "Paste"}
+	labels := []string{"New File", "New Folder", "-", "Cut", "Copy", "Copy Path", "Copy Absolute Path", "Paste", "-", "Duplicate", "Rename", "Delete"}
 	rows := wantExplorerRows(t, app, "tree-backend", labels)
 
-	if rows[0].ID != "code-view:cut:backend" || rows[1].ID != "code-view:copy:backend" {
-		t.Fatalf("cut/copy ids = %q %q", rows[0].ID, rows[1].ID)
+	if rows[0].ID != "code-view:new-file:backend" || rows[1].ID != "code-view:new-folder:backend" {
+		t.Fatalf("new rows = %q %q", rows[0].ID, rows[1].ID)
 	}
 
-	if rows[2].ID != "code-view:copy-path:backend" || rows[3].ID != "code-view:copy-abs:backend" {
-		t.Fatalf("path ids = %q %q", rows[2].ID, rows[3].ID)
+	if rows[3].ID != "code-view:cut:backend" || rows[4].ID != "code-view:copy:backend" {
+		t.Fatalf("cut/copy ids = %q %q", rows[3].ID, rows[4].ID)
 	}
 
-	if rows[4].ID != "code-view:paste:backend" || rows[4].Enabled {
-		t.Fatalf("paste row = %+v, want disabled", rows[4])
+	if rows[5].ID != "code-view:copy-path:backend" || rows[6].ID != "code-view:copy-abs:backend" {
+		t.Fatalf("path ids = %q %q", rows[5].ID, rows[6].ID)
+	}
+
+	if rows[7].ID != "code-view:paste:backend" || rows[7].Enabled {
+		t.Fatalf("paste row = %+v, want disabled", rows[7])
+	}
+
+	if rows[9].ID != "code-view:duplicate:backend" || rows[10].ID != "code-view:rename:backend" || rows[11].ID != "code-view:delete:backend" {
+		t.Fatalf("op rows = %q %q %q", rows[9].ID, rows[10].ID, rows[11].ID)
 	}
 }
 
@@ -89,29 +106,33 @@ func TestExplorerMenuHints(t *testing.T) {
 	app := newTestApp(t)
 
 	rows := app.ContextMenuFor("tree-backend/probe.go")
-	if len(rows) != 5 {
-		t.Fatalf("rows = %d, want 5", len(rows))
+	if len(rows) != 12 {
+		t.Fatalf("rows = %d, want 12", len(rows))
 	}
 
-	if rows[0].Hint != shortcutHint("Ctrl+X") || rows[0].Hint == "" {
-		t.Fatalf("cut hint = %q", rows[0].Hint)
+	if rows[3].Hint != shortcutHint("Ctrl+X") || rows[3].Hint == "" {
+		t.Fatalf("cut hint = %q", rows[3].Hint)
 	}
 
-	if rows[1].Hint != shortcutHint("Ctrl+C") || rows[1].Hint == "" {
-		t.Fatalf("copy hint = %q", rows[1].Hint)
+	if rows[4].Hint != shortcutHint("Ctrl+C") || rows[4].Hint == "" {
+		t.Fatalf("copy hint = %q", rows[4].Hint)
 	}
 
-	if rows[2].Hint != "" || rows[3].Hint != "" {
-		t.Fatalf("path rows carry hints: %+v", rows[2:])
+	if rows[5].Hint != "" || rows[6].Hint != "" {
+		t.Fatalf("path rows carry hints: %+v", rows[5:7])
 	}
 
-	if rows[4].Hint != shortcutHint("Ctrl+V") || rows[4].Hint == "" {
-		t.Fatalf("paste hint = %q", rows[4].Hint)
+	if rows[7].Hint != shortcutHint("Ctrl+V") || rows[7].Hint == "" {
+		t.Fatalf("paste hint = %q", rows[7].Hint)
+	}
+
+	if rows[10].Hint != "F2" || rows[11].Hint != "Del" {
+		t.Fatalf("op hints = %q %q", rows[10].Hint, rows[11].Hint)
 	}
 
 	// The hint survives the public bridge the page paints from.
 	bridged := app.contextMenuForPage("tree-backend/probe.go")
-	if len(bridged) != 5 || bridged[1].Hint != rows[1].Hint || bridged[4].Hint != rows[4].Hint {
+	if len(bridged) != 12 || bridged[4].Hint != rows[4].Hint || bridged[7].Hint != rows[7].Hint {
 		t.Fatalf("bridged hints = %+v", bridged)
 	}
 }
@@ -139,15 +160,31 @@ func TestExplorerMenuRootPasteOnly(t *testing.T) {
 
 	for _, id := range []string{"tree-pane", "sidebar", ""} {
 		rows := app.ContextMenuFor(id)
-		if len(rows) != 1 || rows[0].Label != "Paste" || rows[0].ID != "code-view:paste:" {
-			t.Fatalf("%q rows = %+v, want one paste row", id, rows)
+		if len(rows) != 4 {
+			t.Fatalf("%q rows = %+v, want new-file, new-folder, separator, paste", id, rows)
 		}
 
-		if rows[0].Hint != shortcutHint("Ctrl+V") {
-			t.Fatalf("%q paste hint = %q", id, rows[0].Hint)
+		if rows[0].Label != "New File" || rows[0].ID != "code-view:new-file:" {
+			t.Fatalf("%q new-file row = %+v", id, rows[0])
 		}
 
-		if rows[0].Enabled {
+		if rows[1].Label != "New Folder" || rows[1].ID != "code-view:new-folder:" {
+			t.Fatalf("%q new-folder row = %+v", id, rows[1])
+		}
+
+		if rows[2].Label != "-" || rows[2].ID != "" || rows[2].Enabled {
+			t.Fatalf("%q separator row = %+v", id, rows[2])
+		}
+
+		if rows[3].Label != "Paste" || rows[3].ID != "code-view:paste:" {
+			t.Fatalf("%q rows = %+v, want paste last", id, rows)
+		}
+
+		if rows[3].Hint != shortcutHint("Ctrl+V") {
+			t.Fatalf("%q paste hint = %q", id, rows[3].Hint)
+		}
+
+		if rows[3].Enabled {
 			t.Fatalf("%q paste is enabled with nothing staged", id)
 		}
 	}
@@ -156,7 +193,7 @@ func TestExplorerMenuRootPasteOnly(t *testing.T) {
 
 	for _, id := range []string{"tree-pane", "sidebar", ""} {
 		rows := app.ContextMenuFor(id)
-		if len(rows) != 1 || !rows[0].Enabled {
+		if len(rows) != 4 || !rows[3].Enabled {
 			t.Fatalf("%q paste stays disabled after a copy: %+v", id, rows)
 		}
 	}
@@ -177,6 +214,28 @@ func TestExplorerCopyPathClipboard(t *testing.T) {
 	got, err := ownframe.Read()
 	if err != nil || got != "backend/probe.go" {
 		t.Fatalf("clipboard = %q (%v), want the slash-relative path", got, err)
+	}
+}
+
+func TestExplorerCopyPathClipboardMultiSelect(t *testing.T) {
+	ownframe.UseMemory(true)
+	defer ownframe.UseMemory(false)
+	clearStagedCopy()
+	defer clearStagedCopy()
+
+	app := newTestApp(t)
+	app.explSel = map[string]bool{
+		"backend/probe.go": true,
+		"backend/store.go": true,
+	}
+
+	if err := app.MenuAction(context.Background(), "code-view:copy-path:backend/probe.go"); err != nil {
+		t.Fatalf("MenuAction: %v", err)
+	}
+
+	got, err := ownframe.Read()
+	if err != nil || got != "backend/probe.go\nbackend/store.go" {
+		t.Fatalf("clipboard = %q (%v), want both selected paths", got, err)
 	}
 }
 
@@ -203,6 +262,39 @@ func TestExplorerCopyAbsPathClipboard(t *testing.T) {
 
 	if !strings.HasSuffix(filepath.ToSlash(got), "backend/probe.go") {
 		t.Fatalf("clipboard = %q, want it to end in backend/probe.go", got)
+	}
+}
+
+func TestExplorerCopyAbsPathClipboardMultiSelect(t *testing.T) {
+	ownframe.UseMemory(true)
+	defer ownframe.UseMemory(false)
+	clearStagedCopy()
+	defer clearStagedCopy()
+
+	app := newTestApp(t)
+	app.explSel = map[string]bool{
+		"backend/probe.go": true,
+		"backend/store.go": true,
+	}
+
+	if err := app.MenuAction(context.Background(), "code-view:copy-abs:backend/probe.go"); err != nil {
+		t.Fatalf("MenuAction: %v", err)
+	}
+
+	got, err := ownframe.Read()
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+
+	lines := strings.Split(got, "\n")
+	if len(lines) != 2 {
+		t.Fatalf("clipboard = %q, want two absolute paths", got)
+	}
+
+	for i, want := range []string{"backend/probe.go", "backend/store.go"} {
+		if !filepath.IsAbs(lines[i]) || !strings.HasSuffix(filepath.ToSlash(lines[i]), want) {
+			t.Fatalf("line %d = %q, want an absolute path ending in %q", i, lines[i], want)
+		}
 	}
 }
 
@@ -284,8 +376,8 @@ func TestExplorerRightClickReplacesOutsideSelection(t *testing.T) {
 	app.explAnchor = "backend/probe.go"
 
 	rows := app.ContextMenuFor("tree-backend/store.go")
-	if len(rows) != 5 {
-		t.Fatalf("rows = %d, want 5", len(rows))
+	if len(rows) != 12 {
+		t.Fatalf("rows = %d, want 12", len(rows))
 	}
 
 	if len(app.explSel) != 1 || !app.explSel["backend/store.go"] {
@@ -570,21 +662,21 @@ func TestExplorerMenuPaintsInPage(t *testing.T) {
 	ctx := context.Background()
 
 	rows := app.contextMenuForPage("tree-backend/probe.go")
-	if len(rows) != 5 {
-		t.Fatalf("menu rows = %d, want 5", len(rows))
+	if len(rows) != 12 {
+		t.Fatalf("menu rows = %d, want 12", len(rows))
 	}
 
 	if !app.presentMenu(40, 50, rows) || !app.View().MenuOpen {
 		t.Fatal("page menu did not open")
 	}
 
-	box, ok := boxByID(app.Page().Boxes(), "ctx-0")
+	box, ok := boxByID(app.Page().Boxes(), "ctx-3")
 	if !ok {
 		t.Fatal("menu row was not painted")
 	}
 
 	if !strings.Contains(box.Action, "code-view:cut:backend/probe.go") {
-		t.Fatalf("ctx-0 action = %q, want the cut id", box.Action)
+		t.Fatalf("ctx-3 action = %q, want the cut id", box.Action)
 	}
 
 	if err := app.onClick(ctx, ownframe.Box{ID: box.ID, Action: box.Action}); err != nil {

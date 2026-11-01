@@ -21,7 +21,7 @@
       <svg class="filter-icon" width="12" height="12" viewBox="0 0 14 14" fill="none" stroke-width="1.5" stroke-linecap="round">
         <circle cx="6" cy="6" r="4.1"/><path d="m9.2 9.2 3 3"/>
       </svg>
-      <input id="filter" class="filter-input" type="text" data-bind="Filter" placeholder="Filter by name or path" autocomplete="off" spellcheck="false"{{if .Modal}} tabindex="-1"{{end}}>
+      <input id="filter" class="filter-input" type="text" data-bind="Filter" placeholder="Filter by name or path" autocomplete="off" spellcheck="false"{{if .Modal}} tabindex="-1"{{end}} maxlength="255">
       {{if .Filter}}<button class="filter-x" id="filter-clear" data-action="filter-clear" type="button" title="Clear filter" aria-label="Clear filter"{{if .Modal}} tabindex="-1"{{end}}>×</button>{{end}}
     </div>
 
@@ -39,7 +39,10 @@
       </div>
       {{end}}
       {{range .Tree}}
-      <button class="trow{{if .Dir}} dir{{end}}{{if .Open}} open{{end}}{{if .Ignored}} ignored{{end}}{{if .Selected}} selected{{end}}" id="tree-{{.Path}}" style="padding-left:{{.Indent}}px" data-action="{{if .Dir}}dir:{{else}}open:{{end}}{{.Path}}" type="button" title="{{if .Dir}}{{if .Open}}Collapse{{else}}Expand{{end}} {{end}}{{.Path}}{{if .IgnoredNote}} (git ignored){{end}}" aria-label="{{if .Dir}}{{if .Open}}Collapse{{else}}Expand{{end}} {{.Path}}{{else}}Open {{.Path}}{{end}}{{if .IgnoredNote}}, git ignored{{end}}"{{if $.Modal}} tabindex="-1"{{end}}>
+      {{if .Loading}}<div class="trow loading" id="tree-{{.Path}}" style="padding-left:{{.Indent}}px" aria-label="Loading {{.Path}}" tabindex="-1"><span class="tname">Loading…</span></div>
+      {{else if .LoadErr}}<button class="trow load-err" id="tree-{{.Path}}" style="padding-left:{{.Indent}}px" data-action="dir:{{.Path}}" type="button" title="Retry {{.Path}}: {{.LoadErr}}" aria-label="Retry {{.Path}}"{{if $.Modal}} tabindex="-1"{{end}}><span class="tname">Retry: {{.LoadErr}}</span></button>
+      {{else if .More}}<div class="trow more" id="tree-{{.Path}}" style="padding-left:{{.Indent}}px" aria-label="{{.MoreCount}} more files" tabindex="-1"><span class="tname">+{{.MoreCount}} more…</span></div>
+      {{else}}<button class="trow{{if .Dir}} dir{{end}}{{if .Open}} open{{end}}{{if .Ignored}} ignored{{end}}{{if .Selected}} selected{{end}}" id="tree-{{.Path}}" style="padding-left:{{.Indent}}px" data-action="{{if .Dir}}dir:{{else}}open:{{end}}{{.Path}}" type="button" title="{{if .Dir}}{{if .Open}}Collapse{{else}}Expand{{end}} {{end}}{{.Path}}{{if .IgnoredNote}} (git ignored){{end}}" aria-label="{{if .Dir}}{{if .Open}}Collapse{{else}}Expand{{end}} {{.Path}}{{else}}Open {{.Path}}{{end}}{{if .IgnoredNote}}, git ignored{{end}}"{{if $.Modal}} tabindex="-1"{{end}}>
         {{if .Dir}}
         {{if .Open}}<svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m1.8 3.6 3.2 3.2 3.2-3.2"/></svg>{{else}}<svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3.6 1.8 3.2 3.2-3.2 3.2"/></svg>{{end}}
         {{else}}
@@ -47,12 +50,14 @@
         {{end}}
         <span class="tname">{{.Short}}</span>
         {{if .IgnoredNote}}<span class="tree-note">ignored</span>{{end}}
+        {{if .Dirty}}<span class="tree-dot" id="tree-dot-{{.Path}}" title="Unsaved changes"></span>{{end}}
         <span class="fstat {{.StatusClass}}">{{.Status}}</span>
-      </button>
+      </button>{{end}}
       {{end}}
 
       {{if not .Tree}}<div class="tree-more">No readable files in this workspace.</div>{{end}}
-      {{if .Filtered}}<div class="tree-tag">matching paths</div>{{end}}
+      {{if .Filtered}}<div class="tree-tag">matching paths{{if .FilterNote}} · {{.FilterNote}}{{end}}</div>{{end}}
+      {{if .DirLoadNote}}<div class="tree-tag">{{.DirLoadNote}}</div>{{end}}
       {{if .TreeScroll}}
       <button class="tree-scroll" id="tree-scroll" type="button" title="Drag to scroll files" aria-label="Scroll files" tabindex="-1" style="height:{{.TreeTrackH}}px">
         <span class="tree-thumb" id="tree-thumb" style="top:{{.TreeThumbTop}}px;height:{{.TreeThumbH}}px"></span>
@@ -81,6 +86,7 @@
       <span class="sc-stats"><b class="add">+{{.Diff.TotalAdd}}</b><b class="del">−{{.Diff.TotalDel}}</b></span>
       {{if .Diff.HasChanges}}
       <span class="changes-tools-head">
+        <button class="commit-btn" id="changes-commit" data-action="commit-dialog" type="button" title="Commit staged changes" aria-label="Commit staged changes"{{if .Modal}} tabindex="-1"{{end}}>Commit</button>
         <button class="side-btn" id="changes-stage-all" data-action="stage-all" type="button" title="Stage all changes" aria-label="Stage all changes"{{if .Modal}} tabindex="-1"{{end}}>+</button>
         {{if .Diff.HasStaged}}<button class="side-btn" id="changes-unstage-all" data-action="unstage-all" type="button" title="Unstage all changes" aria-label="Unstage all changes"{{if .Modal}} tabindex="-1"{{end}}>−</button>{{end}}
         <button class="side-btn" id="changes-discard-all" data-action="discard-all" type="button" title="Discard all changes" aria-label="Discard all changes"{{if .Modal}} tabindex="-1"{{end}}>↩</button>
@@ -226,7 +232,7 @@
         {{if .History.BranchOpen}}
         <div class="branch-panel" role="dialog" aria-modal="true" aria-label="Choose a branch">
           <div class="branch-filter">
-            <input id="branch-filter" class="branch-input" type="text" data-bind="BranchQuery" placeholder="Filter branches" autocomplete="off" spellcheck="false" aria-label="Filter branches">
+            <input id="branch-filter" class="branch-input" type="text" data-bind="BranchQuery" placeholder="Filter branches" autocomplete="off" spellcheck="false" aria-label="Filter branches" maxlength="255">
           </div>
           <div class="branch-actions">
             <button class="hist-btn" id="branch-head" data-action="branch-head" type="button">Follow HEAD</button>

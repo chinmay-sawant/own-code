@@ -1,7 +1,6 @@
 package app
 
 import (
-	"github.com/chinmay-sawant/own-code/internal/edit"
 	"github.com/chinmay-sawant/ownframe"
 )
 
@@ -88,7 +87,7 @@ func (a *App) editDiffFileAt(line, displayCol int) {
 	}
 
 	path := file.Path
-	a.openFile(path)
+	a.openFilePreview(path)
 
 	if line < 0 {
 		if lines := inlineChangeLines(a.changedLinesFor(path)); len(lines) > 0 {
@@ -216,9 +215,9 @@ func (a *App) saveDirtyActive() {
 	}
 
 	path := ""
-	if a.mode == "changes" && a.diffSource == "working" && a.dirty[a.diffPath] {
+	if a.mode == "changes" && a.diffSource == "working" && a.isDirty(a.diffPath) {
 		path = a.diffPath
-	} else if doc := a.activeDoc(); doc != nil && a.dirty[doc.Path] {
+	} else if doc := a.activeDoc(); doc != nil && a.isDirty(doc.Path) {
 		path = doc.Path
 	}
 
@@ -226,21 +225,5 @@ func (a *App) saveDirtyActive() {
 		return
 	}
 
-	doc := a.docs[path]
-	if doc == nil {
-		return
-	}
-
-	data := []byte(edit.JoinLines(doc.Lines))
-	if err := a.ws.writeFile(path, data); err != nil {
-		a.showToast("error", "Save failed", err.Error())
-		a.refresh()
-
-		return
-	}
-
-	a.dirty[path] = false
-	a.docs[path] = a.ws.openDoc(path)
-	a.showToast("success", "File saved", path)
-	a.refresh()
+	a.savePath(path)
 }

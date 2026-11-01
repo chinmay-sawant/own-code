@@ -4,12 +4,15 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/chinmay-sawant/own-code/internal/edit"
 	"github.com/chinmay-sawant/own-code/internal/merge"
 	"github.com/chinmay-sawant/own-code/internal/terminal"
+	"github.com/chinmay-sawant/own-code/internal/wsl"
 	"github.com/chinmay-sawant/ownframe"
 	"github.com/fsnotify/fsnotify"
 )
@@ -93,8 +96,17 @@ const (
 	roundHalf            = 0.5
 	treeWheelRows        = 3.0
 
-	maxTabs       = 8
-	maxRecent     = 4
+	maxRecent = 4
+	// maxFieldLen caps every single-line search/filter input (palette,
+	// workspace search/replace, find, explorer filter, branch, browse, and
+	// project path). The templates carry the same maxlength="255" so the
+	// engine clamps typing/paste; the Go clamp below covers restored
+	// state and programmatic sets.
+	maxFieldLen = 255
+	// mruMax is the MRU switcher window. The persisted list and the
+	// welcome panel keep maxRecent; only the switcher shows this wider
+	// window.
+	mruMax        = 20
 	treeParentPad = 2
 
 	scrollStep = 96
@@ -158,13 +170,32 @@ type App struct {
 	scrollGroup     [2]int
 	splitWheelAccum [2]float64
 
+	// tabScroll remembers the vertical pixel offset per open path per
+	// group, so switching tabs restores the tab's own position instead of
+	// zeroing the group. Same path can differ per side. Runtime only: it
+	// is never persisted to the session.
+	tabScroll [2]map[string]int
+	// scrollXGrp is the per-group horizontal offset in split mode.
+	// Single-pane mode keeps using scrollX; entering a split seeds
+	// group 0 from scrollX, and collapsing copies group 0 back.
+	scrollXGrp [2]int
+	// splitDrag tracks an in-progress split-divider drag: start pins the
+	// ratio at grab time and dx accumulates the pointer delta in page px.
+	splitDrag splitDividerDrag
+
 	editing    bool
 	edit       *edit.Buffer
 	dirty      map[string]bool
 	editCaret  int
 	editAnchor int
-	editUndo   []editSnapshot
-	editRedo   []editSnapshot
+	// bracketOn flashes the match of the bracket at the caret; BracketLine
+	// and BracketFrom/To locate it in source coordinates.
+	bracketOn   bool
+	bracketLine int
+	bracketFrom int
+	bracketTo   int
+	editUndo    []editSnapshot
+	editRedo    []editSnapshot
 	// revertUndo/revertRedo store forward hunk patches for Ctrl+Z restore
 	// after a mistaken discard. Separate from editUndo so text and hunk
 	// histories never clobber each other.
@@ -177,6 +208,11 @@ type App struct {
 	menuX      int
 	menuY      int
 	menuItems  []menuViewRow
+	// pendingFocus is a control id the next tick focuses once the panel that
+	// owns it has been laid out. Click handlers run inside the window's
+	// redraw batch, so a panel they open is not in the form state yet when
+	// the handler asks for its input.
+	pendingFocus string
 
 	searchOpen      bool
 	searchQuery     string
@@ -195,17 +231,28 @@ type App struct {
 	searchResult    chan searchReply
 	searchCancel    context.CancelFunc
 
-	diffPath      string
-	diffSplit     bool
-	diffRows      []diffRow
-	diffRowsGen   uint64
-	diffWrap      diffWrapCache
-	changesScroll changesScroll
-	changesDrag   bool
-	changesDragAt int
-	changesScale  float64
-	diffSource    string
-	selected      map[string]bool
+	diffPath    string
+	diffSplit   bool
+	diffRows    []diffRow
+	diffRowsGen uint64
+	diffWrap    diffWrapCache
+	// changeStarts caches diffChangeStarts for the current display rows.
+	// fillDiffFile and fileNavChangeRows both scanned every row on every
+	// frame; the rows only change when diffRowsGen moves or the wrap shape
+	// (wrap on/off, column budget) changes, so the starts are cached on
+	// that key instead of rescanned per frame.
+	changeStarts     []int
+	changeStartsGen  uint64
+	changeStartsWrap bool
+	changeStartsCols [2]int
+	changeStartsN    int
+	changeStartsOK   bool
+	changesScroll    changesScroll
+	changesDrag      bool
+	changesDragAt    int
+	changesScale     float64
+	diffSource       string
+	selected         map[string]bool
 
 	// Merge editor state. The result text is the source of truth; parsed
 	// conflicts and the current index are derived from it after every change.
@@ -230,22 +277,70 @@ type App struct {
 	confirmPaths []string
 	confirmTitle string
 	confirmMsg   string
+	// commitDialogOpen shows the commit dialog over the working tree.
+	// commitDialogMsg is the message draft: cancel and failure keep it,
+	// only a successful commit clears it. commitDialogErr is the inline
+	// error for an empty message or a failed git commit.
+	commitDialogOpen bool
+	commitDialogMsg  string
+	commitDialogErr  string
+	// confirmPending holds the dirty tabs a Save/Don't Save choice acts on.
+	// Paths are stored instead of indices because indices shift as tabs
+	// close; the arms resolve the index at execution and close descending.
+	confirmPending []tabRef
+	// confirmAfter continues the original action after the dialog resolves:
+	// "close-one", "bulk", "evict-open", "merge-leave", or "close-split".
+	confirmAfter string
+	// confirmEvictGroup/confirmEvictPath is the file to open after an
+	// eviction dialog resolves.
+	confirmEvictGroup int
+	confirmEvictPath  string
+	// confirmEvictPinned re-opens through the pinned matrix when the
+	// evicted open came from a pinned entry point.
+	confirmEvictPinned bool
+	// confirmBulkGroup/confirmBulkPaths remember the full close set for a
+	// bulk dialog, so Cancel closes nothing and Save/Don't Save close all.
+	confirmBulkGroup int
+	confirmBulkPaths []string
+	// confirmMerge marks a dialog whose Save arm writes the merge result
+	// instead of the plain buffer.
+	confirmMerge bool
+	// confirmProceed continues the original action with the button-press
+	// context, so callers with bespoke close behavior keep it.
+	confirmProceed func(context.Context) error
 
-	commits          commitLog
-	branches         []branchRow
-	headBranch       string
-	historyRef       string
-	historyLabel     string
-	branchOpen       bool
-	branchQuery      string
-	commitDetails    map[string]*changedFile
-	commitKeys       []string
-	commitOpen       string
-	commitFile       string
-	commitRows       []diffRow
-	commitPreview    []diffRow
-	patchLoader      *commitPatchLoader
-	branchLogs       *branchLogCache
+	// autoSave is off or afterDelay; autoSaveDelayMs is the debounce for
+	// afterDelay. autosaveGen drops stale timer fires; autosaveDue is the
+	// next on-loop save time; autosaveTimer is the pending debounce timer.
+	autoSave        string
+	autoSaveDelayMs int
+	autosaveGen     int
+	autosaveDue     int64
+	autosaveTimer   *time.Timer
+
+	commits       commitLog
+	branches      []branchRow
+	headBranch    string
+	historyRef    string
+	historyLabel  string
+	branchOpen    bool
+	branchQuery   string
+	commitDetails map[string]*changedFile
+	commitKeys    []string
+	commitErrors  map[string]string
+	commitOpen    string
+	commitFile    string
+	commitRows    []diffRow
+	commitPreview []diffRow
+	patchLoader   *commitPatchLoader
+	branchLogs    *branchLogCache
+	// blameOn toggles the per-line blame gutter (off by default). The async
+	// blameLoader reads git off the page loop; blameCache holds the finished
+	// lines per path and blamePending dedups in-flight stat keys.
+	blameOn          bool
+	blameLoader      *blameLoader
+	blameCache       map[string]blameEntry
+	blamePending     map[string]bool
 	historyScroll    historyScroll
 	historyLimit     int
 	historyDone      bool
@@ -277,11 +372,23 @@ type App struct {
 	details       bool
 	devOn         bool
 	windowControl bool
+	// fpsCLI/fpsCLISet carry the --fps override: CLI wins over settings,
+	// default is uncapped. -1/0 both mean uncapped.
+	fpsCLI    int
+	fpsCLISet bool
 
 	// zoom is the layout multiplier, 1 for 100 percent. It scales the row
 	// grid, the window controls, and the reader fonts together, and persists per
 	// workspace in the session.
 	zoom float64
+
+	// fontSize is the global base font in px (default 12, 8..24). It feeds
+	// the zoom font table and persists in the session (missing → global →
+	// builtin) and in the global settings file.
+	fontSize float64
+	// zoomPerView holds v1 per-view overrides (editor/terminal only).
+	// Missing views follow the global zoom. CSS-only v1; zx/zf stay global.
+	zoomPerView map[string]float64
 
 	scrollY       int
 	viewportH     int
@@ -292,30 +399,153 @@ type App struct {
 
 	settingsOpen bool
 	theme        string
-	fileMenu     bool
-	projectOpen  bool
-	projectQuery string
-	recentOpen   bool
-	recentRoots  []string
-	browseOpen   bool
-	browseRoot   string
-	browseList   browseListWindow
-	fileAlert    string
-	paletteOpen  bool
-	recent       []string
-	paletteQuery string
-	paletteIndex int
-	nav          []string
-	navAt        int
-	ctrl         bool
-	shift        bool
+	// lineNumbersSet/showLineNumbers drive the gutter number column:
+	// unset defaults to shown.
+	lineNumbersSet  bool
+	showLineNumbers bool
+	// relativeNumbers toggles relative gutter numbers.
+	relativeNumbers bool
+	// tabSize is the global indent width (0 = auto per file).
+	// insertSet/insertSpaces pin the global indent style (default spaces).
+	// ecSet/useEditorConfig gate .editorconfig (default on).
+	// indentByFile pins per-file overrides.
+	tabSize         int
+	insertSet       bool
+	insertSpaces    bool
+	ecSet           bool
+	useEditorConfig bool
+	indentByFile    map[string]indentOverride
+	// ecCache memoizes parsed .editorconfig files by path.
+	// trimMode is the global trailing-whitespace mode ("" = auto).
+	ecCache  map[string]ecFile
+	trimMode string
+	// wrapByFile pins per-file soft-wrap overrides.
+	wrapByFile map[string]bool
+	// explorerInput is the inline new-file / rename prompt state.
+	explorerInput explorerInputState
+	// replaceOpen shows the in-file replace bar. findError carries an
+	// invalid-regex message; replaceRegex/replaceWholeWord are the in-file
+	// matcher toggles. searchRegex/searchWholeWord/searchReplace are the
+	// workspace search toggles and replacement text; searchError, searchTotal
+	// and searchCapped report the last pass; replaceCheck stages one
+	// checkbox per file path. The replace journal holds applied files for
+	// the explicit workspace undo.
+	replaceOpen       bool
+	findError         string
+	replaceRegex      bool
+	replaceWholeWord  bool
+	searchRegex       bool
+	searchWholeWord   bool
+	searchReplace     string
+	searchError       string
+	searchTotal       int
+	searchCapped      bool
+	replaceCheck      map[string]bool
+	replaceJournal    []appliedFile
+	replaceJournalOK  bool
+	replaceJournalMsg string
+	replaceSkipped    replaceSkipped
+	// settingsPath is the global settings file; settings is the last
+	// loaded/saved snapshot; settingsLast debounces writes; settingsTab
+	// selects the Settings panel section; settingsNote is the panel note.
+	// keymapCapture holds the action awaiting a capture chord;
+	// keymapPending* hold a conflicted rebind awaiting Swap/Replace/Cancel.
+	settingsPath          string
+	settings              globalSettings
+	settingsLast          string
+	settingsTab           string
+	settingsNote          string
+	keymapCapture         string
+	keymapPendingAction   string
+	keymapPendingChord    string
+	keymapPendingOthers   []string
+	pendingExcludesScan   []string
+	pendingExcludesSearch []string
+	// scanDraft/searchDraft hold the raw Files & Search textarea content
+	// while the panel is open. Drafts validate live; only valid globs save.
+	scanDraft     string
+	scanTouched   bool
+	searchDraft   string
+	searchTouched bool
+	// scanHidden counts files the live scan excludes hide, measured when
+	// the patterns applied. Walk-time pruning removes matches from Files,
+	// so the count is parked here instead of recomputed.
+	scanHidden int
+	// scanFilter is the compiled excludes snapshot used by scan and
+	// search.
+	scanFilter      *scanExcludes
+	fileMenu        bool
+	projectOpen     bool
+	projectQuery    string
+	recentOpen      bool
+	recentRoots     []string
+	browseOpen      bool
+	browseRoot      string
+	browseFilter    string
+	browseList      browseListWindow
+	browseDrag      bool
+	browseDragAt    int
+	browseDragScale float64
+	// settingsScrollOffset is the pixel offset of the settings tab
+	// content (see settings_scroll.go); the metrics below come from the
+	// last layout and feed the auto edge rail.
+	settingsScrollOffset int
+	settingsWheelAccum   float64
+	settingsViewH        int
+	settingsContentH     int
+	// settingsViewXYWH is the viewport box from the last layout, in page
+	// coords, with the panel origin beside it: the fixed rail is
+	// published panel-relative (see fillSettingsScroll).
+	settingsViewX     int
+	settingsViewY     int
+	settingsViewW     int
+	settingsPanelX    int
+	settingsPanelY    int
+	settingsDrag      bool
+	settingsDragAt    int
+	settingsDragScale float64
+	fileAlert         string
+	paletteOpen       bool
+	recent            []string
+	paletteQuery      string
+	paletteIndex      int
+	// paletteMode is the quick-open overlay mode: files, symbols, recent,
+	// or goto. The input box is shared; symbolQuery mirrors the query while
+	// the overlay is in symbols mode, and symbolScope pins Ctrl+Shift+O to
+	// the active file. symIndex is the lazy workspace symbol cache.
+	paletteMode string
+	symbolQuery string
+	symbolScope string
+	symIndex    *symbolIndex
+	// closedTabs is the LIFO closed-tab stack for Ctrl+Shift+T reopen.
+	// crumbMenu/crumbMenuOpen drive the breadcrumb sibling dropdown.
+	closedTabs    []closedTab
+	crumbMenu     int
+	crumbMenuOpen bool
+	// previewTab is the per-group preview-tab slot. pinned is the per-group
+	// pin set.
+	previewTab [2]string
+	pinned     [2]map[string]bool
+	nav        []string
+	navAt      int
+	ctrl       bool
+	shift      bool
+	// lastClickAction/lastClickAt detect double-clicks app-side: the engine
+	// reports press-down and click-up with no press count, so two clicks on
+	// the same file or tab inside doubleClickWindow pin instead of
+	// previewing. Runtime only, never persisted.
+	lastClickAction string
+	lastClickAt     time.Time
 	// pasteStaged is one in-app file copy staged for Ctrl+V. It is the
 	// Task 3 seam: the explorer Copy menu row stages here (see
 	// stageExplorerCopy), and the Ctrl+V/menu paste path consumes it
 	// before reading the OS clipboard.
-	pasteStaged  *pasteStagedCopy
-	preview      bool
-	wrap         bool
+	pasteStaged *pasteStagedCopy
+	preview     bool
+	wrap        bool
+	// stickyOff disables the pinned enclosing-symbol headers. Default
+	// false: headers show whenever the mode and file allow them.
+	stickyOff    bool
 	scrollX      int
 	viewportCols int
 	findOpen     bool
@@ -324,12 +554,29 @@ type App struct {
 	findIndex    int
 	findHits     []findHit
 	findReturn   string
+	// replaceQuery is the in-file replacement text for the replace row.
+	replaceQuery string
 
 	watch        *fsnotify.Watcher
 	watchCancel  context.CancelFunc
 	watchUpdates chan watchUpdate
 	watchNote    string
 	watchErr     *AppError
+
+	// Async directory loader: single background worker, per-path tokens.
+	// walkTree and onToggleDir enqueue only; receiveDirLoads installs.
+	dirLoads      map[string]int
+	dirLoadSeq    int
+	dirLoadReq    chan dirLoadRequest
+	dirLoadResult chan dirLoadReply
+	dirLoadCtx    context.Context
+	dirLoadCancel context.CancelFunc
+	// dirLoadNote is the last slow load (>500ms) for the Frame tab hook.
+	dirLoadNote string
+
+	// Quick-open disk fallback state.
+	paletteBusy bool
+	paletteNote string
 
 	// Embedded terminal panel. Hiding the panel keeps its shells running;
 	// project switches close them and leave the panel empty.
@@ -384,28 +631,49 @@ func NewWithLimit(root string, limit int) (*App, error) {
 	}
 
 	a := &App{
-		ws:            ws,
-		docs:          map[string]*fileDoc{},
-		dirty:         map[string]bool{},
-		folders:       map[string]bool{},
-		statuses:      map[string]string{},
-		commitDetails: map[string]*changedFile{},
-		selected:      map[string]bool{},
-		mode:          "explorer",
-		diffSource:    "working",
-		historyRatio:  historyDefaultRatio,
-		splitRatio:    defaultSplitRatio,
-		viewportH:     defaultHeight,
-		devOn:         true,
-		wrap:          true,
-		branchLogs:    newBranchLogCache(branchLogLimit),
-		searchResult:  make(chan searchReply, 1),
-		scanLimit:     ws.Limit,
-		historyLimit:  maxCommits,
-		historyScroll: historyScroll{Limit: maxCommits},
-		historyLoad:   make(chan historyLoadReply, 1),
-		term:          terminal.NewManager(),
-		termHeight:    termDefaultHeight,
+		ws:              ws,
+		docs:            map[string]*fileDoc{},
+		dirty:           map[string]bool{},
+		folders:         map[string]bool{},
+		statuses:        map[string]string{},
+		commitDetails:   map[string]*changedFile{},
+		commitErrors:    map[string]string{},
+		selected:        map[string]bool{},
+		mode:            "explorer",
+		diffSource:      "working",
+		historyRatio:    historyDefaultRatio,
+		splitRatio:      defaultSplitRatio,
+		tabScroll:       [2]map[string]int{{}, {}},
+		viewportH:       defaultHeight,
+		devOn:           true,
+		wrap:            true,
+		branchLogs:      newBranchLogCache(branchLogLimit),
+		searchResult:    make(chan searchReply, 1),
+		blameCache:      map[string]blameEntry{},
+		blamePending:    map[string]bool{},
+		scanLimit:       ws.Limit,
+		historyLimit:    maxCommits,
+		historyScroll:   historyScroll{Limit: maxCommits},
+		historyLoad:     make(chan historyLoadReply, 1),
+		term:            terminal.NewManager(),
+		termHeight:      termDefaultHeight,
+		autoSave:        autoSaveOff,
+		autoSaveDelayMs: autoSaveDefaultDelay,
+		theme:           "midnight",
+		fontSize:        defaultFontSize,
+		zoom:            1,
+		settingsTab:     "appearance",
+		settings:        zeroSettings(),
+	}
+	a.term.SetNotify(a.requestTerminalFrame)
+	a.startDirLoader()
+
+	// The global settings path is recorded here, but the file loads in
+	// EnableSession (settings first, session fallback). New alone never
+	// touches the user config directory, so tests stay hermetic; the
+	// literal above already carries the builtin defaults.
+	if settingsPath, err := defaultSettingsPath(); err == nil {
+		a.settingsPath = settingsPath
 	}
 
 	if ws.Sample {
@@ -443,10 +711,14 @@ func NewWithLimit(root string, limit int) (*App, error) {
 	}
 
 	a.page = page
+	_ = a.page.SetTheme(a.activeThemeCSS())
 	if !ws.Sample {
 		// New has no caller context. The patch worker lives for the app and
 		// Close cancels its in-flight git read.
 		a.patchLoader = NewCommitPatchLoader(ws.Root, maxCommitPatchCache)
+		// The blame worker lives for the app too; Close cancels its
+		// in-flight git read.
+		a.blameLoader = NewBlameLoader(ws.Root)
 	}
 
 	page.Handle(ownframe.Handlers{
@@ -533,6 +805,11 @@ func (a *App) openInitial() {
 	a.docs[target] = a.ws.openDoc(target)
 	a.tabs = []string{target}
 	a.active = 0
+	a.ensurePinnedMaps()
+	// The initial tab is pinned so the first single-click appends
+	// instead of replacing the only tab.
+	a.pinned[0][target] = true
+	a.previewTab[0] = ""
 	a.addRecent(target)
 	a.resetNavHistory(target)
 }
@@ -638,84 +915,6 @@ func (a *App) openNewWindow() error {
 	return nil
 }
 
-// reloadWindow rescans the current project and restores the saved layout.
-// The OS window keeps its size, so the page stays at the same resolution;
-// tabs that still exist stay open and the scroll offset is preserved.
-func (a *App) reloadWindow(ctx context.Context) error {
-	a.persistSession()
-	keepTabs := append([]string(nil), a.tabs...)
-	keepTabs2 := append([]string(nil), a.tabs2...)
-	keepActive, keepActive2 := a.active, a.active2
-	keepScroll, keepGroup := a.scrollY, a.scrollGroup
-	keepMode := a.mode
-
-	var ws *workspace
-	var err error
-
-	switch {
-	case a.ws.Sample:
-		ws, err = loadSampleWorkspace()
-	case a.scanLimit > 0 && a.scanLimit != MaxWorkspaceFiles:
-		ws, err = loadDiskWorkspaceWithLimit(a.ws.Root, a.scanLimit)
-	default:
-		ws, err = loadDiskWorkspaceLazy(a.ws.Root)
-	}
-
-	if err != nil {
-		a.showToast("error", "Reload failed", err.Error())
-		a.refresh()
-
-		return nil
-	}
-
-	a.StopWatcher()
-	a.ws = ws
-	a.docs = map[string]*fileDoc{}
-	a.dirty = map[string]bool{}
-	a.fileMenu = false
-	a.projectOpen = false
-	a.revertUndo = nil
-	a.revertRedo = nil
-	a.tabs = keepExistingTabs(keepTabs, ws)
-	a.tabs2 = keepExistingTabs(keepTabs2, ws)
-	a.active = clampSessionIndex(keepActive, len(a.tabs))
-	a.active2 = clampSessionIndex(keepActive2, len(a.tabs2))
-	a.mode = keepMode
-	a.statuses = statusMap(a.changes)
-	a.syncFileNav()
-	a.selectFirstDiff()
-
-	if len(a.tabs) == 0 {
-		a.openInitial()
-	} else {
-		a.addRecent(a.tabs[a.active])
-		a.pruneNavHistory()
-		if current := a.activeDocPath(); current != "" {
-			if len(a.nav) == 0 {
-				a.resetNavHistory(current)
-			} else if a.navAt < 0 || a.navAt >= len(a.nav) || a.nav[a.navAt] != current {
-				a.pushNavHistory(current)
-			}
-		}
-	}
-
-	a.scrollY = keepScroll
-	a.scrollGroup = keepGroup
-	a.resetScroll()
-	a.Page().Scroll().SetScrollOffset(0, keepScroll)
-	a.refresh()
-
-	if err := a.StartWatcher(ctx); err != nil {
-		a.setWatchError(err)
-		a.refresh()
-	}
-
-	a.showToast("success", "Window reloaded", "Same size, same project, fresh scan.")
-	a.refresh()
-
-	return nil
-}
-
 // resetLayout closes secondary UI and restores the default explorer layout.
 func (a *App) resetLayout() {
 	a.tabs = nil
@@ -724,6 +923,9 @@ func (a *App) resetLayout() {
 	a.active2 = 0
 	a.split = false
 	a.focusGroup = 0
+	a.tabScroll = [2]map[string]int{{}, {}}
+	a.scrollXGrp = [2]int{}
+	a.splitDrag = splitDividerDrag{}
 	a.details = false
 	a.filter = ""
 	a.findOpen = false
@@ -736,6 +938,9 @@ func (a *App) resetLayout() {
 	a.fileMenu = false
 	a.browseOpen = false
 	a.browseRoot = ""
+	a.browseFilter = ""
+	a.browseDrag = false
+	a.browseDragScale = 0
 	a.fileAlert = ""
 	a.scrollY = 0
 	a.scrollGroup = [2]int{}
@@ -774,6 +979,7 @@ func (a *App) switchProject(ctx context.Context, root string) error {
 	}
 
 	a.StopWatcher()
+	a.stopDirLoader()
 	a.closeTerminalSessions()
 	a.ws = ws
 	a.docs = map[string]*fileDoc{}
@@ -785,6 +991,9 @@ func (a *App) switchProject(ctx context.Context, root string) error {
 	a.active2 = 0
 	a.split = false
 	a.focusGroup = 0
+	a.tabScroll = [2]map[string]int{{}, {}}
+	a.scrollXGrp = [2]int{}
+	a.splitDrag = splitDividerDrag{}
 	a.details = false
 	a.filter = ""
 	a.fileMenu = false
@@ -796,6 +1005,54 @@ func (a *App) switchProject(ctx context.Context, root string) error {
 	a.revertRedo = nil
 	a.recentRoots = rememberRecentProject(a.recentRoots, ws.Root)
 	saveRecentProjects(a.recentRoots)
+
+	// The patch worker closes over its root, so a switch must retire it:
+	// otherwise commit patches keep running git in the previous project and
+	// the pane spins on "Loading" (or reports the wrong repo's error).
+	// Commit, history, and branch state belong to the old root too.
+	if a.patchLoader != nil {
+		a.patchLoader.Close()
+		a.patchLoader = nil
+	}
+	// The blame worker closes over its root too; blame lines belong to the
+	// old project, so the toggle resets with the switch.
+	if a.blameLoader != nil {
+		a.blameLoader.Close()
+		a.blameLoader = nil
+	}
+	a.blameOn = false
+	a.blameCache = map[string]blameEntry{}
+	a.blamePending = map[string]bool{}
+	if !ws.Sample {
+		a.patchLoader = NewCommitPatchLoader(ws.Root, maxCommitPatchCache)
+		a.blameLoader = NewBlameLoader(ws.Root)
+	}
+	a.commitDetails = map[string]*changedFile{}
+	a.commitKeys = nil
+	a.commitErrors = map[string]string{}
+	a.commitOpen = ""
+	a.commitFile = ""
+	a.commitRows = nil
+	a.commitPreview = nil
+	a.firstChangePending = ""
+	a.diffSource = "working"
+	a.diffPath = ""
+	a.diffRows = nil
+	a.branchChanges = changeSet{}
+	a.branchPath = ""
+	a.commits = commitLog{}
+	a.branches = nil
+	a.headBranch = ""
+	a.historyRef = ""
+	a.historyLabel = ""
+	a.branchLogs = newBranchLogCache(branchLogLimit)
+	a.historyLimit = maxCommits
+	a.historyDone = false
+	a.historyToken++
+	a.historyScroll = historyScroll{Limit: maxCommits}
+	a.hoverCommit = ""
+	a.branchOpen = false
+	a.branchQuery = ""
 
 	if ws.Sample {
 		a.changes = sampleChangeSet()
@@ -812,12 +1069,27 @@ func (a *App) switchProject(ctx context.Context, root string) error {
 	a.sessionPath, _ = defaultSessionPath(ws.Root)
 	a.sessionReady = false
 	a.sessionLast = ""
+	// Global settings roam across projects: theme, font, zoom, keymap, and
+	// excludes stay live while the per-workspace session resets. The fresh
+	// workspace refilters with the live excludes.
+	a.applyScanExcludesToWorkspace()
+	_ = a.page.SetTheme(a.activeThemeCSS())
+	a.dirLoads = map[string]int{}
+	a.dirLoadNote = ""
+	a.paletteBusy = false
+	a.paletteNote = ""
+	a.startDirLoader()
 	a.refresh()
 
 	if err := a.StartWatcher(ctx); err != nil {
 		a.setWatchError(err)
 		a.refresh()
 	}
+
+	// Load the new root's working tree and history right away so the Source
+	// Control rail never shows the previous project's commits (or an empty
+	// rail) until the watcher happens to fire.
+	a.ReloadChanges(ctx, false)
 
 	return nil
 }
@@ -831,7 +1103,9 @@ func (a *App) refresh() {
 }
 
 // onScroll is the windowing callback. It slices the code or diff rows around
-// the viewport and reports whether the frame needs a layout.
+// the viewport and reports whether the frame needs a layout. In split mode
+// the page offset carries no pane state — each group scrolls through its own
+// offset and rail — so only viewport resizes rebuild; the offsets stay inert.
 func (a *App) onScroll(offsetY, viewH int) bool {
 	if viewH <= 0 {
 		viewH = a.viewportH
@@ -855,7 +1129,11 @@ func (a *App) onScroll(offsetY, viewH int) bool {
 		cols = a.codeCols()
 	}
 
-	if offsetY == a.scrollY && viewH == a.viewportH && cols == a.viewportCols {
+	if a.split {
+		if viewH == a.viewportH && cols == a.viewportCols {
+			return false
+		}
+	} else if offsetY == a.scrollY && viewH == a.viewportH && cols == a.viewportCols {
 		return false
 	}
 
@@ -878,18 +1156,18 @@ func (a *App) buildView() View {
 	winW, _ := a.page.Size()
 	v := View{
 		Mode:          a.mode,
-		Filter:        a.filter,
+		Filter:        clampFieldLen(a.filter),
 		Details:       a.details,
 		DevOn:         a.devOn,
 		MenuOpen:      a.menuOpen,
 		MenuX:         a.menuX,
 		MenuY:         a.menuY,
 		MenuRows:      append([]menuViewRow(nil), a.menuItems...),
-		Modal:         a.paletteOpen || a.branchOpen || a.searchOpen || a.settingsOpen || a.confirmOpen || a.fileMenu || a.browseOpen || a.termFocus,
+		Modal:         a.paletteOpen || a.branchOpen || a.searchOpen || a.settingsOpen || a.confirmOpen || a.commitDialogOpen || a.fileMenu || a.browseOpen || a.termFocus,
 		SettingsOpen:  a.settingsOpen,
 		FileMenu:      a.fileMenu,
 		ProjectOpen:   a.projectOpen,
-		ProjectQuery:  a.projectQuery,
+		ProjectQuery:  clampFieldLen(a.projectQuery),
 		RecentOpen:    a.recentOpen,
 		RecentFlyX:    a.recentFlyoutX(),
 		RecentFlyY:    a.recentFlyoutY(),
@@ -898,52 +1176,99 @@ func (a *App) buildView() View {
 		BrowseOpen:    a.browseOpen,
 		BrowseRoot:    a.browseRoot,
 		BrowseName:    clipBrowsePath(winW, a.browseDisplayName()),
+		BrowseQuery:   clampFieldLen(a.browseFilter),
 		BrowseEntries: a.browseWindowedEntries(),
+		BrowseTotal:   len(a.browseFilteredEntries()),
 		IsWSL:         isWSL(),
+		IsWindows:     runtime.GOOS == "windows",
+		HasWSL:        wsl.Available(),
 		Alert:         a.fileAlert,
 		Themes:        a.themeRows(),
+		AutoSave:      validAutoSave(a.autoSave),
+		AutoSaveDelay: clampAutoSaveDelay(firstNonZero(a.autoSaveDelayMs, autoSaveDefaultDelay)),
+		MaxFPS:        a.EffectiveMaxFPS(),
+		FPSLabel:      FPSLabel(a.EffectiveMaxFPS()),
+		FPSOptions:    fpsRows(a.EffectiveMaxFPS()),
+		SettingsTab:   a.settingsTabName(),
+		FontLabel:     a.fontLabel(),
+		KeymapRows:    a.keymapRows(),
+		ScanText:      a.scanDraftText(),
+		SearchText:    a.searchDraftText(),
+		ScanBad:       invalidGlobLines(a.scanDraftText()),
+		SearchBad:     invalidGlobLines(a.searchDraftText()),
+		UseGitignore:  a.scanFilterAllowsGitignore(),
+		SearchIgnored: a.scanFilterAllowsSearchIgnored(),
+		ScanMatch:     a.scanExcludeMatchCount(),
+		SearchSkip:    a.searchExcludeSkipCount(),
+		SettingsNote:  a.settingsNote,
 		Workspace:     baseName(a.ws.Root),
 		Branch:        a.changes.Branch,
 		Changed:       len(a.changes.Files) + len(a.changes.Conflicts),
 		DevNote:       a.changes.Note,
 		ScanBudget:    a.ws.ScanBudget(),
 		WatchNote:     a.watchNote,
+		FilterNote:    a.filterNote(),
+		DirLoadNote:   a.dirLoadNote,
 		HoverPath:     a.hoverPath,
 		Dirty:         a.dirtyCount(),
 		Toast:         a.toast,
 		Wrap:          a.wrap,
 		ScrollX:       0,
-		FindQuery:     a.findQuery,
+		FindQuery:     clampFieldLen(a.findQuery),
 		FindOpen:      a.findOpen,
 		FindCase:      a.findCase,
 		FindCurrent:   a.findCurrent(),
 		FindTotal:     len(a.findHits),
-		BranchQuery:   a.branchQuery,
-		Split:         a.split && a.mode == "explorer",
-		FocusGroup:    a.focusGroup,
+
+		ReplaceOpen:      a.replaceOpen,
+		ReplaceQuery:     clampFieldLen(a.replaceQuery),
+		ReplaceRegex:     a.replaceRegex,
+		ReplaceWholeWord: a.replaceWholeWord,
+		FindError:        a.findError,
+		BranchQuery:      clampFieldLen(a.branchQuery),
+		Split:            a.split && a.mode == "explorer",
+		FocusGroup:       a.focusGroup,
+		FocusedPane:      0,
+	}
+
+	if v.Split {
+		v.FocusedPane = a.focusGroup
+		if v.FocusedPane != 1 {
+			v.FocusedPane = 0
+		}
 	}
 
 	if !a.wrap {
-		v.ScrollX = a.scrollX
+		v.ScrollX = a.scrollXFor(0)
 	}
 
 	v.Tree, v.TreeTotal, v.TreeCount, v.Filtered = a.treeRows()
 	v.TreeStart = a.treeOffset
 	v.StickyTree = a.stickyTreeRows()
 	v.TreeVisible = a.treeVisibleRows()
+	v.ExplorerInputOpen = a.explorerInput.Open
+	v.ExplorerInputTitle = a.explorerInputTitle()
 	a.fillTreeScroll(&v)
+	a.fillBrowseScroll(&v)
+	a.fillSettingsScroll(&v)
 	v.Tabs, v.TabsPrev, v.TabsNext = a.windowTabRows(0)
 	v.Recent = a.recentRows()
 	v.ActiveTab = a.active
-	v.PaletteQuery = a.paletteQuery
-	v.SearchQuery = a.searchQuery
+	v.PaletteQuery = clampFieldLen(a.paletteQuery)
+	v.SearchQuery = clampFieldLen(a.searchQuery)
+	v.SearchReplace = clampFieldLen(a.searchReplace)
 	v.Palette = a.paletteView()
 	v.Search = a.searchViewState()
 	v.FileNav = a.fileNavViewState()
 	v.ChangeLabel = a.fileNavSummary()
 	v.Confirm = a.confirmViewState()
+	v.CommitMessage = a.commitDialogMsg
+	v.CommitDialog = a.commitDialogViewState()
 
 	v.PaneLeft, v.PaneWidth = a.paneGeometry()
+	if v.Split {
+		v.SplitDivLeft, v.SplitDivW = a.splitDividerGeometry()
+	}
 
 	if doc := a.groupDoc(0); doc != nil {
 		v.Active = doc.Path
@@ -994,7 +1319,13 @@ func (a *App) buildView() View {
 		v.TitleBarMax = a.page.Window().Maximized()
 	}
 
-	v.ZoomLabel = a.zoomLabel()
+	v.ZoomLabel = a.statusZoomLabel()
+	v.EditorZoom = a.zoomPerViewValue("editor")
+	v.TerminalZoom = a.zoomPerViewValue("terminal")
+	v.EditorZoomLabel = a.zoomPerViewLabel("editor")
+	v.TerminalZoomLabel = a.zoomPerViewLabel("terminal")
+	v.KeymapCapture = a.keymapCapture
+	v.KeymapPending = a.keymapPendingMessage()
 
 	v.CmdTitle = "Search files"
 	switch {
@@ -1033,6 +1364,8 @@ func (a *App) buildView() View {
 // fillCode fills the first editor group, its visible rows, and the empty state.
 func (a *App) fillCode(v *View) {
 	doc := a.groupDoc(0)
+	v.BlameOn = a.blameOn
+	v.BlameNote, v.BlameShow = a.blameStatus(doc)
 	if doc == nil {
 		v.Welcome = true
 		v.Active = ""
@@ -1063,6 +1396,9 @@ func (a *App) fillCode(v *View) {
 	cols := a.codeColsForGroup(0)
 
 	if v.Preview {
+		// The blame column paints code rows only; the rendered preview
+		// keeps its own gutter.
+		v.BlameNote, v.BlameShow = "", false
 		doc.ensurePreview(cols)
 		start, end, track := a.windowSliceForGroup(0, len(doc.Preview))
 		v.TrackTop = track
@@ -1074,10 +1410,18 @@ func (a *App) fillCode(v *View) {
 		return
 	}
 
-	start, end, track := a.windowSliceForGroup(0, len(doc.Lines))
+	// The sticky block takes headroom above the windowed rows: the track
+	// shifts down by its height and the slice shrinks by the same rows so
+	// the pane stays exactly full.
+	sticky := a.stickyForGroup(0)
+	v.Sticky = sticky
+	reserve := len(sticky)
+	v.TrackTop = reserve * a.zx(rowH)
+
+	start, end, _ := a.windowSliceReserve(0, len(doc.Lines), reserve)
 	if a.wrap {
 		plan := doc.wrapped(cols)
-		start, end, track = a.windowSliceForGroup(0, len(plan.Rows))
+		start, end, _ = a.windowSliceReserve(0, len(plan.Rows), reserve)
 		// Never start mid-line: a scroll offset landing inside a wrapped
 		// source line would fill the viewport with No==0 continuations and
 		// blank the gutter. Snap back to the line start and keep the same
@@ -1092,30 +1436,32 @@ func (a *App) fillCode(v *View) {
 				}
 			}
 		}
-		v.TrackTop = track
 		v.Rows = a.copyFindRows(cloneCodeRows(plan.Rows[start:end]))
+		v.Rows = a.markBracketRows(v.Rows)
 		a.decorateCodeRows(doc, v.Rows, 0)
 		a.decorateEditRows(v.Rows)
+		a.decorateBlame(doc, v.Rows, 0)
 
 		return
 	}
 
-	v.TrackTop = track
 	v.Rows = make([]codeRow, 0, end-start)
 
 	for i := start; i < end; i++ {
 		row := codeRow{No: i + 1, Line: i, Segments: doc.Tokens[i]}
 		if !a.wrap {
-			row.ScrollX = a.scrollX
+			row.ScrollX = a.scrollXFor(0)
 		}
 		v.Rows = append(v.Rows, row)
 	}
 
 	v.Rows = a.copyFindRows(v.Rows)
+	v.Rows = a.markBracketRows(v.Rows)
 	a.decorateCodeRows(doc, v.Rows, 0)
 	a.decorateEditRows(v.Rows)
+	a.decorateBlame(doc, v.Rows, 0)
 
-	a.sliceUnwrappedCodeRows(v.Rows, cols)
+	a.sliceUnwrappedCodeRowsFor(v.Rows, cols, 0)
 }
 
 // sliceUnwrappedCodeRows trims unwrapped rows to their visible rune window.
@@ -1123,11 +1469,17 @@ func (a *App) fillCode(v *View) {
 // the rows below. EditStart, caret, selection, and click math keep using
 // full-line columns and the full scrollX, so only the painted slice moves.
 func (a *App) sliceUnwrappedCodeRows(rows []codeRow, cols int) {
+	a.sliceUnwrappedCodeRowsFor(rows, cols, a.focusedScrollGroup())
+}
+
+// sliceUnwrappedCodeRowsFor is sliceUnwrappedCodeRows for one editor group,
+// so split panes slice against their own horizontal offset.
+func (a *App) sliceUnwrappedCodeRowsFor(rows []codeRow, cols, group int) {
 	if a.wrap {
 		return
 	}
 
-	col, rem := a.hscrollWindow(a.zf(codeCellW), cols)
+	col, rem := a.hscrollWindowFor(group, a.zf(codeCellW), cols)
 
 	for i := range rows {
 		rows[i].Segments = sliceSegments(rows[i].Segments, col, cols)
@@ -1461,6 +1813,13 @@ func (a *App) fillCommitDiff(v *View, d *diffView) {
 
 	file := a.commitDetails[commitDetailKey(commit.Hash, path)]
 	if file == nil {
+		if msg, failed := a.commitErrors[commitDetailKey(commit.Hash, path)]; failed {
+			d.Note = "Couldn't load the patch for " + path + ": " + msg + ". Reselect the file or press R to retry."
+			d.EmptyTitle = "Commit diff"
+			d.Loading = false
+
+			return
+		}
 		if !a.ws.Sample && path != "" {
 			d.Note = "Loading the patch for " + path + "…"
 			d.Loading = true
@@ -1547,7 +1906,7 @@ func (a *App) fillDiffFile(v *View, d *diffView, file *changedFile) {
 			a.changeNav.mode == a.mode && a.changeNav.scroll == a.scrollY {
 			current = a.changeNav.row
 		}
-		markCurrentDiffChange(rows, visible, start, current)
+		markCurrentDiffChangeWithStarts(rows, visible, start, current, a.cachedChangeStarts(rows))
 		a.sliceUnwrappedDiffRows(visible)
 		d.Rows = visible
 	}
@@ -1612,7 +1971,12 @@ func diffChangeStarts(rows []diffRow) []int {
 }
 
 func markCurrentDiffChange(rows, visible []diffRow, start, current int) {
-	starts := diffChangeStarts(rows)
+	markCurrentDiffChangeWithStarts(rows, visible, start, current, diffChangeStarts(rows))
+}
+
+// markCurrentDiffChangeWithStarts is markCurrentDiffChange with precomputed
+// starts, for the per-frame path that reuses the cached scan.
+func markCurrentDiffChangeWithStarts(rows, visible []diffRow, start, current int, starts []int) {
 	if len(starts) == 0 {
 		return
 	}
@@ -1630,6 +1994,29 @@ func markCurrentDiffChange(rows, visible []diffRow, start, current int) {
 	for i := range visible {
 		visible[i].Current = start+i >= selected && start+i < end
 	}
+}
+
+// cachedChangeStarts returns the change-block starts for the current display
+// rows, rescanning only when the diff generation, wrap shape, or row count
+// changed since the last call.
+func (a *App) cachedChangeStarts(rows []diffRow) []int {
+	unified, split := 0, 0
+	if a.wrap {
+		unified, split = a.diffColumns()
+	}
+	if a.changeStartsOK && a.changeStartsGen == a.diffRowsGen &&
+		a.changeStartsWrap == a.wrap && a.changeStartsCols == [2]int{unified, split} &&
+		a.changeStartsN == len(rows) {
+		return a.changeStarts
+	}
+	starts := diffChangeStarts(rows)
+	a.changeStarts = starts
+	a.changeStartsGen = a.diffRowsGen
+	a.changeStartsWrap = a.wrap
+	a.changeStartsCols = [2]int{unified, split}
+	a.changeStartsN = len(rows)
+	a.changeStartsOK = true
+	return starts
 }
 
 // findCommit returns one commit by full hash.
@@ -1835,7 +2222,7 @@ func (a *App) fillHistory(v *View) {
 		Browsing:    a.historyRef != "",
 		Detached:    strings.HasPrefix(a.headBranch, "HEAD detached"),
 		BranchOpen:  a.branchOpen,
-		BranchQuery: a.branchQuery,
+		BranchQuery: clampFieldLen(a.branchQuery),
 	}
 	if !h.Visible {
 		v.History = h
@@ -1971,7 +2358,9 @@ func (a *App) windowSlice(total int) (int, int, int) {
 }
 
 // contentHeight is the page height for the current mode. The fixed window controls
-// covers the rest, so a short file leaves the page at one viewport.
+// covers the rest, so a short file leaves the page at one viewport. In split
+// mode the spacer follows the taller pane (group 0 wins ties): the right pane
+// is virtual with its own rail, and a dual spacer is out of scope.
 func (a *App) contentHeight() int {
 	rows := 0
 
@@ -2057,6 +2446,7 @@ func (a *App) toggleWrap() {
 		a.wrap = !a.wrap
 		if a.wrap {
 			a.scrollX = 0
+			a.scrollXGrp = [2]int{}
 		}
 		a.resetScroll()
 		a.refresh()
@@ -2068,6 +2458,7 @@ func (a *App) toggleWrap() {
 	a.wrap = !a.wrap
 	if a.wrap {
 		a.scrollX = 0
+		a.scrollXGrp = [2]int{}
 	}
 	a.viewportCols = 0
 
@@ -2081,7 +2472,8 @@ func (a *App) toggleWrap() {
 }
 
 // scrollTo moves the page and rebuilds the visible slice, keeping an open
-// inline card on its line.
+// inline card on its line. It is the group-0 / single-pane path: split panes
+// scroll through scrollGroupTo, which mirrors group 0 here.
 func (a *App) scrollTo(y int) {
 	target := a.clampScroll(y)
 	a.scrollY = target
@@ -2093,7 +2485,10 @@ func (a *App) scrollTo(y int) {
 	a.refresh()
 }
 
-// resetScroll returns to the top when a new file or mode opens.
+// resetScroll returns to the top when a new file or mode opens. It zeroes
+// both groups and both horizontal offsets. Split-path tab switches must use
+// resetGroupScroll plus per-tab save/restore instead, so the other pane and
+// the tab's own position survive.
 func (a *App) resetScroll() {
 	a.resetFind()
 	a.changeNav = changeNavigation{}
@@ -2104,6 +2499,12 @@ func (a *App) resetScroll() {
 	a.scrollTarget = 0
 	a.scrollPending = true
 	a.scrollX = 0
+	a.scrollXGrp = [2]int{}
+	for group := 0; group < 2; group++ {
+		if a.tabScroll[group] == nil {
+			a.tabScroll[group] = map[string]int{}
+		}
+	}
 	a.page.ScrollTo(0, 0)
 	a.repositionInlineCard()
 }
@@ -2111,8 +2512,10 @@ func (a *App) resetScroll() {
 // resetFind clears the find bar without touching focus.
 func (a *App) resetFind() {
 	a.findOpen = false
+	a.replaceOpen = false
 	a.findQuery = ""
-	a.findCase = false
+	a.replaceQuery = ""
+	a.findError = ""
 	a.findHits = nil
 	a.findIndex = 0
 	a.findReturn = ""
@@ -2220,16 +2623,18 @@ func (a *App) stickyTreeRows() []treeRow {
 }
 
 // treeRows returns the visible explorer rows, the total row count, the file
-// count, and whether the filter is active.
+// count, and whether the filter is active. It never touches disk: open
+// unloaded folders are enqueued to the background loader and render as
+// spinner rows until receiveDirLoads installs them.
 func (a *App) treeRows() ([]treeRow, int, int, bool) {
-	a.ensureOpenFoldersLoaded()
+	a.scheduleOpenFoldersLoaded()
 
 	count := len(a.ws.Files)
 	if a.filter != "" {
 		return a.filteredRows()
 	}
 
-	total := countTreeOpen(a.ws.Tree, a.folders)
+	total := countTreeOpenWithState(a.ws.Tree, a.folders)
 	for range 3 {
 		visible := a.treeVisibleRows()
 		before := a.treeOffset
@@ -2250,6 +2655,9 @@ func (a *App) treeRows() ([]treeRow, int, int, bool) {
 	return rows, total, count, false
 }
 
+// ensureOpenFoldersLoaded is kept for by-path callers and tests that need
+// a synchronous load. The render path uses scheduleOpenFoldersLoaded
+// (enqueue-only) so the page loop never blocks on disk I/O.
 func (a *App) ensureOpenFoldersLoaded() {
 	if a.ws == nil || a.ws.Sample || !a.ws.Lazy {
 		return
@@ -2276,9 +2684,21 @@ func (a *App) ensureOpenFoldersLoaded() {
 	}
 }
 
+// filterNote scopes the sidebar filter when lazy: ws.Files is seen-so-far,
+// not the full repo.
+func (a *App) filterNote() string {
+	if a.filter == "" || a.ws == nil || !a.ws.Lazy {
+		return ""
+	}
+	return "Filtering seen files only; expand folders or use Quick Open for full-repo."
+}
+
 // walkTree appends the visible nodes in the current offset window.
 // parentIgnored tracks whether an ancestor already carries the ignored
-// label, so only the topmost ignored row gets the pill.
+// label, so only the topmost ignored row gets the pill. It never touches
+// disk: unloaded open folders emit a synthetic spinner child, LoadErr emits
+// a retry row, and dirChildCap overflow emits a "more…" row. All three are
+// non-focusable placeholders excluded from TreeCount.
 func (a *App) walkTree(nodes []*fileNode, depth int, parentIgnored bool, rows *[]treeRow, index *int, start, end int) {
 	for _, node := range nodes {
 		if *index >= end {
@@ -2307,18 +2727,65 @@ func (a *App) walkTree(nodes []*fileNode, depth int, parentIgnored bool, rows *[
 				row.Badge = languageInfo(node.Meta.Lang).Badge
 				row.Status = a.statuses[node.Path]
 				row.StatusClass = "st-" + strings.ToLower(row.Status)
+				row.Dirty = a.isDirty(node.Path)
 			}
 
 			*rows = append(*rows, row)
 		}
 
 		if node.Dir && a.folders[node.Path] {
-			if !node.Loaded {
-				_ = a.ws.loadNode(node)
+			// Enqueue-only: never loadNode here. Unloaded/error/capped
+			// states render as synthetic rows below.
+			if !node.Loaded && !node.Loading && node.LoadErr == "" {
+				a.requestDirLoad(node.Path)
+				node.Loading = true
+			}
+			if node.Loading && !node.Loaded {
+				a.emitTreePlaceholder(rows, index, start, end, node.Path+"/…", "Loading…", depth+1, true, "", false, 0)
+			} else if node.LoadErr != "" {
+				a.emitTreePlaceholder(rows, index, start, end, node.Path+"/…retry", "Retry: "+node.LoadErr, depth+1, false, node.LoadErr, false, 0)
 			}
 			a.walkTree(node.Children, depth+1, parentIgnored || node.Ignored, rows, index, start, end)
+			if node.More > 0 {
+				a.emitTreePlaceholder(rows, index, start, end, node.Path+"/…more", "...", depth+1, false, "", true, node.More)
+			}
 		}
 	}
+}
+
+// emitTreePlaceholder appends one synthetic spinner/retry/more row inside the
+// offset window. Placeholders never join Files/ByPath and never count toward
+// TreeCount.
+func (a *App) emitTreePlaceholder(rows *[]treeRow, index *int, start, end int, path, name string, depth int, loading bool, loadErr string, more bool, moreCount int) {
+	if *index >= end {
+		return
+	}
+	pos := *index
+	*index++
+	if pos < start {
+		return
+	}
+	display := name
+	if more {
+		display = "..."
+	}
+	row := treeRow{
+		Path:      path,
+		Name:      display,
+		Dir:       false,
+		Indent:    a.zx(treePad) + depth*a.zx(treeIndent),
+		Loading:   loading,
+		LoadErr:   loadErr,
+		More:      more,
+		MoreCount: moreCount,
+	}
+	if more {
+		row.Name = "..."
+		row.Short = "..."
+	} else {
+		row.Short = clipTreeName(a.drawerWidth(), row.Indent, false, false, display)
+	}
+	*rows = append(*rows, row)
 }
 
 // filteredRows returns the visible slice of matching paths.
@@ -2342,6 +2809,7 @@ func (a *App) filteredRows() ([]treeRow, int, int, bool) {
 			Badge:       languageInfo(file.Lang).Badge,
 			Status:      a.statuses[file.Path],
 			StatusClass: "st-" + strings.ToLower(a.statuses[file.Path]),
+			Dirty:       a.isDirty(file.Path),
 		})
 	}
 
@@ -2419,6 +2887,28 @@ func countTreeOpen(nodes []*fileNode, open map[string]bool) int {
 	return total
 }
 
+// countTreeOpenWithState counts visible nodes plus synthetic spinner/retry/
+// more rows, mirroring walkTree. TreeCount (len(Files)) still excludes them;
+// only the scroll total includes them so the window stays full.
+func countTreeOpenWithState(nodes []*fileNode, open map[string]bool) int {
+	total := 0
+	for _, node := range nodes {
+		total++
+		if node.Dir && open[node.Path] {
+			if node.Loading && !node.Loaded {
+				total++
+			} else if node.LoadErr != "" {
+				total++
+			}
+			total += countTreeOpenWithState(node.Children, open)
+			if node.More > 0 {
+				total++
+			}
+		}
+	}
+	return total
+}
+
 // tabRowsFor returns one group's open tabs in strip order. Index tracks
 // the full-list position for actions on a windowed strip.
 func (a *App) tabRowsFor(group int) []tabRow {
@@ -2444,7 +2934,9 @@ func (a *App) tabRowsFor(group int) []tabRow {
 			Status:      status,
 			StatusClass: "st-" + strings.ToLower(status),
 			Active:      i == active && a.mode == "explorer",
-			Dirty:       a.dirty[path],
+			Dirty:       a.isDirty(path),
+			Preview:     a.isPreviewTab(group, path),
+			Pinned:      a.isPinned(group, path),
 		})
 	}
 
@@ -2513,6 +3005,17 @@ func (a *App) openFileAt(group int, path string, record bool) {
 		return
 	}
 
+	if a.mergeOpen && a.mergeDirty {
+		grp, pth, rec := group, path, record
+		if a.requestMergeLeave(func(ctx context.Context) error {
+			a.openFileAt(grp, pth, rec)
+
+			return nil
+		}) {
+			return
+		}
+	}
+
 	if a.ws.ByPath[path] == nil {
 		a.ws.ensureFileLoaded(path)
 	}
@@ -2547,6 +3050,11 @@ func (a *App) openFileAt(group int, path string, record bool) {
 		group = 0
 	}
 
+	oldPath := ""
+	if *active >= 0 && *active < len(*tabs) {
+		oldPath = (*tabs)[*active]
+	}
+
 	found := -1
 
 	for i, open := range *tabs {
@@ -2558,12 +3066,18 @@ func (a *App) openFileAt(group int, path string, record bool) {
 	}
 
 	if found < 0 {
+		// Tabs are unlimited: every new path appends. The strip windows
+		// full-width tabs with scroll arrows, so overflow scrolls instead
+		// of evicting.
 		*tabs = append(*tabs, path)
-		if len(*tabs) > maxTabs {
-			*tabs = append((*tabs)[:0], (*tabs)[1:]...)
-		}
-
 		found = len(*tabs) - 1
+	}
+
+	// Explicit opens pin their tab; a preview hit becomes pinned.
+	a.ensurePinnedMaps()
+	a.pinned[group][path] = true
+	if a.previewTab[group] == path {
+		a.previewTab[group] = ""
 	}
 
 	*active = found
@@ -2583,14 +3097,10 @@ func (a *App) openFileAt(group int, path string, record bool) {
 		a.pushNavHistory(path)
 	}
 	if a.split {
-		a.scrollGroup[group] = 0
-		a.splitWheelAccum[group] = 0
-		if group == 0 {
-			a.scrollY = 0
-			if a.page != nil {
-				a.page.ScrollTo(0, 0)
-			}
-		}
+		// Per-tab memory: the previously active tab keeps its offset and
+		// the opened file restores its own (or 0). The other pane is
+		// untouched.
+		a.saveRestoreGroupScroll(group, oldPath, path)
 	} else {
 		a.resetScroll()
 	}
@@ -2607,17 +3117,23 @@ func (a *App) selectTabIn(group, index int) { a.selectTabAt(group, index, true) 
 // selectTabAt is the shared tab focuser. History jumps reuse the same layout
 // without recording a new entry.
 func (a *App) selectTabAt(group, index int, record bool) {
+	group = a.normalizeGroup(group)
+
 	tabs := a.groupTabs(group)
 	if index < 0 || index >= len(tabs) {
 		return
 	}
 
+	oldPath := ""
+	if active := a.groupActive(group); active >= 0 && active < len(tabs) {
+		oldPath = tabs[active]
+	}
+
 	a.finishEdit()
 
-	if group == 1 && a.split {
+	if group == 1 {
 		a.active2 = index
 	} else {
-		group = 0
 		a.active = index
 	}
 
@@ -2628,14 +3144,7 @@ func (a *App) selectTabAt(group, index int, record bool) {
 	}
 	// Preview stays on across tabs; fillCode gates it to Markdown.
 	if a.split {
-		a.scrollGroup[group] = 0
-		a.splitWheelAccum[group] = 0
-		if group == 0 {
-			a.scrollY = 0
-			if a.page != nil {
-				a.page.ScrollTo(0, 0)
-			}
-		}
+		a.saveRestoreGroupScroll(group, oldPath, tabs[index])
 	} else {
 		a.resetScroll()
 	}
@@ -2648,17 +3157,26 @@ func (a *App) closeTab(index int) { a.closeTabIn(0, index) }
 
 // closeTabIn closes one tab in a specific group.
 func (a *App) closeTabIn(group, index int) {
+	group = a.normalizeGroup(group)
+
 	tabs := a.groupTabs(group)
 	if index < 0 || index >= len(tabs) {
 		return
 	}
 
+	closedPath := tabs[index]
+	closedWasActive := index == a.groupActive(group)
+
 	a.finishEdit()
+	// Push the closed stack on every close (with a dirty snapshot when
+	// needed) and drop the tab's preview/pin state.
+	a.pushClosed(group, index, closedPath)
+	a.clearTabState(group, closedPath)
 
 	next := append([]string(nil), tabs[:index]...)
 	next = append(next, tabs[index+1:]...)
 
-	if group == 1 && a.split {
+	if group == 1 {
 		a.tabs2 = next
 		if index < a.active2 {
 			a.active2--
@@ -2672,7 +3190,6 @@ func (a *App) closeTabIn(group, index int) {
 			a.active2 = 0
 		}
 	} else {
-		group = 0
 		a.tabs = next
 
 		if index < a.active {
@@ -2688,14 +3205,42 @@ func (a *App) closeTabIn(group, index int) {
 		}
 	}
 
-	if a.split && len(a.tabs2) == 0 && group == 1 {
-		a.split = false
-		a.focusGroup = 0
+	if a.split {
+		switch {
+		case group == 1 && len(a.tabs2) == 0:
+			// Auto-close on an emptied right pane: the left pane keeps
+			// its tabs, focus, and offsets exactly as they are.
+			a.split = false
+			a.focusGroup = 0
+			a.resetGroupScroll(1)
+		case group == 0 && len(a.tabs) == 0:
+			if len(a.tabs2) > 0 {
+				// Last tab of the left while split: collapse onto the
+				// renumbered right instead of showing an empty left.
+				a.adoptRightGroup()
+			} else {
+				a.split = false
+				a.focusGroup = 0
+				a.resetScroll()
+			}
+		default:
+			a.restoreActiveGroupScroll(group, closedPath, closedWasActive)
+		}
+	} else {
+		// Preview stays on across tabs; fillCode gates it to Markdown.
+		a.resetScroll()
+	}
+
+	// The dirty entry for a path with no remaining tab is dropped so the
+	// map never leaks. Dialog arms save or discard before closing, so a
+	// direct close only ever drops a clean entry here.
+	if !a.pathOpenInTabs(closedPath) {
+		delete(a.dirty, closedPath)
 	}
 
 	// Preview stays on across tabs; fillCode gates it to Markdown.
-	a.resetScroll()
-	a.ensureTabVisible(group)
+	a.ensureTabVisible(0)
+	a.ensureTabVisible(1)
 	a.refresh()
 }
 
@@ -2707,6 +3252,7 @@ func (a *App) useSampleHistory() {
 	a.headBranch = history.Branch
 	a.commitDetails = details
 	a.commitKeys = nil
+	a.commitErrors = map[string]string{}
 	a.commitOpen = ""
 	a.commitFile = ""
 	a.commitRows = nil
@@ -2769,10 +3315,24 @@ func treeRowIndex(nodes []*fileNode, open map[string]bool, path string, index *i
 	return false
 }
 
-// collapseAll closes every folder.
+// collapseAll closes every folder and drops in-flight directory loads so
+// late replies are discarded (cancellation via token-drop).
 func (a *App) collapseAll() {
 	for path := range a.folders {
 		delete(a.folders, path)
+	}
+	for path := range a.dirLoads {
+		delete(a.dirLoads, path)
+	}
+	if a.ws != nil {
+		var clear func([]*fileNode)
+		clear = func(nodes []*fileNode) {
+			for _, n := range nodes {
+				n.Loading = false
+				clear(n.Children)
+			}
+		}
+		clear(a.ws.Tree)
 	}
 
 	a.treeOffset = 0
@@ -2792,10 +3352,22 @@ func (a *App) setMode(_ context.Context, mode string) {
 	}
 
 	if a.mode == "merge" {
+		if a.mergeDirty {
+			m := mode
+			if a.requestMergeLeave(func(ctx context.Context) error {
+				a.setMode(ctx, m)
+
+				return nil
+			}) {
+				return
+			}
+		}
+
 		a.leaveMergeMode()
 	}
 
 	a.mode = mode
+	a.autosaveFocusSave()
 	a.inlineCard = inlineCard{}
 	if mode == "changes" && a.diffPath != "" && a.fileNav != nil {
 		a.fileNav.Select(a.diffPath)
@@ -2875,6 +3447,7 @@ func (a *App) ReloadChanges(ctx context.Context, announce bool) {
 		if history.Head != a.commits.Head {
 			a.commitDetails = map[string]*changedFile{}
 			a.commitKeys = nil
+			a.commitErrors = map[string]string{}
 		}
 
 		a.commits = history
@@ -2902,6 +3475,13 @@ func (a *App) ReloadChanges(ctx context.Context, announce bool) {
 	a.changesScroll.SetOffset(0, len(a.sidebarChangeFiles()), a.changeVisibleRows())
 	if a.diffSource == "commit" {
 		a.revealChangePath(a.commitFile)
+		// Refresh (R) retries a failed patch instead of leaving the pane on
+		// its error note: ensureCommitFile clears the stored error and asks
+		// the worker again.
+		if a.commitOpen != "" && a.commitFile != "" &&
+			a.commitDetails[commitDetailKey(a.commitOpen, a.commitFile)] == nil {
+			a.ensureCommitFile(ctx, a.commitOpen, a.commitFile)
+		}
 	}
 	if a.diffSource == "branch" {
 		a.refreshBranchChanges(ctx)
@@ -3108,6 +3688,7 @@ func (a *App) pickBranch(ctx context.Context, ref string) {
 	a.commitFile = ""
 	a.commitRows = nil
 	a.commitPreview = nil
+	a.commitErrors = map[string]string{}
 	a.historyLimit = maxCommits
 	a.historyDone = len(history.Commits) < maxCommits
 	a.historyScroll.SetOffset(0, len(history.Commits), a.historyVisibleRows())
@@ -3317,6 +3898,10 @@ func (a *App) ensureCommitFile(_ context.Context, hash, path string) {
 		return
 	}
 
+	// A previous failure for this file must not block a retry: reselecting
+	// the file or pressing R clears the error below and asks again.
+	delete(a.commitErrors, key)
+
 	if a.patchLoader == nil {
 		// This fallback exists for an App built by a test without New. The
 		// worker lives for the app and Close cancels its in-flight read.
@@ -3346,6 +3931,7 @@ func (a *App) pollPatches(ctx context.Context) bool {
 			if result.Key == a.firstChangePending {
 				a.firstChangePending = ""
 			}
+			a.storeCommitError(result.Key, result.Err.Error())
 			a.showToast("error", "Commit diff unavailable", result.Err.Error())
 			changed = true
 
@@ -3356,6 +3942,7 @@ func (a *App) pollPatches(ctx context.Context) bool {
 			continue
 		}
 
+		delete(a.commitErrors, result.Key)
 		a.commitDetails[result.Key] = result.File
 		a.commitKeys = append(a.commitKeys, result.Key)
 
@@ -3384,6 +3971,25 @@ func (a *App) pollPatches(ctx context.Context) bool {
 	}
 
 	return changed
+}
+
+// storeCommitError remembers one failed patch so the commit pane shows the
+// failure instead of spinning on "Loading" forever. The map stays bounded
+// like the patch cache; eviction drops an arbitrary oldest entry.
+func (a *App) storeCommitError(key, msg string) {
+	if a.commitErrors == nil {
+		a.commitErrors = map[string]string{}
+	}
+
+	if _, seen := a.commitErrors[key]; !seen && len(a.commitErrors) >= maxCommitPatchCache {
+		for old := range a.commitErrors {
+			delete(a.commitErrors, old)
+
+			break
+		}
+	}
+
+	a.commitErrors[key] = msg
 }
 
 // focusCommitPage scrolls the history rail to the commit with hash.
@@ -3502,7 +4108,7 @@ func (a *App) togglePreview() {
 // mode the outline belongs to the selected diff file, so open it first.
 func (a *App) outlineLine(line int) {
 	if a.mode == "changes" && a.diffPath != "" {
-		a.openFile(a.diffPath)
+		a.openFilePreview(a.diffPath)
 	}
 
 	a.scrollToSourceLine(line)

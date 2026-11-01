@@ -590,3 +590,32 @@ func TestScreenResizeScrollback(t *testing.T) {
 		t.Errorf("scrollback line = %q, want a", got)
 	}
 }
+
+func TestSnapshotViewportMatchesFullScreen(t *testing.T) {
+	s := NewScreen(40, 6)
+	s.Feed([]byte(strings.Repeat("output line\r\n", 1100)))
+	for _, alt := range []bool{false, true} {
+		if alt {
+			s.Feed([]byte("\x1b[?1049hhello"))
+		}
+		full := s.Snapshot()
+		for _, scroll := range []int{0, 1, 50, 5000} {
+			view := s.SnapshotViewport(4, scroll)
+			offset := max(0, len(full.Lines)-4-min(scroll, max(0, len(full.Lines)-4)))
+			if view.TotalLines != len(full.Lines) || view.LineOffset != offset || len(view.Lines) != 4 {
+				t.Fatalf("viewport metadata: total=%d offset=%d rows=%d", view.TotalLines, view.LineOffset, len(view.Lines))
+			}
+			for i, row := range view.Lines {
+				for j, cell := range row {
+					if cell != full.Lines[offset+i][j] {
+						t.Fatal("viewport differs from full snapshot")
+					}
+				}
+			}
+			view.Lines[0][0].Rune = '!'
+			if s.Snapshot().Lines[offset][0] != full.Lines[offset][0] {
+				t.Fatal("viewport aliases screen")
+			}
+		}
+	}
+}

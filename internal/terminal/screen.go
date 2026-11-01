@@ -36,12 +36,16 @@ type Cell struct {
 // Line is one row of cells. Every line in a Snapshot has exactly Cols cells.
 type Line []Cell
 
-// Snapshot is an immutable copy of the visible terminal state. Lines holds
-// scrollback followed by the visible rows, and CursorLine is an absolute index
-// into Lines. Trailing blank rows are kept, so CursorLine always addresses a
-// row in Lines. Version changes whenever the visible state changes.
+// Snapshot is an immutable copy of terminal state. A full snapshot includes
+// scrollback followed by screen rows. A viewport snapshot includes a subset
+// starting at LineOffset. CursorLine is absolute in either case; subtract
+// LineOffset to index Lines. Version changes whenever the visible state changes.
 type Snapshot struct {
-	Lines         []Line
+	Lines []Line
+	// TotalLines and LineOffset describe a partial viewport snapshot. A zero
+	// TotalLines means Lines contains the complete screen and scrollback.
+	TotalLines    int
+	LineOffset    int
 	CursorLine    int
 	CursorCol     int
 	CursorVisible bool
@@ -257,25 +261,47 @@ func (s *Screen) Version() uint64 {
 func (s *Screen) Snapshot() Snapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.snapshotLocked(0, s.totalLines())
+}
 
-	var lines []Line
-	cursorLine := s.curY
+// SnapshotViewport copies only the requested rows, keeping the cost of live
+// output independent of scrollback length. Scroll is measured from the tail.
+func (s *Screen) SnapshotViewport(rows, scroll int) Snapshot {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows = max(1, rows)
+	total := s.totalLines()
+	scroll = max(0, min(scroll, max(0, total-rows)))
+	start := max(0, total-rows-scroll)
+	return s.snapshotLocked(start, min(total, start+rows))
+}
+
+func (s *Screen) totalLines() int {
 	if s.alt {
-		lines = cloneGrid(s.buffer)
-	} else {
-		lines = make([]Line, 0, len(s.scrollback)+s.rows)
-		for _, row := range s.scrollback {
-			lines = append(lines, cloneLine(row))
+		return len(s.buffer)
+	}
+	return len(s.scrollback) + len(s.buffer)
+}
+
+func (s *Screen) snapshotLocked(start, end int) Snapshot {
+	history := len(s.scrollback)
+	if s.alt {
+		history = 0
+	}
+	lines := make([]Line, 0, end-start)
+	for i := start; i < end; i++ {
+		if i < history {
+			lines = append(lines, cloneLine(s.scrollback[i]))
+			continue
 		}
-		cursorLine = len(lines) + s.curY
-		for _, row := range s.buffer {
-			lines = append(lines, cloneLine(row))
-		}
+		lines = append(lines, cloneLine(s.buffer[i-history]))
 	}
 
 	return Snapshot{
 		Lines:          lines,
-		CursorLine:     cursorLine,
+		TotalLines:     s.totalLines(),
+		LineOffset:     start,
+		CursorLine:     history + s.curY,
 		CursorCol:      s.curX,
 		CursorVisible:  s.cursorVisible,
 		AppCursor:      s.appCursor,

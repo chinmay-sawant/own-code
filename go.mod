@@ -3,12 +3,12 @@ module github.com/chinmay-sawant/own-code
 go 1.26.10
 
 // Standalone copy of ownframe/examples/code-view. This pins ownframe at the
-// master commit dbcfeccf49d1 (pseudo-version v0.0.3-0.20261030185212-dbcfeccf49d1).
+// feat/fps-cap-presents commit 022d6d9684c4 (pseudo-version v0.0.3-0.20261101195413-022d6d9684c4).
 // The local replace below points at the sibling checkout because the
 // upstream module zip at that commit is too large to download; keep an
 // ownframe checkout next to this repo.
 require (
-	github.com/chinmay-sawant/ownframe v0.0.3-0.20261030185212-dbcfeccf49d1
+	github.com/chinmay-sawant/ownframe v0.0.3-0.20261101195413-022d6d9684c4
 	github.com/creack/pty v1.1.24
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/hajimehoshi/ebiten/v2 v2.10.4
@@ -24,7 +24,7 @@ require (
 	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/benoitkugler/textlayout v0.3.2 // indirect
 	github.com/benoitkugler/textprocessing v0.0.6 // indirect
-	github.com/chinmay-sawant/blinkless v0.0.4-0.20261026120705-9d2ba1c7b728 // indirect
+	github.com/chinmay-sawant/blinkless v0.1.1-0.20261031105747-f50f76a342ef // indirect
 	github.com/ebitengine/gomobile v0.0.0-20260820040257-d11f821a26a6 // indirect
 	github.com/ebitengine/hideconsole v1.0.0 // indirect
 	github.com/ebitengine/oto/v3 v3.5.0 // indirect

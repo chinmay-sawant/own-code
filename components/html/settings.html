@@ -4,17 +4,99 @@
   <div class="settings-panel" id="settings-panel" role="dialog" aria-modal="true" aria-label="Settings">
     <div class="settings-header"><b>Settings</b><button class="palette-close" id="settings-close" data-action="settings-close" type="button" aria-label="Close settings">×</button></div>
     <div class="settings-body">
-      <div class="settings-nav"><div class="settings-nav-active">Appearance</div></div>
-      <div class="settings-content">
+      <div class="settings-nav" role="tablist" aria-label="Settings sections">
+        <button class="settings-nav-item{{if eq .SettingsTab "appearance"}} settings-nav-active{{end}}" id="settings-tab-appearance" data-action="settings-tab:appearance" type="button" role="tab" aria-selected="{{if eq .SettingsTab "appearance"}}true{{else}}false{{end}}">Appearance</button>
+        <button class="settings-nav-item{{if eq .SettingsTab "keyboard"}} settings-nav-active{{end}}" id="settings-tab-keyboard" data-action="settings-tab:keyboard" type="button" role="tab" aria-selected="{{if eq .SettingsTab "keyboard"}}true{{else}}false{{end}}">Keyboard</button>
+        <button class="settings-nav-item{{if eq .SettingsTab "files"}} settings-nav-active{{end}}" id="settings-tab-files" data-action="settings-tab:files" type="button" role="tab" aria-selected="{{if eq .SettingsTab "files"}}true{{else}}false{{end}}">Files &amp; Search</button>
+      </div>
+      <div class="settings-content" id="settings-viewport">
+        <div class="settings-scroll" id="settings-scroll" style="top:{{.SettingsScrollTop}}px">
+        {{if eq .SettingsTab "keyboard"}}
+        <div class="settings-title">Keyboard shortcuts</div>
+        <div class="settings-caption">Rebind the subset below. F12 and Ctrl+Shift+I stay fixed for the developer dock. Terminal-owned chords and single letters need a confirm.</div>
+        {{if .KeymapPending}}<div class="settings-conflict" id="keymap-conflict" role="alert"><span>{{.KeymapPending}}</span><span class="settings-conflict-btns"><button class="settings-btn" id="keymap-swap" data-action="keymap-swap" type="button">Swap</button><button class="settings-btn" id="keymap-replace" data-action="keymap-replace" type="button">Replace</button><button class="settings-btn" id="keymap-cancel" data-action="keymap-cancel" type="button">Cancel</button></span></div>{{end}}
+        {{range .KeymapRows}}
+        <div class="settings-key{{if .Fixed}} fixed{{end}}{{if .Capturing}} capturing{{end}}{{if .Conflict}} conflict{{end}}" id="keymap-{{.Action}}">
+          <span class="settings-key-text"><b>{{.Label}}</b><span>{{.Chord}}{{if .Custom}} (default {{.Default}}){{end}}{{if .Fixed}} · fixed{{end}}</span></span>
+          {{if .Fixed}}<span class="settings-key-fixed">Fixed</span>
+          {{else if .Capturing}}<span class="settings-capturing">Press keys… <button class="settings-btn" id="keymap-cancel-{{.Action}}" data-action="keymap-cancel" type="button">Cancel</button></span>
+          {{else}}<span class="settings-key-btns"><button class="settings-btn" id="keymap-rebind-{{.Action}}" data-action="keymap-rebind:{{.Action}}" type="button">Rebind</button>{{if .Custom}}<button class="settings-btn" id="keymap-reset-{{.Action}}" data-action="keymap-reset:{{.Action}}" type="button">Reset</button>{{end}}</span>{{end}}
+        </div>
+        {{end}}
+        <div class="settings-foot"><button class="settings-btn" id="keymap-reset-all" data-action="keymap-reset-all" type="button">Reset all shortcuts</button></div>
+        {{else if eq .SettingsTab "files"}}
+        <div class="settings-title">Files &amp; Search</div>
+        <div class="settings-caption">One glob per line. <code>*</code> <code>?</code> <code>**</code> and trailing <code>/</code> for folders. No <code>!</code> negation in v1. Invalid lines stay red and never save.</div>
+        <div class="settings-sub">Scan excludes <span class="settings-count">{{if .ScanMatch}}{{.ScanMatch}} hidden{{end}}</span></div>
+        <textarea class="settings-area{{if .ScanBad}} is-invalid{{end}}" id="excludes-scan" data-bind="ScanText" rows="4" spellcheck="false" aria-label="Scan exclude globs, one per line">{{.ScanText}}</textarea>
+        {{if .ScanBad}}<div class="settings-invalid" id="excludes-scan-bad" role="alert">Invalid scan globs on line {{range $i, $l := .ScanBad}}{{if $i}}, {{end}}{{$l}}{{end}} — not saved.</div>{{end}}
+        <div class="settings-sub">Search excludes <span class="settings-count">{{if .SearchSkip}}{{.SearchSkip}} skipped{{end}}</span></div>
+        <textarea class="settings-area{{if .SearchBad}} is-invalid{{end}}" id="excludes-search" data-bind="SearchText" rows="3" spellcheck="false" aria-label="Search exclude globs, one per line">{{.SearchText}}</textarea>
+        {{if .SearchBad}}<div class="settings-invalid" id="excludes-search-bad" role="alert">Invalid search globs on line {{range $i, $l := .SearchBad}}{{if $i}}, {{end}}{{$l}}{{end}} — not saved.</div>{{end}}
+        <div class="settings-toggles">
+          <button class="settings-toggle" id="settings-toggle-gitignore" data-action="settings-toggle-gitignore" type="button" aria-pressed="{{if .UseGitignore}}true{{else}}false{{end}}"><span class="settings-check">{{if .UseGitignore}}✓{{end}}</span>Use .gitignore (dimmed rows stay expandable)</button>
+          <button class="settings-toggle" id="settings-toggle-searchignored" data-action="settings-toggle-searchignored" type="button" aria-pressed="{{if .SearchIgnored}}true{{else}}false{{end}}"><span class="settings-check">{{if .SearchIgnored}}✓{{end}}</span>Search ignored files</button>
+        </div>
+        <div class="settings-caption">Custom scan excludes hide entirely (unlike dimmed gitignored rows). Search skips scan-excluded, search-excluded, and — unless toggled — ignored files. Search caps: 200 matches, 8 per file.</div>
+        <div class="settings-foot"><button class="settings-btn primary" id="settings-rescan" data-action="settings-rescan" type="button">Apply &amp; Rescan</button><span class="settings-foot-note">Scan budget honors -files.</span></div>
+        {{else}}
         <div class="settings-title">Color theme</div>
         <div class="settings-caption">Choose the colors for the editor and interface.</div>
         {{range .Themes}}
         <button class="settings-theme{{if .Active}} selected{{end}}" id="theme-{{.ID}}" data-action="theme:{{.ID}}" type="button" aria-pressed="{{if .Active}}true{{else}}false{{end}}">
+          <span class="settings-swatch swatch-{{.ID}}" aria-hidden="true"></span>
           <span class="settings-theme-text"><b>{{.Name}}</b><span>{{.Description}}</span></span><span class="settings-check">{{if .Active}}✓{{end}}</span>
         </button>
         {{end}}
+        <div class="settings-sub">Font size <span class="settings-count">{{.FontLabel}}</span></div>
+        <div class="settings-stepper" role="group" aria-label="Base font size">
+          <button class="settings-btn" id="font-dec" data-action="font-dec" type="button" aria-label="Decrease font size">−</button>
+          <span class="settings-step-value">{{.FontLabel}}</span>
+          <button class="settings-btn" id="font-inc" data-action="font-inc" type="button" aria-label="Increase font size">+</button>
+          <button class="settings-btn" id="font-reset" data-action="font-reset" type="button">Reset</button>
+        </div>
+        <div class="settings-sub">Interface zoom <span class="settings-count">{{.ZoomLabel}}</span></div>
+        <div class="settings-stepper" role="group" aria-label="Interface zoom">
+          <button class="settings-btn" id="zoom-dec" data-action="zoom-dec" type="button" aria-label="Zoom out">−</button>
+          <span class="settings-step-value">{{.ZoomLabel}}</span>
+          <button class="settings-btn" id="zoom-inc" data-action="zoom-inc" type="button" aria-label="Zoom in">+</button>
+          <button class="settings-btn" id="zoom-reset-btn" data-action="zoom-reset" type="button">Reset</button>
+        </div>
+        <div class="settings-sub">Per-view overrides</div>
+        <div class="settings-caption">Editor and terminal can differ from the interface zoom. Cleared views follow the global zoom.</div>
+        <div class="settings-perview" id="perview-editor"><span class="settings-perview-label">Editor</span><span class="settings-stepper"><button class="settings-btn" id="editor-zoom-dec" data-action="editor-zoom-dec" type="button" aria-label="Editor zoom out">−</button><span class="settings-step-value">{{.EditorZoomLabel}}</span><button class="settings-btn" id="editor-zoom-inc" data-action="editor-zoom-inc" type="button" aria-label="Editor zoom in">+</button>{{if .EditorZoom}}<button class="settings-btn" id="editor-zoom-clear" data-action="editor-zoom-clear" type="button">Clear</button>{{end}}</span></div>
+        <div class="settings-perview" id="perview-terminal"><span class="settings-perview-label">Terminal</span><span class="settings-stepper"><button class="settings-btn" id="terminal-zoom-dec" data-action="terminal-zoom-dec" type="button" aria-label="Terminal zoom out">−</button><span class="settings-step-value">{{.TerminalZoomLabel}}</span><button class="settings-btn" id="terminal-zoom-inc" data-action="terminal-zoom-inc" type="button" aria-label="Terminal zoom in">+</button>{{if .TerminalZoom}}<button class="settings-btn" id="terminal-zoom-clear" data-action="terminal-zoom-clear" type="button">Clear</button>{{end}}</span></div>
+        <div class="settings-sub">Auto-save</div>
+        <div class="settings-caption">After delay saves shortly after you stop typing. On focus change saves when you switch tabs or panes. Large files skip the delay but still save on navigation. Never applies to merge results or the sample workspace.</div>
+        <div class="settings-stepper" role="group" aria-label="Auto-save mode">
+          <button class="settings-btn{{if eq .AutoSave "off"}} primary{{end}}" id="autosave-off" data-action="autosave:off" type="button" aria-pressed="{{if eq .AutoSave "off"}}true{{else}}false{{end}}">Off</button>
+          <button class="settings-btn{{if eq .AutoSave "afterDelay"}} primary{{end}}" id="autosave-afterDelay" data-action="autosave:afterDelay" type="button" aria-pressed="{{if eq .AutoSave "afterDelay"}}true{{else}}false{{end}}">After delay</button>
+          <button class="settings-btn{{if eq .AutoSave "onFocusChange"}} primary{{end}}" id="autosave-onFocusChange" data-action="autosave:onFocusChange" type="button" aria-pressed="{{if eq .AutoSave "onFocusChange"}}true{{else}}false{{end}}">On focus change</button>
+        </div>
+        {{if eq .AutoSave "afterDelay"}}
+        <div class="settings-stepper" role="group" aria-label="Auto-save delay">
+          <button class="settings-btn" id="autosave-delay-dec" data-action="autosave-delay-dec" type="button" aria-label="Shorter auto-save delay">−</button>
+          <span class="settings-step-value">{{.AutoSaveDelay}} ms</span>
+          <button class="settings-btn" id="autosave-delay-inc" data-action="autosave-delay-inc" type="button" aria-label="Longer auto-save delay">+</button>
+        </div>
+        {{end}}
+        <div class="settings-sub">Frame rate (desktop) <span class="settings-count">{{.FPSLabel}}</span></div>
+        <div class="settings-caption">Caps heavy presents without VSync; the app ticks at cap+20 (60 shows, 80 runs). Idle windows still park. Applies on restart.</div>
+        <div class="settings-stepper" role="group" aria-label="Desktop frame rate">
+          {{range .FPSOptions}}
+          <button class="settings-btn{{if .Active}} primary{{end}}" id="fps-{{.Value}}" data-action="fps:{{.Value}}" type="button" aria-pressed="{{if .Active}}true{{else}}false{{end}}">{{.Label}}</button>
+          {{end}}
+        </div>
+        {{end}}
+        {{if .SettingsNote}}<div class="settings-note" id="settings-note" role="status">{{.SettingsNote}}</div>{{end}}
+        </div>
       </div>
     </div>
   </div>
 </div>
+{{if and .SettingsOpen .SettingsScroll}}
+<button class="settings-rail" id="settings-rail" type="button" title="Scroll settings" aria-label="Scroll settings" tabindex="-1" style="left:{{.SettingsRailLeft}}px;top:{{.SettingsRailTop}}px;height:{{.SettingsTrackH}}px">
+  <span class="settings-thumb" id="settings-thumb" style="top:{{.SettingsThumbTop}}px;height:{{.SettingsThumbH}}px"><svg width="6" height="{{.SettingsThumbH}}" aria-hidden="true"><rect width="6" height="{{.SettingsThumbH}}" fill="currentColor"/></svg></span>
+</button>
+{{end}}
 {{end}}

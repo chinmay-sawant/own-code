@@ -309,24 +309,69 @@ func TestSplitScrollTabSwitchPreservesOtherPane(t *testing.T) {
 	app.toggleSplit()
 	app.openFileIn(0, "backend/server.go")
 	app.openFileIn(1, "backend/store.go")
-	app.openFileIn(1, "README.md") // second tab in group 1
+	app.openFileIn(1, "backend/probe.go") // second tab in group 1
+
+	// Opens land on the first change, so the probe tab starts moved: work
+	// relative to the live offsets, not zero.
+	g1base := app.scrollGroup[1]
 
 	app.scrollGroupBy(0, 120)
 	app.scrollGroupBy(1, 80)
 
-	if app.scrollGroup[0] != 120 || app.scrollGroup[1] != 80 {
+	if app.scrollGroup[0] != 120 || app.scrollGroup[1] != g1base+80 {
 		t.Fatalf("setup offsets: (%d, %d)", app.scrollGroup[0], app.scrollGroup[1])
 	}
 
-	// Switch tab in group 1 to tab 0 ("backend/store.go")
+	// Switch tab in group 1 to tab 0 ("README.md", mirrored at toggle):
+	// the newly shown tab restores its own remembered offset (0, first
+	// visit), not a reset.
 	app.selectTabIn(1, 0)
 
-	// Group 1 scroll should reset to 0 for the newly focused tab
 	if app.scrollGroup[1] != 0 {
-		t.Fatalf("group 1 scroll after tab switch = %d, want 0", app.scrollGroup[1])
+		t.Fatalf("group 1 scroll after tab switch = %d, want restored 0", app.scrollGroup[1])
 	}
 	// Group 0 scroll should be preserved!
 	if app.scrollGroup[0] != 120 {
 		t.Fatalf("group 0 scroll unexpectedly modified: got %d, want 120", app.scrollGroup[0])
+	}
+
+	// Switch back to backend/probe.go: its offset restores instead of zeroing.
+	app.selectTabIn(1, 2)
+
+	if app.scrollGroup[1] != g1base+80 {
+		t.Fatalf("group 1 scroll after switching back = %d, want restored %d", app.scrollGroup[1], g1base+80)
+	}
+	if app.scrollGroup[0] != 120 {
+		t.Fatalf("group 0 scroll unexpectedly modified: got %d, want 120", app.scrollGroup[0])
+	}
+}
+
+func TestSplitScrollPerTabRestore(t *testing.T) {
+	app := newTestApp(t)
+
+	app.toggleSplit()
+	app.openFileIn(0, "backend/server.go")
+	app.scrollGroupBy(0, 100) // server.go is live at 100
+	app.openFileIn(0, "backend/store.go")
+	app.scrollGroupBy(0, 60) // store.go is live at 60
+
+	// Switching away saves store.go at 60; README.md restores its own 0.
+	app.selectTabIn(0, 0)
+	if app.scrollGroup[0] != 0 {
+		t.Fatalf("first-visit tab offset = %d, want 0", app.scrollGroup[0])
+	}
+
+	// server.go restores the 100 it held when it was last active.
+	app.selectTabIn(0, 1)
+	if app.scrollGroup[0] != 100 {
+		t.Fatalf("restored tab offset = %d, want 100", app.scrollGroup[0])
+	}
+
+	// store.go restores its 60 the same way. (A file open ends with the
+	// first-change jump, so reopen-restore only survives for changeless
+	// files; tab switches restore unconditionally.)
+	app.selectTabIn(0, 2)
+	if app.scrollGroup[0] != 60 {
+		t.Fatalf("restored tab offset = %d, want 60", app.scrollGroup[0])
 	}
 }

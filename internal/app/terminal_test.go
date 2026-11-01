@@ -389,3 +389,42 @@ func TestTerminalBuildIncludesPanel(t *testing.T) {
 		}
 	}
 }
+
+func TestTerminalInterruptRestoresPrompt(t *testing.T) {
+	app := newTerminalTestApp(t)
+	defer app.Close()
+
+	ctx := context.Background()
+	toggleTerminalForTest(t, app, ctx)
+	waitTerminalContains(t, app, "$")
+
+	sendTerminalCommand(t, app, ctx, "sleep 30")
+	waitTerminalContains(t, app, "sleep 30")
+
+	app.ctrl = true
+	if err := app.onKeyDown(ctx, "c"); err != nil {
+		t.Fatalf("onKeyDown: %v", err)
+	}
+	app.ctrl = false
+
+	deadline := time.Now().Add(terminalTestTimeout)
+	for {
+		app.pollTerminal(ctx)
+		text := terminalRowsText(app.View().Terminal.Rows)
+		lines := strings.Split(text, "\n")
+		last := ""
+		for i := len(lines) - 1; i >= 0; i-- {
+			if strings.TrimSpace(lines[i]) != "" {
+				last = lines[i]
+				break
+			}
+		}
+		if strings.Contains(last, "$") && !strings.Contains(last, "sleep") {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("prompt never returned after Ctrl+C:\n%s", text)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}

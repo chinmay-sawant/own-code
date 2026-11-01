@@ -5,7 +5,7 @@
   <span class="sb-fill"></span>
   {{if .HoverPath}}<span class="sb-item sb-path mono" id="sb-hover-path">{{.HoverPath}}</span>{{end}}
   {{if .WatchNote}}<span class="sb-item sb-watch" id="sb-watch">{{.WatchNote}}</span>{{end}}
-  {{if .Dirty}}<span class="sb-item sb-dirty" id="sb-dirty">{{.Dirty}} unsaved</span>{{end}}
+  {{if .Dirty}}<span class="sb-item sb-dirty" id="sb-dirty" title="{{.Dirty}} unsaved files">{{.Dirty}} unsaved</span>{{end}}
   {{if .ScanBudget}}<span class="sb-item sb-scan" id="sb-scan" title="{{.ScanBudget}}">{{.ScanBudget}}</span>{{end}}
   {{if eq .Mode "changes"}}
   <span class="sb-item sb-extra">{{.Diff.Add}} additions</span>
@@ -24,7 +24,7 @@
   <button class="sb-item sb-dev{{if .DevOn}} on{{end}}" id="sb-devtools" data-action="devtools" type="button" title="Toggle developer tools" aria-pressed="{{if .DevOn}}true{{else}}false{{end}}"{{if .Modal}} tabindex="-1"{{end}}>
     <span class="sb-dot"></span>DevTools {{if .DevOn}}on{{else}}off{{end}}
   </button>
-  <button class="sb-item sb-zoom" id="sb-zoom" data-action="zoom-reset" type="button" title="Reset zoom to 100 percent" aria-label="Reset zoom, currently {{.ZoomLabel}}"{{if .Modal}} tabindex="-1"{{end}}>{{.ZoomLabel}}</button>
+  <button class="sb-item sb-zoom" id="sb-zoom" data-action="settings-zoom" type="button" title="Zoom and font settings" aria-label="Zoom and font settings, currently {{.ZoomLabel}}"{{if .Modal}} tabindex="-1"{{end}}>{{.ZoomLabel}}</button>
 </footer>
 
 {{if .Toast.Show}}<div class="toast-layer" aria-live="polite" role="status">

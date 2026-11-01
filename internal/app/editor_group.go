@@ -12,8 +12,8 @@ type editorGroup struct {
 }
 
 // Open shows path and focuses it, appending when it is not open yet. A path
-// already in the group is only focused. When the group is full the oldest tab
-// is dropped and returned as evicted. A max below 1 means maxTabs.
+// already in the group is only focused. Tabs are unlimited: the max argument
+// is accepted for compatibility but never evicts.
 func (g *editorGroup) Open(path string, max int) (int, string) {
 	if path == "" {
 		return -1, ""
@@ -26,23 +26,11 @@ func (g *editorGroup) Open(path string, max int) (int, string) {
 		return index, ""
 	}
 
-	limit := max
-	if limit < 1 {
-		limit = maxTabs
-	}
-
 	g.Tabs = append(g.Tabs, path)
-	evicted := ""
-
-	for len(g.Tabs) > limit {
-		evicted = g.Tabs[0]
-		g.Tabs = append(g.Tabs[:0], g.Tabs[1:]...)
-	}
-
 	g.Active = len(g.Tabs) - 1
 	g.Path = path
 
-	return g.Active, evicted
+	return g.Active, ""
 }
 
 // Select focuses one tab. An out-of-range index leaves the group unchanged.
@@ -133,11 +121,11 @@ func (g *editorGroup) Paths() []string {
 }
 
 // Reset replaces the group with paths, trimming each entry, dropping blanks,
-// and keeping the first of each duplicate. The list is capped at maxTabs and
-// active is clamped to a real tab, so a restored session cannot leave Active
-// past the end or Path stale.
+// and keeping the first of each duplicate. Tabs are unlimited; active is
+// clamped to a real tab, so a restored session cannot leave Active past the
+// end or Path stale.
 func (g *editorGroup) Reset(paths []string, active int) {
-	tabs := make([]string, 0, maxTabs)
+	tabs := make([]string, 0, len(paths))
 
 	seen := make(map[string]bool, len(paths))
 
@@ -150,10 +138,6 @@ func (g *editorGroup) Reset(paths []string, active int) {
 		seen[path] = true
 
 		tabs = append(tabs, path)
-
-		if len(tabs) == maxTabs {
-			break
-		}
 	}
 
 	g.Tabs = tabs

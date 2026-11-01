@@ -84,7 +84,7 @@ func (a *App) fileNavChangeRows(path string) []int {
 		if (a.diffSource == "commit" && a.commitFile != path) || (a.diffSource == "branch" && a.branchPath != path) || (a.diffSource == "working" && a.diffPath != path) {
 			return nil
 		}
-		return diffChangeStarts(a.diffDisplayRows())
+		return a.cachedChangeStarts(a.diffDisplayRows())
 	}
 	doc := a.activeDoc()
 	if doc == nil || doc.Path != path {
@@ -234,7 +234,7 @@ func (a *App) openChangedPath(path string) {
 		}
 		a.selectDiff(path)
 	} else {
-		a.openFile(path)
+		a.openFilePreview(path)
 	}
 
 	if a.fileNav != nil {

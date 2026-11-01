@@ -23,10 +23,18 @@ func (a *App) onPress(ctx context.Context, box ownframe.Box, x, y float64) (bool
 
 	if a.confirmOpen {
 		switch box.ID {
-		case "confirm-ok", "confirm-cancel", "confirm-backdrop":
+		case "confirm-ok", "confirm-cancel", "confirm-save", "confirm-dont-save", "confirm-backdrop":
 			// Dialog presses must reach Click: a consumed press on the
 			// same id makes Click redraw only, which would freeze the
 			// dialog shut.
+		default:
+			return true, nil
+		}
+	}
+
+	if a.commitDialogOpen && !a.confirmOpen {
+		switch box.ID {
+		case "commit-message", "commit-confirm", "commit-cancel", "commit-backdrop":
 		default:
 			return true, nil
 		}
@@ -70,6 +78,7 @@ func (a *App) onPress(ctx context.Context, box ownframe.Box, x, y float64) (bool
 	sel := edit.SelectionFromPoints(text, line, col, line, col)
 	a.editAnchor = sel.Anchor
 	a.editCaret = sel.Caret
+	a.clearBracket()
 	a.dragSelect = true
 	a.refresh()
 
@@ -112,6 +121,10 @@ func (a *App) editPointAt(x, y float64) (int, int, bool) {
 	if !ok {
 		return 0, 0, false
 	}
+
+	// The pinned headers shift the painted rows down: map the point past
+	// them before resolving the visual row.
+	y -= float64(a.stickyTopPx(0))
 
 	cols := a.codeColsForGroup(0)
 	visual := visualRowAt(int(y), int(box.Y), a.scrollY, a.zx(rowH))

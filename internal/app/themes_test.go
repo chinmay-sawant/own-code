@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"image/png"
+	"strings"
 	"testing"
 
 	"github.com/chinmay-sawant/ownframe"
@@ -98,3 +99,14 @@ func TestThemeSelectionPaint(t *testing.T) {
 }
 
 func themePNG(a *App) []byte { return a.page.Probe().PNG() }
+
+func TestTermPaletteCoversCatalog(t *testing.T) {
+	for _, theme := range themeCatalog() {
+		css := themeCSS(theme.ID)
+		for _, want := range []string{"--term-bg", "--term0", "--term7", "--term8", "--term15"} {
+			if !strings.Contains(css, want) {
+				t.Fatalf("theme %s css misses %s", theme.ID, want)
+			}
+		}
+	}
+}

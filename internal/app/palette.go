@@ -19,9 +19,18 @@ const (
 type paletteView struct {
 	Open bool
 	Rows []paletteRow
+	// Mode is the overlay mode (files, symbols, recent, goto). Note scopes
+	// the results for modes that filter beyond filenames. Busy marks an
+	// in-flight disk fallback.
+	Mode string
+	Busy bool
+	Note string
 }
 
-// paletteRow is one file suggestion.
+// paletteRow is one file suggestion. Cmd names a `>` command-mode row
+// (one of the paletteCmd* ids); file rows leave it empty. Symbol rows set
+// Symbol and carry the definition Kind, the 0-based Line, and the 1-based
+// No the symbol-open:path:line action round-trips through.
 type paletteRow struct {
 	Path   string
 	Name   string
@@ -29,12 +38,31 @@ type paletteRow struct {
 	Lang   string
 	Badge  string
 	Active bool
+	Cmd    string
+	Symbol bool
+	Kind   string
+	Line   int
+	No     int
 }
 
 // paletteRows returns the open tabs followed by workspace files for an empty
 // query, or path matches for a query. An absolute path resolves to that file,
-// even when it lives outside the open folder.
+// even when it lives outside the open folder. A query starting with `>`
+// returns command rows instead of files.
 func (a *App) paletteRows() []paletteRow {
+	// Symbol and goto modes own the overlay: symbol rows filter the active
+	// file's outline, goto has no rows (Enter parses the query).
+	switch a.paletteMode {
+	case paletteModeSymbols:
+		return a.symbolPaletteRows()
+	case paletteModeGoto:
+		return nil
+	}
+
+	if a.isPaletteCommandMode() {
+		return a.paletteCommandRows()
+	}
+
 	if row, ok := a.absolutePaletteRow(a.paletteQuery); ok {
 		return []paletteRow{row}
 	}
@@ -42,6 +70,8 @@ func (a *App) paletteRows() []paletteRow {
 	query := strings.ToLower(strings.TrimSpace(a.paletteQuery))
 
 	if query == "" {
+		a.paletteBusy = false
+		a.paletteNote = ""
 		rows := make([]paletteRow, 0, paletteDefaultRows)
 		seen := map[string]bool{}
 
@@ -176,10 +206,13 @@ func (a *App) paletteRows() []paletteRow {
 	}
 
 	if len(rows) < paletteMaxRows && a.ws != nil && (diskFileSearcher != nil || (!a.ws.Sample && a.ws.Root != "")) {
+		a.paletteBusy = true
+		a.paletteNote = "Searching disk…"
 		ctx, cancel := context.WithTimeout(context.Background(), paletteDiskSearchTimeout)
 		defer cancel()
 
 		diskPaths, err := diskSearchFiles(ctx, a.ws.Root)
+		a.paletteBusy = false
 		if err == nil && len(diskPaths) > 0 {
 			var diskPrefix []paletteRow
 			var diskContains []paletteRow
@@ -217,7 +250,18 @@ func (a *App) paletteRows() []paletteRow {
 				}
 				rows = append(rows, row)
 			}
+			if a.ws != nil && a.ws.Lazy {
+				a.paletteNote = "Disk results include unexpanded folders."
+			} else {
+				a.paletteNote = ""
+			}
+		} else {
+			a.paletteNote = ""
 		}
+	} else if a.ws != nil && a.ws.Lazy && query != "" {
+		a.paletteNote = "Covered seen files only; expand folders for full-repo."
+	} else {
+		a.paletteNote = ""
 	}
 
 	return rows
@@ -236,12 +280,14 @@ func paletteRowOf(file *fileMeta) paletteRow {
 
 // paletteView marks the selected row.
 func (a *App) paletteView() paletteView {
-	out := paletteView{Open: a.paletteOpen}
+	out := paletteView{Open: a.paletteOpen, Mode: a.paletteMode, Busy: a.paletteBusy, Note: a.paletteNote}
 	if !a.paletteOpen {
 		return out
 	}
 
 	rows := a.paletteRows()
+	out.Busy = a.paletteBusy
+	out.Note = a.paletteNote
 
 	switch {
 	case len(rows) == 0:
@@ -264,6 +310,7 @@ func (a *App) paletteView() paletteView {
 // openPalette shows the overlay and focuses its input.
 func (a *App) openPalette(ctx context.Context) error {
 	a.paletteOpen = true
+	a.paletteMode = paletteModeFiles
 	a.paletteQuery = ""
 	a.paletteIndex = 0
 	a.refresh()
@@ -272,13 +319,16 @@ func (a *App) openPalette(ctx context.Context) error {
 		return err
 	}
 
-	return a.page.Form().Focus(ctx, "palette")
+	return a.focusAfterLayout(ctx, "palette")
 }
 
 // closePalette hides the overlay.
 func (a *App) closePalette(ctx context.Context) error {
 	a.paletteOpen = false
+	a.paletteMode = paletteModeFiles
 	a.paletteQuery = ""
+	a.symbolQuery = ""
+	a.symbolScope = ""
 	a.paletteIndex = 0
 	a.refresh()
 

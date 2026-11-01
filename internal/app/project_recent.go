@@ -40,7 +40,18 @@ func loadRecentProjects() []string {
 		return nil
 	}
 
-	return cleanRecentProjects(roots)
+	// Test temp dirs and deleted checkouts must not linger: keep only the
+	// sample fixture and roots still on disk so a stale file can never push
+	// live projects out of the capped list or reopen a missing folder.
+	cleaned := cleanRecentProjects(roots)
+	out := cleaned[:0]
+	for _, root := range cleaned {
+		if root == "sample" || isDir(root) {
+			out = append(out, root)
+		}
+	}
+
+	return out
 }
 
 func cleanRecentProjects(roots []string) []string {
@@ -131,6 +142,29 @@ func rememberRecentProject(roots []string, root string) []string {
 	}
 
 	return out
+}
+
+// ResolveStartupRoot picks the project to open at launch. An explicit -root
+// flag always wins. Otherwise the most recent project still on disk reopens,
+// so a relaunch lands where the last session left off instead of forcing the
+// user to browse back to it every time. The sample fixture reopens as "" and
+// a missing or empty history falls back to the flag default.
+func ResolveStartupRoot(explicit bool, root string) string {
+	if explicit {
+		return root
+	}
+
+	for _, recent := range loadRecentProjects() {
+		if recent == "sample" {
+			return ""
+		}
+
+		if isDir(recent) {
+			return recent
+		}
+	}
+
+	return root
 }
 
 func saveRecentProjects(roots []string) {

@@ -17,24 +17,40 @@ import (
 func main() {
 	webMode := flag.Bool("web", false, "serve the picture in a browser on -addr")
 	addr := flag.String("addr", "127.0.0.1:8145", "listen address for -web")
-	root := flag.String("root", ".", "directory to browse; defaults to the current directory")
-	files := flag.Int("files", app.MaxWorkspaceFiles, "maximum files to scan; raise it for a large repository")
+	root := flag.String("root", ".", "directory to browse; when omitted the last opened project reopens")
+	files := flag.Int("files", app.MaxWorkspaceFiles, "explicit N runs a full scan up to N files; default is lazy (ReadDir root only, folders load on expand)")
 	dev := flag.Bool("dev", false, "open the developer tools dock at startup")
 	perf := flag.Bool("perf", true, "enable pipeline sampling for the devtools Frame tab")
 	windowControl := flag.Bool("window-control", true, "draw custom minimize, maximize, and close controls in the titlebar")
+	fps := flag.Int("fps", 0, "desktop present cap: 60/120/144/240, -1/0 uncapped (default); Updates run at cap+20, idle still parks")
 	wsl.AddWSLFlags(flag.CommandLine)
 	flag.Parse()
 	if wsl.MaybeReexecInWSL() {
 		return
 	}
 
-	a, err := app.NewWithLimit(*root, *files)
+	rootExplicit := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "root" {
+			rootExplicit = true
+		}
+	})
+
+	a, err := app.NewWithLimit(app.ResolveStartupRoot(rootExplicit, *root), *files)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer a.Close()
 
 	a.EnableSession()
+
+	fpsSet := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "fps" {
+			fpsSet = true
+		}
+	})
+	a.SetFPSCLI(*fps, fpsSet)
 
 	devSet := false
 	flag.Visit(func(f *flag.Flag) {
@@ -77,7 +93,7 @@ func main() {
 			log.Printf("own-code: watcher unavailable: %v", err)
 		}
 	}
-	options := ownframe.WindowOptions{CustomChrome: a.WindowControl(), PlacementID: "own-code"}
+	options := ownframe.WindowOptions{CustomChrome: a.WindowControl(), PlacementID: "own-code", MaxFPS: a.WindowMaxFPSValue()}
 	if a.WindowControl() {
 		options.Draggable = a.WindowControlDrag
 	}

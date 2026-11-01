@@ -84,7 +84,7 @@ func (a *App) goNavBack() bool {
 
 	a.navAt--
 
-	a.openFileAt(a.activeGroup(), target, false)
+	a.openFileAtPreview(a.activeGroup(), target, false)
 
 	return true
 }
@@ -108,7 +108,7 @@ func (a *App) goNavForward() bool {
 
 	a.navAt++
 
-	a.openFileAt(a.activeGroup(), target, false)
+	a.openFileAtPreview(a.activeGroup(), target, false)
 
 	return true
 }

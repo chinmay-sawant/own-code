@@ -30,12 +30,16 @@ func TestContextMenuBridgeTabRows(t *testing.T) {
 	}
 
 	rows := app.contextMenuForPage("tab-1")
-	if len(rows) != 5 {
-		t.Fatalf("handler rows = %d, want 5", len(rows))
+	if len(rows) != 7 {
+		t.Fatalf("handler rows = %d, want 7", len(rows))
 	}
 
-	if !strings.HasPrefix(rows[2].ID, "code-view:tab-close-all") {
-		t.Fatalf("Close All id = %q, want the code-view:tab-close-all prefix", rows[2].ID)
+	if !strings.HasPrefix(rows[0].ID, "code-view:tab-unpin:") {
+		t.Fatalf("pin row id = %q, want the code-view:tab-unpin: prefix", rows[0].ID)
+	}
+
+	if !strings.HasPrefix(rows[5].ID, "code-view:tab-close-all") {
+		t.Fatalf("Close All id = %q, want the code-view:tab-close-all prefix", rows[5].ID)
 	}
 
 	bridge, ok := any(app.Page()).(pageMenuBridge)
@@ -44,12 +48,12 @@ func TestContextMenuBridgeTabRows(t *testing.T) {
 	}
 
 	rows = bridge.ContextMenuFor("tab-1")
-	if len(rows) != 5 {
-		t.Fatalf("page rows = %d, want 5", len(rows))
+	if len(rows) != 7 {
+		t.Fatalf("page rows = %d, want 7", len(rows))
 	}
 
-	if !strings.HasPrefix(rows[2].ID, "code-view:tab-close-all") {
-		t.Fatalf("page Close All id = %q, want the code-view:tab-close-all prefix", rows[2].ID)
+	if !strings.HasPrefix(rows[5].ID, "code-view:tab-close-all") {
+		t.Fatalf("page Close All id = %q, want the code-view:tab-close-all prefix", rows[5].ID)
 	}
 }
 
@@ -73,11 +77,11 @@ func TestContextMenuBridgeCloseAllGroupOne(t *testing.T) {
 	}
 
 	rows := app.contextMenuForPage("tab2-0")
-	if len(rows) != 5 {
-		t.Fatalf("handler rows = %d, want 5", len(rows))
+	if len(rows) != 7 {
+		t.Fatalf("handler rows = %d, want 7", len(rows))
 	}
 
-	closeAll := rows[2]
+	closeAll := rows[5]
 	if !strings.HasPrefix(closeAll.ID, "code-view:tab-close-all") {
 		t.Fatalf("Close All id = %q, want the code-view:tab-close-all prefix", closeAll.ID)
 	}

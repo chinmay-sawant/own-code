@@ -6,23 +6,41 @@
       <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke-width="1.5" stroke-linecap="round">
         <circle cx="6" cy="6" r="4.1"/><path d="m9.2 9.2 3 3"/>
       </svg>
-      <input id="workspace-search" class="palette-input" type="text" data-bind="SearchQuery" placeholder="Search workspace contents" autocomplete="off" spellcheck="false" aria-label="Search workspace contents">
-      <button class="palette-close" id="search-case" data-action="search-case" type="button" title="Match case" aria-label="Match case" aria-pressed="{{if .Search.Case}}true{{else}}false{{end}}">Aa</button>
+      <input id="workspace-search" class="palette-input" type="text" data-bind="SearchQuery" placeholder="Search workspace contents" autocomplete="off" spellcheck="false" aria-label="Search workspace contents" maxlength="255">
+      <button class="palette-close{{if .Search.Case}} on{{end}}" id="search-case" data-action="search-case" type="button" title="Match case (Alt+C)" aria-label="Match case" aria-pressed="{{if .Search.Case}}true{{else}}false{{end}}">Aa</button>
+      <button class="palette-close{{if .Search.Regex}} on{{end}}" id="search-regex" data-action="search-regex" type="button" title="Use regular expression (Alt+R)" aria-label="Use regular expression" aria-pressed="{{if .Search.Regex}}true{{else}}false{{end}}">.*</button>
+      <button class="palette-close{{if .Search.WholeWord}} on{{end}}" id="search-word" data-action="search-word" type="button" title="Match whole word (Alt+W)" aria-label="Match whole word" aria-pressed="{{if .Search.WholeWord}}true{{else}}false{{end}}">W</button>
       <button class="palette-close" id="search-close" data-action="search-close" type="button" title="Close search" aria-label="Close search">×</button>
     </div>
+    <div class="palette-search replace-search">
+      <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke-width="1.5" stroke-linecap="round">
+        <path d="m2 4h7M8 2l2 2-2 2M12 10H5M6 8l-2 2 2 2"/>
+      </svg>
+      <input id="workspace-replace" class="palette-input" type="text" data-bind="SearchReplace" placeholder="Replace in workspace" autocomplete="off" spellcheck="false" aria-label="Replace in workspace" maxlength="255">
+    </div>
+    {{if .Search.Error}}<div class="search-error" id="search-error" role="alert">{{.Search.Error}}</div>{{end}}
     <div class="search-meta">
-      <span>{{.Search.Files}} files · {{.Search.Total}} results</span>
+      <span>{{.Search.Files}} files · {{.Search.Total}} results{{if gt .Search.TotalAll .Search.Total}} · {{.Search.TotalAll}} total{{else if .Search.Capped}} · {{.Search.TotalAll}}+ total{{end}}</span>
       {{if .Search.Busy}}<span class="search-busy">searching…</span>{{else if .Search.Truncated}}<span class="search-more">more results hidden</span>{{end}}
       {{if .Search.Note}}<span class="search-note">{{.Search.Note}}</span>{{end}}
     </div>
+    {{if .Search.Skipped}}<div class="search-skipped" id="search-skipped">{{.Search.Skipped}}</div>{{end}}
     <div class="search-results" id="search-results">
     <div class="palette-list search-list">
       {{range .Search.Rows}}
-      <button class="palette-row search-row{{if .Selected}} on{{end}}" id="search-hit-{{.Index}}" data-action="search-hit:{{.Index}}" type="button" title="{{.Path}}:{{.Line}}">
+      {{if .GroupFirst}}
+      <div class="search-file" id="search-file-{{.Index}}">
+        <button class="search-check{{if .Checked}} on{{end}}" id="search-check-{{.Index}}" data-action="search-toggle-file:{{.Index}}" type="button" title="Include {{.Path}} in replace" aria-label="Include {{.Path}} in replace" aria-pressed="{{if .Checked}}true{{else}}false{{end}}">{{if .Checked}}☑{{else}}☐{{end}}</button>
+        <span class="search-file-path" title="{{.Path}}">{{.Path}}</span>
+        <span class="search-file-count mono">{{.GroupCount}}</span>
+      </div>
+      {{end}}
+      <button class="palette-row search-row{{if .Selected}} on{{end}}{{if .Checked}} checked{{end}}{{if .Replacement}} with-replace{{end}}" id="search-hit-{{.Index}}" data-action="search-hit:{{.Index}}" type="button" title="{{.Path}}:{{.Line}}">
         <span class="search-loc mono">{{.Line}}:{{.Col}}</span>
         <span class="palette-text search-text">
           <b>{{.Name}} <span class="search-dir">{{.Dir}}</span></b>
           <span class="search-line"><span class="search-before">{{.Before}}</span><span class="search-match">{{.Match}}</span><span class="search-after">{{.After}}</span></span>
+          {{if .Checked}}<span class="search-replace-line"><span class="search-arrow">→</span><span class="search-replacement">{{.Replacement}}</span></span>{{end}}
         </span>
       </button>
       {{else}}
@@ -31,7 +49,15 @@
     </div>
     {{if .Search.Scroll}}<div class="search-scroll-track" id="search-scroll-track"><button class="search-thumb" id="search-thumb" type="button" tabindex="-1" title="Drag to scroll search results" aria-label="Scroll search results" style="margin-top:{{.Search.ScrollTop}}px;height:{{.Search.ScrollHeight}}px"><svg width="8" height="{{.Search.ScrollHeight}}" aria-hidden="true"><rect width="8" height="{{.Search.ScrollHeight}}" fill="#c5c9d1"/></svg></button></div>{{end}}
     </div>
-    <div class="palette-foot"><span>↑↓ choose · Enter open · Esc close</span><span>Ctrl+Shift+F</span></div>
+    {{if .Palette.Busy}}<div class="palette-note">Searching disk…</div>{{else if .Palette.Note}}<div class="palette-note">{{.Palette.Note}}</div>{{end}}
+    <div class="palette-foot"><span>↑↓ choose · Enter open · Ctrl+Enter replace · Space toggles file · Esc close</span><span>Ctrl+Shift+F · Ctrl+Shift+H</span></div>
+    <div class="palette-foot replace-foot">
+      <span>{{.Search.ReplaceFiles}} files · {{.Search.ReplaceTotal}} previewed</span>
+      <span class="replace-actions">
+        {{if .Search.CanUndoReplace}}<button class="replace-btn" id="replace-undo" data-action="replace-undo" type="button" title="Restore every file from the last replace" aria-label="Undo last workspace replace">Undo replace</button>{{else if .Search.UndoNote}}<span class="search-undo-note">{{.Search.UndoNote}}</span>{{end}}
+        <button class="replace-btn danger" id="search-replace-all" data-action="search-replace-all" type="button" title="Review and replace every checked match" aria-label="Replace all checked matches"{{if not .Search.CanReplace}} disabled{{end}}>Replace All{{if gt .Search.ReplaceTotal 0}} ({{.Search.ReplaceFiles}} files, {{.Search.ReplaceTotal}}){{end}}</button>
+      </span>
+    </div>
   </div>
 </div>
 {{end}}
@@ -39,26 +65,34 @@
 {{if .Palette.Open}}
 <div class="palette-layer" id="palette-layer">
   <div class="palette-back" id="palette-back" data-action="palette-close" aria-hidden="true"></div>
-  <div class="palette" id="palette-panel" role="dialog" aria-modal="true" aria-label="Quick open">
+  <div class="palette" id="palette-panel" role="dialog" aria-modal="true" aria-label="{{if eq .Palette.Mode "symbols"}}Search symbols{{else if eq .Palette.Mode "goto"}}Go to line{{else}}Quick open{{end}}">
     <div class="palette-search">
       <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke-width="1.5" stroke-linecap="round">
         <circle cx="6" cy="6" r="4.1"/><path d="m9.2 9.2 3 3"/>
       </svg>
-      <input id="palette" class="palette-input" type="text" data-bind="PaletteQuery" placeholder="Search files by name" autocomplete="off" spellcheck="false" aria-label="Search files">
+      <input id="palette" class="palette-input" type="text" data-bind="PaletteQuery" placeholder="{{if eq .Palette.Mode "symbols"}}Search symbols in this file{{else if eq .Palette.Mode "goto"}}:<line>[:<col>]{{else}}Search files by name{{end}}" autocomplete="off" spellcheck="false" aria-label="{{if eq .Palette.Mode "symbols"}}Search symbols in this file{{else if eq .Palette.Mode "goto"}}Go to line{{else}}Search files{{end}}" maxlength="255">
       <button class="palette-close" id="palette-close" data-action="palette-close" type="button" title="Close search" aria-label="Close search">×</button>
     </div>
-    <div class="palette-list" role="group" aria-label="Quick open results">
+    <div class="palette-list" role="group" aria-label="{{if eq .Palette.Mode "symbols"}}Symbol results{{else if eq .Palette.Mode "goto"}}Go to line{{else}}Quick open results{{end}}">
       {{range .Palette.Rows}}
+      {{if .Symbol}}
+      <button class="palette-row symbol-row{{if .Active}} on{{end}}" id="palette-{{.Path}}-{{.No}}" data-action="symbol-open:{{.Path}}:{{.No}}" type="button" aria-label="Go to {{.Name}} on line {{.No}}">
+        <span class="okind ok-{{.Kind}}">{{.Kind}}</span>
+        <span class="palette-text"><b>{{.Name}}</b><span>{{.Kind}} · {{.Path}}:{{.No}}</span></span>
+        <span class="palette-go">:{{.No}}</span>
+      </button>
+      {{else}}
       <button class="palette-row{{if .Active}} on{{end}}" id="palette-{{.Path}}" data-action="open:{{.Path}}" type="button" aria-label="Open {{.Path}}">
         <span class="ficon lang-{{.Lang}}">{{.Badge}}</span>
         <span class="palette-text"><b>{{.Name}}</b><span>{{.Dir}}</span></span>
         <span class="palette-go">↵</span>
       </button>
+      {{end}}
       {{else}}
-      <div class="palette-empty">No file matches this search.</div>
+      <div class="palette-empty">{{if eq $.Palette.Mode "symbols"}}No symbol matches this search.{{else if eq $.Palette.Mode "goto"}}Type :&lt;line&gt;[:&lt;col&gt;], for example :42 or :42:7.{{else}}No file matches this search.{{end}}</div>
       {{end}}
     </div>
-    <div class="palette-foot"><span>{{len .Palette.Rows}} files</span><span>↑↓ choose · Enter open · Esc close</span></div>
+    <div class="palette-foot"><span>{{if eq .Palette.Mode "symbols"}}{{len .Palette.Rows}} symbols{{else if eq .Palette.Mode "goto"}}:42 jumps to line 42 · :42:7 adds column 7{{else}}{{len .Palette.Rows}} files · single-click opens preview · type &gt; for tab commands{{end}}</span><span>{{if eq .Palette.Mode "goto"}}Enter jump · Esc close{{else}}↑↓ choose · Enter open · Esc close{{end}}</span></div>
   </div>
 </div>
 {{end}}

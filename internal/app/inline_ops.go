@@ -147,7 +147,7 @@ func (a *App) showInlineCard(line int) {
 		visual = plan.firstRow(line - 1)
 	}
 
-	rowTop := a.zx(editorBodyTop) + (visual-a.scrollY/a.zx(rowH))*a.zx(rowH)
+	rowTop := a.zx(editorBodyTop) + a.stickyTopPx(0) + (visual-a.scrollY/a.zx(rowH))*a.zx(rowH)
 	newText := ""
 	if line-1 < len(doc.Lines) {
 		newText = doc.Lines[line-1]
@@ -205,7 +205,7 @@ func (a *App) showSelectionCard(doc *fileDoc, start, end int) {
 		plan := doc.wrapped(a.codeColsForGroup(0))
 		visual = plan.firstRow(start - 1)
 	}
-	rowTop := a.zx(editorBodyTop) + (visual-a.scrollY/a.zx(rowH))*a.zx(rowH)
+	rowTop := a.zx(editorBodyTop) + a.stickyTopPx(0) + (visual-a.scrollY/a.zx(rowH))*a.zx(rowH)
 	lines := append([]string(nil), doc.Lines[start-1:end]...)
 	card := inlineCardForSelection(rowTop, a.pageWidth(), a.viewportH, start, end, doc.Path, lines)
 	card.Left = a.windowControlLeftPx() + inlineCardLeft
@@ -246,7 +246,7 @@ func (a *App) refreshInlineCardSelection() bool {
 		visual = plan.firstRow(start - 1)
 	}
 	_ = visual
-	rowTop := a.zx(editorBodyTop) + (visual-a.scrollY/a.zx(rowH))*a.zx(rowH)
+	rowTop := a.zx(editorBodyTop) + a.stickyTopPx(0) + (visual-a.scrollY/a.zx(rowH))*a.zx(rowH)
 	lines := append([]string(nil), doc.Lines[start-1:end]...)
 	card := inlineCardForSelection(rowTop, a.pageWidth(), a.viewportH, start, end, doc.Path, lines)
 	card.Left = left
@@ -293,7 +293,7 @@ func (a *App) cardAnchor() (int, int, bool) {
 		plan := doc.wrapped(a.codeColsForGroup(0))
 		visual = plan.firstRow(line - 1)
 	}
-	rowTop := a.zx(editorBodyTop) + (visual-a.scrollY/a.zx(rowH))*a.zx(rowH)
+	rowTop := a.zx(editorBodyTop) + a.stickyTopPx(0) + (visual-a.scrollY/a.zx(rowH))*a.zx(rowH)
 	return left, inlineCardTop(rowTop, a.viewportH), true
 }
 

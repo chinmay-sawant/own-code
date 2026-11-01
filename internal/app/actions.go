@@ -2,11 +2,54 @@ package app
 
 import (
 	"context"
+	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/chinmay-sawant/own-code/internal/wsl"
 	"github.com/chinmay-sawant/ownframe"
 )
+
+// doubleClickWindow is the max gap between two clicks on the same file or
+// tab that counts as a double-click (pin) instead of two single clicks
+// (preview). The engine has no press-count event, so the app tracks the
+// last click itself.
+const doubleClickWindow = 500 * time.Millisecond
+
+// isDoubleClickTarget reports whether action can complete a double-click:
+// a tree/welcome file open or a tab-strip focus.
+func isDoubleClickTarget(action string) bool {
+	return strings.HasPrefix(action, "open:") ||
+		strings.HasPrefix(action, "tab2:") ||
+		strings.HasPrefix(action, "tab:")
+}
+
+// clickIsDouble reports whether action repeats the previous click inside
+// the double-click window, then records this click for the next one. A
+// consumed double-click clears the record so a third fast click starts a
+// fresh single click.
+func (a *App) clickIsDouble(action string) bool {
+	now := time.Now()
+	double := a.lastClickAction == action && !a.lastClickAt.IsZero() &&
+		now.Sub(a.lastClickAt) < doubleClickWindow
+	if double {
+		a.lastClickAction = ""
+		a.lastClickAt = time.Time{}
+	} else {
+		a.lastClickAction = action
+		a.lastClickAt = now
+	}
+
+	return double
+}
+
+// clearDoubleClick drops a pending first click, e.g. when a click takes a
+// different path (multi-select) instead of opening or focusing.
+func (a *App) clearDoubleClick() {
+	a.lastClickAction = ""
+	a.lastClickAt = time.Time{}
+}
 
 // onClick routes every control. State changes end in one refresh; the page
 
@@ -19,7 +62,7 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 
 	if a.confirmOpen {
 		switch box.Action {
-		case "confirm-ok", "confirm-cancel":
+		case "confirm-ok", "confirm-cancel", "confirm-save", "confirm-dont-save":
 		default:
 			if box.ID != "confirm-backdrop" {
 				return nil
@@ -27,7 +70,23 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		}
 	}
 
+	if a.commitDialogOpen && !a.confirmOpen {
+		switch box.Action {
+		case "commit-dialog", "commit-confirm", "commit-cancel":
+		default:
+			if box.ID != "commit-backdrop" && box.ID != "commit-message" {
+				return nil
+			}
+		}
+	}
+
 	action := box.Action
+
+	// A click anywhere else ends a pending double-click: only two
+	// consecutive clicks on the same file or tab pin.
+	if !isDoubleClickTarget(action) {
+		a.clearDoubleClick()
+	}
 
 	// Clicking outside the panel returns the keyboard to the editor. The
 	// terminal body, tabs, tools, and resize strip keep focus.
@@ -65,10 +124,16 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		if err := a.scrollTerminal(ctx, -3); err != nil {
 			return err
 		}
+	case strings.HasPrefix(action, "term-link:"):
+		if r, s, ok := parseTermLinkAction(action); ok {
+			if err := a.openTerminalLink(ctx, r, s); err != nil {
+				return err
+			}
+		}
 	case action == "":
-		if box.ID == "filter" || box.ID == "palette" || box.ID == "find" || box.ID == "branch-filter" ||
-			box.ID == "workspace-search" || box.ID == "editor" || box.ID == "edit-surface" || box.ID == "project-path" ||
-			box.ID == "drawer-path" {
+		if box.ID == "filter" || box.ID == "palette" || box.ID == "find" || box.ID == "find-replace" || box.ID == "branch-filter" ||
+			box.ID == "workspace-search" || box.ID == "workspace-replace" || box.ID == "editor" || box.ID == "edit-surface" || box.ID == "project-path" ||
+			box.ID == "drawer-path" || box.ID == "browse-filter" || box.ID == "commit-message" {
 			return nil
 		}
 
@@ -91,6 +156,15 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 			a.refresh()
 		}
 
+		// Click-to-focus: a press on either pane's body focuses that side
+		// without disturbing caret clicks, which carry their own actions
+		// and never reach this branch.
+		if a.split && a.mode == "explorer" {
+			if group, ok := focusGroupForClick(box.ID); ok && group != a.focusGroup {
+				a.setFocusGroup(group)
+			}
+		}
+
 		return a.page.Form().Focus(ctx, "")
 	case action == "inline-card-close":
 		a.closeInlineCard()
@@ -106,6 +180,8 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		if line, ok := actionIndex(action, "inline-card-line:"); ok {
 			a.showInlineCard(line + 1)
 		}
+	case strings.HasPrefix(action, "blame-commit:"):
+		a.openBlameCommit(ctx, strings.TrimPrefix(action, "blame-commit:"))
 	case action == "toast-close":
 		a.clearToast()
 	case action == "split-toggle":
@@ -123,6 +199,13 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		return a.page.Redraw(ctx)
 	case strings.HasPrefix(action, "edit-begin-line:"):
 		if line, ok := actionIndex(action, "edit-begin-line:"); ok {
+			// Ctrl+Click jumps to the definition under the caret. Press
+			// already placed the caret from the click point (entering edit
+			// mode first when the file was in token view), so the word
+			// resolves exactly where the user pointed.
+			if a.ctrl {
+				return a.gotoDefinitionAtCaret(ctx)
+			}
 			// Press already placed the caret with its column; a Click that
 			// follows must not reset it to the line start.
 			if a.editing && a.edit != nil {
@@ -179,6 +262,18 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.toggleSearchCase(ctx)
 
 		return a.page.Form().Focus(ctx, "workspace-search")
+	case action == "search-regex":
+		a.toggleSearchRegex(ctx)
+
+		return a.page.Form().Focus(ctx, "workspace-search")
+	case action == "search-word":
+		a.toggleSearchWholeWord(ctx)
+
+		return a.page.Form().Focus(ctx, "workspace-search")
+	case action == "search-replace-all":
+		return a.openReplaceConfirm(ctx)
+	case action == "replace-undo":
+		return a.undoWorkspaceReplace(ctx)
 	case action == "search-prev":
 		a.searchStep(-1)
 	case action == "search-next":
@@ -186,6 +281,12 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 	case strings.HasPrefix(action, "search-hit:"):
 		if index, ok := actionIndex(action, "search-hit:"); ok {
 			a.openSearchHit(index)
+		}
+	case strings.HasPrefix(action, "search-toggle-file:"):
+		if index, ok := actionIndex(action, "search-toggle-file:"); ok {
+			a.toggleReplaceFile(index)
+
+			return a.page.Redraw(ctx)
 		}
 	case action == "mode-explorer":
 		a.setMode(ctx, "explorer")
@@ -198,12 +299,32 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.paletteOpen = false
 		a.searchOpen = false
 		a.branchOpen = false
-		a.refresh()
+		a.scanDraft, a.scanTouched = "", false
+		a.searchDraft, a.searchTouched = "", false
+		a.cancelKeymapPending()
+		a.resetSettingsScroll()
+		if err := a.redrawSettings(ctx); err != nil {
+			return err
+		}
 		return a.page.Form().Focus(ctx, "")
 	case action == "settings-close":
 		a.settingsOpen = false
+		a.scanDraft, a.scanTouched = "", false
+		a.searchDraft, a.searchTouched = "", false
+		a.cancelKeymapPending()
 		a.refresh()
 		return a.page.Form().Focus(ctx, "act-settings")
+	case action == "settings-zoom":
+		a.settingsOpen = true
+		a.settingsTab = "appearance"
+		a.paletteOpen = false
+		a.searchOpen = false
+		a.branchOpen = false
+		a.resetSettingsScroll()
+		if err := a.redrawSettings(ctx); err != nil {
+			return err
+		}
+		return a.page.Form().Focus(ctx, "")
 	case action == "file-menu-open":
 		a.fileMenu = !a.fileMenu
 		if !a.fileMenu {
@@ -218,7 +339,7 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.refresh()
 
 		if a.fileMenu {
-			return a.page.Form().Focus(ctx, "drawer-path")
+			return a.focusAfterLayout(ctx, "project-toggle")
 		}
 
 		return a.page.Form().Focus(ctx, "")
@@ -233,8 +354,6 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 	case action == "file-reset":
 		a.resetLayout()
 		return a.page.Form().Focus(ctx, "")
-	case action == "file-reload-window":
-		return a.reloadWindow(ctx)
 	case action == "file-new-window":
 		a.fileMenu = false
 		a.projectOpen = false
@@ -244,7 +363,7 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 	case action == "project-open":
 		a.projectOpen = !a.projectOpen
 		a.refresh()
-		return a.page.Form().Focus(ctx, "drawer-path")
+		return a.focusAfterLayout(ctx, "drawer-path")
 	case action == "project-close":
 		a.projectOpen = false
 		a.refresh()
@@ -266,6 +385,9 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 			a.refresh()
 			return nil
 		}
+		if a.tryHandoffToWSL(root) {
+			return nil
+		}
 		a.browseOpen = false
 		return a.switchProject(ctx, root)
 	case strings.HasPrefix(action, "project-open-path:"):
@@ -278,6 +400,9 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 			a.refresh()
 			return nil
 		}
+		if a.tryHandoffToWSL(root) {
+			return nil
+		}
 		a.browseOpen = false
 		return a.switchProject(ctx, root)
 	case action == "browse-open":
@@ -286,49 +411,64 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.recentOpen = false
 		a.startBrowse()
 		a.refresh()
-		return a.page.Form().Focus(ctx, "project-path")
+		return a.focusAfterLayout(ctx, "browse-filter")
 	case action == "browse-close", action == "browse-backdrop":
 		a.browseOpen = false
 		a.refresh()
 		return nil
+	case action == "browse-filter-clear":
+		a.browseFilter = ""
+		a.page.Form().SetFormValue("browse-filter", "")
+		a.browseList.reset()
+		a.refresh()
+		return a.page.Form().Focus(ctx, "browse-filter")
 	case action == "browse-up":
 		next, ok := browseUpTarget(a.browseRoot)
 		if !ok {
 			return nil
 		}
-		a.browseRoot = next
-		a.browseList.reset()
-		a.fileAlert = ""
+		a.setBrowseRoot(next)
 		a.refresh()
 		return nil
 	case action == "browse-wsl":
-		a.browseRoot = a.browseStartRoot()
-		if a.browseRoot == "" {
-			return nil
-		}
-		a.browseList.reset()
-		a.fileAlert = ""
-		a.refresh()
-		return nil
-	case action == "browse-windows":
-		for c := 'c'; c <= 'z'; c++ {
-			candidate := "/mnt/" + string(c)
-			if isDir(candidate) {
-				a.browseRoot = candidate
-				a.browseList.reset()
-				a.fileAlert = ""
-				a.refresh()
-				return nil
-			}
-		}
-		if isDir("/mnt") {
-			a.browseRoot = "/mnt"
-			a.browseList.reset()
-			a.fileAlert = ""
+		// Inside the guest the choice jumps between the Linux home and the
+		// Windows drives under /mnt. On a Windows host with WSL installed
+		// it jumps into the virtual distro list instead.
+		if !isWSL() && runtime.GOOS == "windows" && wsl.Available() {
+			a.setBrowseRoot(wsl.WSLDistrosRoot)
 			a.refresh()
 			return nil
 		}
-		a.fileAlert = "No Windows drives found under /mnt."
+		root := a.browseStartRoot()
+		if root == "" {
+			return nil
+		}
+		a.setBrowseRoot(root)
+		a.refresh()
+		return nil
+	case action == "browse-windows":
+		// Inside the guest this jumps to the first Windows drive under
+		// /mnt. On a Windows host it jumps back to the This PC drives
+		// level, the counterpart of the WSL distro list.
+		if isWSL() {
+			for c := 'c'; c <= 'z'; c++ {
+				candidate := "/mnt/" + string(c)
+				if isDir(candidate) {
+					a.setBrowseRoot(candidate)
+					a.refresh()
+					return nil
+				}
+			}
+			if isDir("/mnt") {
+				a.setBrowseRoot("/mnt")
+				a.refresh()
+				return nil
+			}
+			a.fileAlert = "No Windows drives found under /mnt."
+			a.refresh()
+			return nil
+		}
+		a.setBrowseRoot("")
 		a.refresh()
 		return nil
 	case strings.HasPrefix(action, "browse-enter:"):
@@ -336,14 +476,20 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		if path == "" {
 			return nil
 		}
+		// The virtual levels need no directory probe: the distro list is
+		// virtual and a listed distro exists even when its UNC is not yet
+		// awake (entering it starts the guest on first ReadDir).
+		if wsl.IsWSLDistrosRoot(path) || wsl.IsWSLDistroRoot(path) {
+			a.setBrowseRoot(path)
+			a.refresh()
+			return nil
+		}
 		if !isDir(path) {
 			a.fileAlert = "Folder not found: " + path
 			a.refresh()
 			return nil
 		}
-		a.browseRoot = path
-		a.browseList.reset()
-		a.fileAlert = ""
+		a.setBrowseRoot(path)
 		a.refresh()
 		return nil
 	case action == "browse-select":
@@ -353,6 +499,9 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		if blockedProjectRoot(a.browseRoot) {
 			a.fileAlert = "Drive roots can't be opened as projects. Pick a folder inside it."
 			a.refresh()
+			return nil
+		}
+		if a.tryHandoffToWSL(a.browseRoot) {
 			return nil
 		}
 		a.browseOpen = false
@@ -367,9 +516,105 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		if err := a.page.SetTheme(a.activeThemeCSS()); err != nil {
 			return err
 		}
+		// Gestures write session + global; the session wins on restore.
+		a.persistSession()
+		a.persistSettings()
 		a.refresh()
+	case strings.HasPrefix(action, "settings-tab:"):
+		a.settingsTab = strings.TrimPrefix(action, "settings-tab:")
+		a.resetSettingsScroll()
+		return a.redrawSettings(ctx)
+	case action == "font-inc":
+		return a.setFontSize(ctx, a.baseFontSize()+1)
+	case action == "font-dec":
+		return a.setFontSize(ctx, a.baseFontSize()-1)
+	case action == "font-reset":
+		return a.resetFontSize(ctx)
+	case action == "zoom-inc":
+		return a.zoomIn(ctx)
+	case action == "zoom-dec":
+		return a.zoomOut(ctx)
+	case action == "editor-zoom-inc":
+		return a.setZoomPerView(ctx, "editor", a.effectiveZoom("editor")*zoomStep)
+	case action == "editor-zoom-dec":
+		return a.setZoomPerView(ctx, "editor", a.effectiveZoom("editor")/zoomStep)
+	case action == "editor-zoom-clear":
+		return a.setZoomPerView(ctx, "editor", 1)
+	case action == "terminal-zoom-inc":
+		return a.setZoomPerView(ctx, "terminal", a.effectiveZoom("terminal")*zoomStep)
+	case action == "terminal-zoom-dec":
+		return a.setZoomPerView(ctx, "terminal", a.effectiveZoom("terminal")/zoomStep)
+	case action == "terminal-zoom-clear":
+		return a.setZoomPerView(ctx, "terminal", 1)
+	case strings.HasPrefix(action, "keymap-rebind:"):
+		a.keymapCapture = strings.TrimPrefix(action, "keymap-rebind:")
+		a.keymapPendingAction, a.keymapPendingChord, a.keymapPendingOthers = "", "", nil
+		a.settingsNote = "Press the new shortcut, or Esc to cancel."
+		return a.redrawSettings(ctx)
+	case action == "keymap-cancel":
+		a.cancelKeymapPending()
+		return a.redrawSettings(ctx)
+	case action == "keymap-swap":
+		a.swapKeymapPending()
+		return a.redrawSettings(ctx)
+	case action == "keymap-replace":
+		a.replaceKeymapPending()
+		return a.redrawSettings(ctx)
+	case strings.HasPrefix(action, "keymap-reset:"):
+		a.resetKeymapAction(strings.TrimPrefix(action, "keymap-reset:"))
+		return a.redrawSettings(ctx)
+	case action == "keymap-reset-all":
+		a.resetKeymapAll()
+		a.showToast("success", "Shortcuts reset", "All shortcuts are back to their defaults.")
+		return a.redrawSettings(ctx)
+	case action == "settings-rescan":
+		if err := a.applyExcludesRescan(ctx); err != nil {
+			return err
+		}
+		return a.redrawSettings(ctx)
+	case action == "settings-toggle-gitignore":
+		e := a.settings.Excludes
+		e.UseGitignore = !e.UseGitignore
+		a.setScanExcludes(e)
+		if err := a.applyExcludesRescan(ctx); err != nil {
+			return err
+		}
+		return a.redrawSettings(ctx)
+	case action == "settings-toggle-searchignored":
+		e := a.settings.Excludes
+		e.SearchIgnored = !e.SearchIgnored
+		a.setScanExcludes(e)
+		a.settingsNote = ""
+		return a.redrawSettings(ctx)
+	case strings.HasPrefix(action, "autosave:"):
+		a.setAutoSave(strings.TrimPrefix(action, "autosave:"))
+		return a.redrawSettings(ctx)
+	case action == "autosave-delay-dec":
+		a.setAutoSaveDelay(a.autoSaveDelayMs - 250)
+		return a.redrawSettings(ctx)
+	case action == "autosave-delay-inc":
+		a.setAutoSaveDelay(a.autoSaveDelayMs + 250)
+		return a.redrawSettings(ctx)
+	case strings.HasPrefix(action, "fps:"):
+		raw := strings.TrimPrefix(action, "fps:")
+		if raw == "-1" || raw == "uncapped" {
+			a.SetMaxFPS(FPSUncapped)
+			return a.redrawSettings(ctx)
+		}
+		v := 0
+		for _, c := range raw {
+			if c < '0' || c > '9' {
+				v = -99
+				break
+			}
+			v = v*10 + int(c-'0')
+		}
+		a.SetMaxFPS(v)
+		return a.redrawSettings(ctx)
 	case action == "palette-open":
 		return a.openPalette(ctx)
+	case action == "goto-definition":
+		return a.gotoDefinitionAtCaret(ctx)
 	case action == "win-min":
 		a.page.Window().Minimize()
 
@@ -392,7 +637,7 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 	case strings.HasPrefix(action, "merge-open:"):
 		a.openMergeConflict(ctx, strings.TrimPrefix(action, "merge-open:"))
 	case action == "merge-close":
-		a.closeMergeEditor()
+		a.requestCloseMergeEditor()
 	case action == "merge-prev":
 		a.mergeStep(-1)
 	case action == "merge-next":
@@ -429,6 +674,12 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		}
 	case action == "discard-all":
 		a.openDiscardConfirm("discard-all", a.workingAllPaths())
+	case action == "commit-dialog":
+		return a.openCommitDialog(ctx)
+	case action == "commit-cancel":
+		a.closeCommitDialog()
+	case action == "commit-confirm":
+		return a.submitCommitDialog(ctx)
 	case action == "stage-selected":
 		if err := a.stageSelected(ctx); err != nil {
 			return err
@@ -453,7 +704,24 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		}
 		a.refresh()
 	case action == "confirm-ok":
-		if err := a.confirmDiscard(ctx); err != nil {
+		if a.confirmKind == confirmKindReplaceAll {
+			a.closeConfirm()
+
+			return a.applyWorkspaceReplace(ctx)
+		}
+		if unsavedKind(a.confirmKind) {
+			if err := a.confirmUnsavedSave(ctx); err != nil {
+				return err
+			}
+		} else if err := a.confirmDiscard(ctx); err != nil {
+			return err
+		}
+	case action == "confirm-save":
+		if err := a.confirmUnsavedSave(ctx); err != nil {
+			return err
+		}
+	case action == "confirm-dont-save":
+		if err := a.confirmUnsavedDontSave(ctx); err != nil {
 			return err
 		}
 	case action == "confirm-cancel":
@@ -511,6 +779,8 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.togglePreview()
 	case action == "wrap-toggle":
 		a.toggleWrap()
+	case action == "blame-toggle":
+		a.toggleBlame()
 	case action == "find-close":
 		return a.closeFind(ctx)
 	case action == "find-prev":
@@ -525,6 +795,18 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.toggleFindCase()
 
 		return a.page.Form().Focus(ctx, "find")
+	case action == "find-regex":
+		a.toggleFindRegex()
+
+		return a.page.Form().Focus(ctx, "find")
+	case action == "find-word":
+		a.toggleFindWholeWord()
+
+		return a.page.Form().Focus(ctx, "find")
+	case action == "replace-one":
+		return a.replaceOne(ctx)
+	case action == "replace-all":
+		return a.replaceAllInFile(ctx)
 	case action == "details-close":
 		a.details = false
 		a.refresh()
@@ -561,7 +843,7 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 			return err
 		}
 
-		return a.page.Form().Focus(ctx, "branch-filter")
+		return a.focusAfterLayout(ctx, "branch-filter")
 	case action == "branch-close":
 		a.branchOpen = false
 		a.branchQuery = ""
@@ -596,10 +878,17 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 	case strings.HasPrefix(action, "open:"):
 		path := strings.TrimPrefix(action, "open:")
 		if (a.ctrl || a.shift) && !a.editing {
+			a.clearDoubleClick()
 			return a.clickTreeSelect(ctx, path)
 		}
 		a.clearExplorerSel()
-		a.openFile(path)
+		if a.clickIsDouble(action) {
+			// Double-click pins: open-then-pin when not open yet.
+			a.pinPath(a.activeGroup(), path)
+		} else {
+			// Single-click previews: reuses the group preview slot.
+			a.openFilePreview(path)
+		}
 	case strings.HasPrefix(action, "dir:"):
 		path := strings.TrimPrefix(action, "dir:")
 		if (a.ctrl || a.shift) && !a.editing {
@@ -609,19 +898,27 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.onToggleDir(path)
 	case strings.HasPrefix(action, "tab-close:"):
 		if index, ok := actionIndex(action, "tab-close:"); ok {
-			a.closeTab(index)
+			a.requestCloseTabIn(0, index)
 		}
 	case strings.HasPrefix(action, "tab2-close:"):
 		if index, ok := actionIndex(action, "tab2-close:"); ok {
-			a.closeTabIn(1, index)
+			a.requestCloseTabIn(1, index)
 		}
 	case strings.HasPrefix(action, "tab2:"):
 		if index, ok := actionIndex(action, "tab2:"); ok {
 			a.selectTabIn(1, index)
+			if a.clickIsDouble(action) {
+				// Double-click on an open tab pins it in place.
+				a.pinTabByIndex(1, index)
+			}
 		}
 	case strings.HasPrefix(action, "tab:"):
 		if index, ok := actionIndex(action, "tab:"); ok {
 			a.selectTab(index)
+			if a.clickIsDouble(action) {
+				// Double-click on an open tab pins it in place.
+				a.pinTabByIndex(0, index)
+			}
 		}
 	case strings.HasPrefix(action, "diff-file:"):
 		path := strings.TrimPrefix(action, "diff-file:")
@@ -653,17 +950,27 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		if line, ok := actionIndex(action, "outline:"); ok {
 			a.outlineLine(line)
 		}
+	case strings.HasPrefix(action, "sticky2:"):
+		if line, ok := actionIndex(action, "sticky2:"); ok {
+			a.scrollToSticky(1, line)
+		}
+	case strings.HasPrefix(action, "sticky:"):
+		if line, ok := actionIndex(action, "sticky:"); ok {
+			a.scrollToSticky(0, line)
+		}
 	}
 
 	return a.page.Form().Focus(ctx, "")
 }
 
 // onChange keeps the filter and the palette query in app state after the
-// binder writes the fields.
+// binder writes the fields. Single-line inputs clamp to maxFieldLen runes;
+// the templates carry the same maxlength so the engine clamps typing and
+// paste, while this covers restored sessions and programmatic sets.
 func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 	switch box.ID {
 	case "filter":
-		next := a.view.Filter
+		next := clampFieldLen(a.view.Filter)
 		if next == a.filter {
 			return nil
 		}
@@ -672,7 +979,7 @@ func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 		a.treeOffset = 0
 		a.refresh()
 	case "find":
-		next := a.view.FindQuery
+		next := clampFieldLen(a.view.FindQuery)
 		if next == a.findQuery {
 			return nil
 		}
@@ -680,8 +987,16 @@ func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 		a.findQuery = next
 		a.reindexFind()
 		a.refresh()
+	case "find-replace":
+		next := clampFieldLen(a.view.ReplaceQuery)
+		if next == a.replaceQuery {
+			return nil
+		}
+
+		a.replaceQuery = next
+		a.refresh()
 	case "branch-filter":
-		next := a.view.BranchQuery
+		next := clampFieldLen(a.view.BranchQuery)
 		if next == a.branchQuery {
 			return nil
 		}
@@ -689,18 +1004,24 @@ func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 		a.branchQuery = next
 		a.refresh()
 	case "palette":
-		next := a.view.PaletteQuery
+		next := clampFieldLen(a.view.PaletteQuery)
 		if next == a.paletteQuery {
 			return nil
 		}
 
 		a.paletteQuery = next
 		a.paletteIndex = 0
+
+		// The symbol overlay filters on the mirrored query.
+		if a.paletteMode == paletteModeSymbols {
+			a.symbolQuery = next
+		}
+
 		a.refresh()
 	case "editor":
 		a.applyEditText(a.view.EditText)
 	case "workspace-search":
-		next := a.view.SearchQuery
+		next := clampFieldLen(a.view.SearchQuery)
 		if next == a.searchQuery {
 			return nil
 		}
@@ -708,13 +1029,56 @@ func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 		a.searchQuery = next
 		a.searchIndex = 0
 		a.runWorkspaceSearch(ctx)
+	case "workspace-replace":
+		next := clampFieldLen(a.view.SearchReplace)
+		if next == a.searchReplace {
+			return nil
+		}
+
+		a.searchReplace = next
+		a.refresh()
+	case "excludes-scan":
+		next := a.view.ScanText
+		if next == a.scanDraftText() && a.scanTouched {
+			return nil
+		}
+
+		a.scanDraft, a.scanTouched = next, true
+		a.noteInvalidGlobs()
+		a.refresh()
+	case "excludes-search":
+		next := a.view.SearchText
+		if next == a.searchDraftText() && a.searchTouched {
+			return nil
+		}
+
+		a.searchDraft, a.searchTouched = next, true
+		a.noteInvalidGlobs()
+		a.refresh()
 	case "project-path", "drawer-path":
-		next := a.view.ProjectQuery
+		next := clampFieldLen(a.view.ProjectQuery)
 		if next == a.projectQuery {
 			return nil
 		}
 
 		a.projectQuery = next
+		a.refresh()
+	case "browse-filter":
+		next := clampFieldLen(a.view.BrowseQuery)
+		if next == a.browseFilter {
+			return nil
+		}
+
+		a.browseFilter = next
+		a.browseList.reset()
+		a.refresh()
+	case "commit-message":
+		next := a.view.CommitMessage
+		if next == a.commitDialogMsg {
+			return nil
+		}
+
+		a.commitDialogMsg = next
 		a.refresh()
 	}
 
@@ -765,7 +1129,7 @@ func (a *App) onWheel(ctx context.Context, x, y, dx, dy float64) (bool, error) {
 		return true, nil
 	}
 	if a.settingsOpen {
-		return true, nil
+		return true, a.settingsWheelAt(ctx, x, y, dy)
 	}
 	if a.paletteOpen || a.branchOpen {
 		return false, nil
@@ -805,7 +1169,21 @@ func (a *App) onWheel(ctx context.Context, x, y, dx, dy float64) (bool, error) {
 			}
 		}
 
-		a.scrollHorizontal(step)
+		// In split mode the hovered pane owns the gesture: the right pane
+		// is tested first so the shared gutter never steals it.
+		group := 0
+		if a.split && a.mode == "explorer" {
+			switch {
+			case a.isOverPane(1, x, y):
+				group = 1
+			case a.isOverPane(0, x, y):
+				group = 0
+			default:
+				group = a.focusedScrollGroup()
+			}
+		}
+
+		a.scrollHorizontalFor(group, step)
 
 		return true, a.page.Redraw(ctx)
 	}
@@ -1046,12 +1424,34 @@ func (a *App) treeKeyDown(ctx context.Context, key string) (bool, error) {
 			return true, a.page.Form().Focus(ctx, focus)
 		}
 
-		a.openFile(path)
+		a.openFilePreview(path)
 		if err := a.page.Redraw(ctx); err != nil {
 			return true, err
 		}
 
 		return true, a.page.Form().Focus(ctx, focus)
+	}
+
+	// Enter on a tree file row pins it (open-then-pin when not open). There
+	// is no press-count for a real double-click, so Enter/Ctrl+K/menu carry
+	// the pin action.
+	if key == "enter" {
+		var isDir bool
+
+		if index >= 0 {
+			isDir = a.view.Tree[index].Dir
+		} else {
+			isDir = a.view.StickyTree[stickyIndex].Dir
+		}
+
+		if !isDir {
+			a.pinPath(a.activeGroup(), path)
+			if err := a.page.Redraw(ctx); err != nil {
+				return true, err
+			}
+
+			return true, a.page.Form().Focus(ctx, focus)
+		}
 	}
 
 	switch key {
@@ -1198,6 +1598,14 @@ func (a *App) onDragStart(ctx context.Context, box ownframe.Box) (bool, error) {
 		}
 		return a.startEditorScrollDrag(group), nil
 	}
+	if box.ID == "split-divider" && a.split && a.mode == "explorer" {
+		a.splitDrag = splitDividerDrag{active: true, start: a.splitRatio}
+		if err := a.page.Form().Focus(ctx, "split-divider"); err != nil {
+			return false, err
+		}
+
+		return true, nil
+	}
 	if box.ID == "search-thumb" && a.searchOpen && a.view.Search.Scroll {
 		track := searchWindowRows * a.zx(searchRowHeight)
 		thumb := a.view.Search.ScrollHeight
@@ -1262,6 +1670,40 @@ func (a *App) onDragStart(ctx context.Context, box ownframe.Box) (bool, error) {
 		return true, nil
 	}
 
+	if box.ID == "browse-thumb" && a.browseOpen && a.view.BrowseScroll {
+		track := a.browseTrackHeight()
+		thumb := a.view.BrowseThumbH
+		total := len(a.browseFilteredEntries())
+		if total <= browseListVisible || track <= thumb {
+			return false, nil
+		}
+
+		a.browseDrag = true
+		a.browseDragAt = a.browseList.Offset
+		a.browseDragScale = float64(total-browseListVisible) / float64(track-thumb)
+
+		return true, nil
+	}
+
+	if box.ID == "browse-scroll" && a.browseOpen && a.view.BrowseScroll {
+		track := a.browseTrackHeight()
+		thumb := a.view.BrowseThumbH
+		total := len(a.browseFilteredEntries())
+		if total <= browseListVisible || track <= thumb {
+			return false, nil
+		}
+
+		a.browseDrag = true
+		a.browseDragAt = a.browseList.Offset
+		a.browseDragScale = float64(total-browseListVisible) / float64(track-thumb)
+
+		return true, nil
+	}
+
+	if (box.ID == "settings-thumb" || box.ID == "settings-rail") && a.settingsOpen {
+		return a.startSettingsThumbDrag(), nil
+	}
+
 	if box.ID == "drawer-resize" {
 		a.drawerDrag = true
 		a.drawerDragExtra = a.drawerExtra
@@ -1292,6 +1734,27 @@ func (a *App) onDragStart(ctx context.Context, box ownframe.Box) (bool, error) {
 
 // onDragMove resizes the panes or moves the explorer thumb.
 func (a *App) onDragMove(ctx context.Context, dx, dy float64) error {
+	if a.splitDrag.active {
+		a.splitDrag.dx += dx
+
+		total := a.editorWidth()
+		ratio := a.splitDrag.start
+
+		if total > 0 {
+			// The pointer delta arrives in screen px; the editor geometry
+			// is in page px, so it scales down by the layout zoom first
+			// (the same conversion the terminal drag uses).
+			ratio += (a.splitDrag.dx / a.uiZoom()) / float64(total)
+		}
+
+		// A clamped tick moves nothing: skip the refresh so a drag pinned
+		// at the rail does not rebuild the view per event.
+		if !a.setSplitRatio(ratio) {
+			return nil
+		}
+
+		return a.page.Redraw(ctx)
+	}
 	if a.termDrag {
 		a.termDragDy += dy
 		maxBase := max(termMinHeight, int(float64(a.termMaxHeight())/a.uiZoom()))
@@ -1378,6 +1841,39 @@ func (a *App) onDragMove(ctx context.Context, dx, dy float64) error {
 		return a.page.Redraw(ctx)
 	}
 
+	if a.browseDrag {
+		total := len(a.browseFilteredEntries())
+		maxOffset := total - browseListVisible
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		offset := a.browseDragAt + int(dy*a.browseDragScale+roundHalf)
+		if offset < 0 {
+			offset = 0
+		}
+		if offset > maxOffset {
+			offset = maxOffset
+		}
+		if offset == a.browseList.Offset {
+			return nil
+		}
+		a.browseList.Offset = offset
+		a.refresh()
+
+		return a.page.Redraw(ctx)
+	}
+
+	if a.settingsDrag {
+		before := a.settingsScrollOffset
+		a.moveSettingsThumbDrag(dy)
+		if a.settingsScrollOffset == before {
+			return nil
+		}
+		a.refresh()
+
+		return a.page.Redraw(ctx)
+	}
+
 	if a.drawerDrag {
 		a.drawerDx += dx
 		extra := a.drawerDragExtra + int(a.drawerDx+roundHalf)
@@ -1428,6 +1924,14 @@ func (a *App) onDragMove(ctx context.Context, dx, dy float64) error {
 
 // onDragEnd releases the history divider.
 func (a *App) onDragEnd(ctx context.Context) error {
+	if a.splitDrag.active {
+		a.splitDrag = splitDividerDrag{}
+		a.persistSession()
+		a.refresh()
+
+		return a.page.Form().Focus(ctx, "")
+	}
+
 	if a.termDrag {
 		a.termDrag = false
 		a.termDragDy = 0
@@ -1440,6 +1944,7 @@ func (a *App) onDragEnd(ctx context.Context) error {
 	a.editorDrag.active = false
 	wasSelect := a.dragSelect
 	wasSearch := a.searchDrag
+	wasBrowse := a.browseDrag
 	a.dragSelect = false
 	a.searchDrag = false
 	a.searchDragScale = 0
@@ -1451,6 +1956,10 @@ func (a *App) onDragEnd(ctx context.Context) error {
 	a.changesScale = 0
 	a.historyListDrag = false
 	a.historyListScale = 0
+	a.browseDrag = false
+	a.browseDragScale = 0
+	a.settingsDrag = false
+	a.settingsDragScale = 0
 	a.drawerDrag = false
 	a.drawerDx = 0
 	if a.cardDrag {
@@ -1459,6 +1968,9 @@ func (a *App) onDragEnd(ctx context.Context) error {
 	a.cardDrag = false
 	a.cardDx = 0
 	a.cardDy = 0
+	if wasBrowse && a.browseOpen {
+		return a.page.Form().Focus(ctx, "browse-filter")
+	}
 	if wasSearch && a.searchOpen {
 		return a.page.Form().Focus(ctx, "workspace-search")
 	}
@@ -1488,23 +2000,49 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 
 	// Layout zoom owns Ctrl+=, Ctrl+-, and Ctrl+0 everywhere, including
 	// while editing: the window leaves these chords to the page because
-	// key zoom is off. Copy, cut, paste, and the other Ctrl chords keep
-	// their own branches below.
+	// key zoom is off. The allows gate kills the old chord when the action
+	// is rebound; the dispatcher below fires the new chord. Uncustomized
+	// behavior (including shift-insensitive Ctrl+Shift+=) is unchanged.
 	if a.ctrl {
 		switch key {
 		case "equal", "kpadd":
+			if !a.keymapAllows("zoom-in", key) {
+				return nil
+			}
 			return a.zoomIn(ctx)
 		case "minus", "kpsubtract":
+			if !a.keymapAllows("zoom-out", key) {
+				return nil
+			}
 			return a.zoomOut(ctx)
 		case "0", "kp0":
+			if !a.keymapAllows("zoom-reset", key) {
+				return nil
+			}
 			return a.resetZoom(ctx)
 		}
 	}
 
 	// Ctrl+` toggles the terminal from anywhere, including while the shell
 	// has focus.
-	if a.ctrl && !a.shift && (key == "backquote" || key == "grave" || key == "`") {
+	if a.ctrl && !a.shift && (key == "backquote" || key == "grave" || key == "`") && a.keymapAllows("toggle-terminal", key) {
 		a.toggleTerminal(ctx)
+
+		return a.page.Redraw(ctx)
+	}
+
+	// Ctrl+1 / Ctrl+2 focus the left / right editor from anywhere, including
+	// while the shell has focus (like Ctrl+`). Plain 1/2 keep switching
+	// modes. In web mode the browser may capture these chords; F6 and the
+	// pane menu cover the same switch there.
+	if a.ctrl && !a.shift && (key == "1" || key == "kp1") && a.keymapAllows("focus-left", key) {
+		a.setFocusGroup(0)
+
+		return a.page.Redraw(ctx)
+	}
+
+	if a.ctrl && !a.shift && (key == "2" || key == "kp2") && a.keymapAllows("focus-right", key) {
+		a.setFocusGroup(1)
 
 		return a.page.Redraw(ctx)
 	}
@@ -1520,14 +2058,27 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 
 	// VS Code-style history: Alt+Left goes back, Alt+Right goes forward. The
 	// window sends these as single names, so they work while editing and win
-	// over the horizontal scroll below.
-	switch key {
-	case "alt+arrowleft":
+	// over the horizontal scroll below. Rebinding kills the old chord.
+	if key == "alt+arrowleft" && a.keymapAllows("history-back", key) {
 		a.goNavBack()
 
 		return a.page.Redraw(ctx)
-	case "alt+arrowright":
+	}
+
+	if key == "alt+arrowright" && a.keymapAllows("history-forward", key) {
 		a.goNavForward()
+
+		return a.page.Redraw(ctx)
+	}
+
+	// F6 cycles the focused editor pane while a split is open. It sits after
+	// the terminal branch so a focused shell keeps the key.
+	if key == "f6" && a.split && a.mode == "explorer" && a.keymapAllows("cycle-pane", key) {
+		if a.focusGroup == 1 {
+			a.setFocusGroup(0)
+		} else {
+			a.setFocusGroup(1)
+		}
 
 		return a.page.Redraw(ctx)
 	}
@@ -1539,15 +2090,72 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 	}
 
 	if a.confirmOpen && key == "enter" {
-		if err := a.confirmDiscard(ctx); err != nil {
+		if a.confirmKind == confirmKindReplaceAll {
+			a.closeConfirm()
+
+			if err := a.applyWorkspaceReplace(ctx); err != nil {
+				return err
+			}
+
+			return a.page.Redraw(ctx)
+		}
+		if unsavedKind(a.confirmKind) {
+			if err := a.confirmUnsavedSave(ctx); err != nil {
+				return err
+			}
+		} else if err := a.confirmDiscard(ctx); err != nil {
 			return err
 		}
 
 		return a.page.Redraw(ctx)
 	}
 
+	if a.confirmOpen && unsavedKind(a.confirmKind) && !a.ctrl && !a.shift && key == "d" {
+		if err := a.confirmUnsavedDontSave(ctx); err != nil {
+			return err
+		}
+
+		return a.page.Redraw(ctx)
+	}
+
+	if a.commitDialogOpen && !a.confirmOpen {
+		switch {
+		case key == "escape":
+			a.closeCommitDialog()
+
+			return a.page.Redraw(ctx)
+		case key == "enter" && a.ctrl:
+			return a.submitCommitDialog(ctx)
+		}
+
+		return nil
+	}
+
 	if a.confirmOpen {
 		return nil
+	}
+
+	// A Rebind capture eats the next key: Esc cancels, anything else becomes
+	// the candidate chord. It sits before the settings escape so cancelling
+	// a capture never closes the panel. The capture banner changes the tab
+	// height, so remeasure the rail with a second pass while open.
+	if a.keymapCapture != "" && key == "escape" {
+		a.cancelKeymapPending()
+		if a.settingsOpen {
+			return a.redrawSettings(ctx)
+		}
+		a.refresh()
+
+		return a.page.Redraw(ctx)
+	}
+
+	if a.keymapCapture != "" {
+		a.processKeymapCapture(chordFromEvent(a.ctrl, a.shift, key))
+
+		if a.settingsOpen {
+			return a.redrawSettings(ctx)
+		}
+		return a.page.Redraw(ctx)
 	}
 
 	if a.settingsOpen && key == "escape" {
@@ -1569,6 +2177,14 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 	if a.browseOpen && key == "escape" {
 		if a.fileAlert != "" {
 			a.fileAlert = ""
+			a.refresh()
+
+			return a.page.Redraw(ctx)
+		}
+		if a.browseFilter != "" {
+			a.browseFilter = ""
+			a.page.Form().SetFormValue("browse-filter", "")
+			a.browseList.reset()
 			a.refresh()
 
 			return a.page.Redraw(ctx)
@@ -1604,6 +2220,24 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 		return a.page.Redraw(ctx)
 	}
 
+	// Alt+C/R/W flip the match toggles for the bar that owns the keyboard:
+	// the in-file find/replace bar or the workspace search/replace panel.
+	// The window sends Alt chords as "alt+<key>".
+	switch key {
+	case "alt+c", "alt+r", "alt+w":
+		return a.toggleMatchKeys(ctx, key)
+	}
+
+	// Space toggles the current result's file checkbox while the search
+	// panel owns the keyboard but no text field or button has focus. Enter
+	// still opens the hit; focused checkboxes toggle through activation.
+	if a.searchOpen && !a.paletteOpen && key == "space" && (a.page.Form().FocusID() == "" ||
+		strings.HasPrefix(a.page.Form().FocusID(), "search-hit-")) {
+		a.toggleReplaceFile(a.searchIndex)
+
+		return a.page.Redraw(ctx)
+	}
+
 	if !a.paletteOpen && (key == "enter" || key == "space") && a.page.Edit().FocusedField() == "" {
 		if id := a.page.Form().FocusID(); id != "" {
 			if key == "space" && isTreeRowID(id) {
@@ -1632,10 +2266,37 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 	// Ctrl+I opens the line card at the current source line, whether the
 	// editor is in token view or mid-edit. It stays before the editing branch
 	// so the caret line names the card while typing.
-	if a.ctrl && !a.shift && key == "i" {
+	if a.ctrl && !a.shift && key == "i" && a.keymapAllows("line-card", key) {
 		a.showInlineCardAtCurrent()
 
 		return a.page.Redraw(ctx)
+	}
+
+	// The goto and symbol overlays open while editing, so their navigation
+	// keys route before the editing branch: arrows move the overlay
+	// selection and Esc closes it instead of leaving edit mode. Editor
+	// chords (Ctrl+S and friends) keep working mid-edit; every other key
+	// belongs to the overlay input. Files-mode palettes never reach here
+	// while editing (Ctrl+P is unreachable mid-edit).
+	if a.paletteOpen && (a.paletteMode == paletteModeGoto || a.paletteMode == paletteModeSymbols) {
+		switch key {
+		case "arrowdown":
+			a.movePalette(1)
+
+			return a.page.Redraw(ctx)
+		case "arrowup":
+			a.movePalette(-1)
+
+			return a.page.Redraw(ctx)
+		case "escape":
+			return a.closePalette(ctx)
+		default:
+			// Editor chords (Ctrl+S and friends) keep working mid-edit;
+			// every other key belongs to the overlay input.
+			if !(a.editing && a.ctrl) {
+				return nil
+			}
+		}
 	}
 
 	if a.editing {
@@ -1663,10 +2324,10 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 		}
 	}
 
-	if a.ctrl && key == "a" && !a.shift {
+	if a.ctrl && key == "a" && !a.shift && a.keymapAllows("select-all-files", key) {
 		if a.mode == "changes" && !a.confirmOpen {
 			switch a.page.Form().FocusID() {
-			case "filter", "palette", "find", "branch-filter", "workspace-search", "project-path", "drawer-path", "editor", "edit-surface":
+			case "filter", "palette", "find", "find-replace", "branch-filter", "workspace-search", "workspace-replace", "project-path", "drawer-path", "browse-filter", "editor", "edit-surface":
 			default:
 				a.selectAllFiles()
 				a.refresh()
@@ -1678,37 +2339,109 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 		return nil
 	}
 
-	if a.ctrl && key == "p" {
+	if a.ctrl && key == "p" && a.keymapAllows("quick-open", key) {
 		return a.openPalette(ctx)
 	}
 
-	if a.ctrl && a.shift && key == "f" {
+	// Ctrl+G opens the go-to-line overlay, in or out of edit mode.
+	if a.ctrl && !a.shift && key == "g" {
+		return a.openGotoPalette(ctx)
+	}
+
+	// Ctrl+Shift+O opens the file-scoped symbol overlay. Key recon: the
+	// window sends "o" with both ctrl and shift tracked from their key
+	// events, mirroring the Ctrl+Shift+F/V chords below.
+	if a.ctrl && a.shift && key == "o" {
+		return a.openSymbolPalette(ctx)
+	}
+
+	// Ctrl+D jumps to the definition of the symbol under the caret. F12
+	// stays with the dev dock, so Ctrl+D is the definition chord; it was
+	// verified free (no other branch or catalog default consumes it).
+	if a.ctrl && !a.shift && key == "d" && a.keymapAllows("goto-definition", key) {
+		return a.gotoDefinitionAtCaret(ctx)
+	}
+
+	// Ctrl+M jumps to the matching bracket (Ctrl+Shift+M selects to it).
+	// Both need a live edit buffer; preview and token views no-op with a
+	// toast instead of mutating anything.
+	if a.ctrl && key == "m" {
+		if !a.editing || a.edit == nil {
+			a.showToast("info", "Bracket match", "Press Ctrl+E to edit, then Ctrl+M jumps to the matching bracket.")
+			a.refresh()
+
+			return a.page.Redraw(ctx)
+		}
+
+		return a.jumpToBracket(ctx, a.shift)
+	}
+
+	// Ctrl+/ toggles line comments. The edit path toasts JSON and plain
+	// text (no style); outside edit mode it asks for Ctrl+E first.
+	// Key recon: "slash" on most layouts, "/" on others.
+	if a.ctrl && !a.shift && (key == "slash" || key == "/") {
+		return a.toggleLineComment(ctx)
+	}
+
+	// Ctrl+K pins/unpins the focused tab; Ctrl+Shift+T reopens the last
+	// closed tab. Both were verified free (no prior branch) and share the
+	// terminal/form focus guards in pinKeyReady; the terminal branch above
+	// already swallowed shell-focused keys.
+	if a.ctrl && a.shift && key == "t" {
+		if !a.pinKeyReady() {
+			return nil
+		}
+
+		a.reopenClosedTab()
+
+		return a.page.Redraw(ctx)
+	}
+
+	if a.ctrl && !a.shift && key == "k" {
+		if !a.pinKeyReady() {
+			return nil
+		}
+
+		a.togglePinFocused()
+
+		return a.page.Redraw(ctx)
+	}
+
+	if a.ctrl && a.shift && key == "f" && a.keymapAllows("workspace-search", key) {
 		return a.openWorkspaceSearch(ctx)
 	}
 
-	if a.ctrl && key == "f" {
+	if a.ctrl && a.shift && key == "h" && a.keymapAllows("workspace-replace", key) {
+		return a.openWorkspaceReplace(ctx)
+	}
+
+	if a.ctrl && key == "f" && a.keymapAllows("find-in-file", key) {
 		return a.openFind(ctx)
 	}
 
-	if a.ctrl && key == "s" {
+	if a.ctrl && key == "h" && a.keymapAllows("replace-in-file", key) {
+		return a.openReplace(ctx)
+	}
+
+	if a.ctrl && key == "s" && a.keymapAllows("save-file", key) {
 		a.saveDirtyActive()
 
 		return a.page.Redraw(ctx)
 	}
 
-	if a.ctrl && key == "e" {
+	if a.ctrl && key == "e" && a.keymapAllows("toggle-edit", key) {
 		a.toggleEdit()
 
 		return a.page.Redraw(ctx)
 	}
 
-	if a.ctrl && key == "backslash" {
+	if a.ctrl && key == "backslash" && a.keymapAllows("toggle-split", key) {
 		a.toggleSplit()
 
 		return a.page.Redraw(ctx)
 	}
 
-	if a.ctrl && a.shift && key == "v" {
+	if a.ctrl && a.shift && key == "v" && a.keymapAllows("toggle-preview", key) {
 		a.togglePreview()
 
 		return a.page.Redraw(ctx)
@@ -1718,13 +2451,15 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 	// closed. The editing branch above already returned, Ctrl+Shift+V
 	// preview keeps its own branch, and overlays and text fields keep the
 	// chord through pasteTargetReady. This sits before treeKeyDown so the
-	// chord pastes instead of moving focus.
-	if a.ctrl && !a.shift && key == "v" && a.pasteTargetReady() {
+	// chord pastes instead of moving focus. The allows gates kill the old
+	// chords when paste/copy/cut are rebound; uncustomized behavior is
+	// unchanged.
+	if a.ctrl && !a.shift && key == "v" && a.pasteTargetReady() && a.keymapAllows("paste-explorer", key) {
 		return a.pasteFromClipboard(ctx)
 	}
 
-	if a.ctrl && !a.shift && (key == "c" || key == "x") && !a.editing && a.explorerCopyReady() {
-		if done, err := a.copyExplorerSelection(ctx, key == "x"); done {
+	if a.ctrl && !a.shift && !a.editing && a.explorerCopyReady() && (a.keymapMatches("cut-path", key) || a.keymapMatches("copy-path", key)) {
+		if done, err := a.copyExplorerSelection(ctx, a.keymapMatches("cut-path", key)); done {
 			return err
 		}
 	}
@@ -1744,6 +2479,9 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 
 			return a.page.Redraw(ctx)
 		case "enter":
+			if a.ctrl {
+				return a.openReplaceConfirm(ctx)
+			}
 			a.openSearchHit(a.searchIndex)
 
 			return a.page.Redraw(ctx)
@@ -1794,8 +2532,47 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 		}
 	}
 
+	if a.page.Form().FocusID() == "find-replace" {
+		switch key {
+		case "escape":
+			return a.closeFind(ctx)
+		case "enter":
+			if a.ctrl {
+				return a.replaceAllInFile(ctx)
+			}
+
+			return a.replaceOne(ctx)
+		default:
+			return nil
+		}
+	}
+
 	if handled, err := a.treeKeyDown(ctx, key); handled || err != nil {
 		return err
+	}
+
+	if a.page.Form().FocusID() == "workspace-replace" {
+		switch key {
+		case "arrowdown":
+			a.searchStep(1)
+
+			return a.page.Redraw(ctx)
+		case "arrowup":
+			a.searchStep(-1)
+
+			return a.page.Redraw(ctx)
+		case "enter":
+			if a.ctrl {
+				return a.openReplaceConfirm(ctx)
+			}
+			a.openSearchHit(a.searchIndex)
+
+			return a.page.Redraw(ctx)
+		case "escape":
+			return a.closeWorkspaceSearch(ctx)
+		default:
+			return nil
+		}
 	}
 
 	if a.page.Form().FocusID() == "branch-filter" {
@@ -1812,6 +2589,73 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 			}
 
 			return a.page.Redraw(ctx)
+		default:
+			return nil
+		}
+	}
+
+	if a.page.Form().FocusID() == "browse-filter" {
+		switch key {
+		case "arrowdown":
+			a.browseList.scrollBy(1, len(a.browseFilteredEntries()))
+			a.refresh()
+
+			return a.page.Redraw(ctx)
+		case "arrowup":
+			a.browseList.scrollBy(-1, len(a.browseFilteredEntries()))
+			a.refresh()
+
+			return a.page.Redraw(ctx)
+		case "pagedown":
+			a.browseList.scrollBy(browseListVisible-1, len(a.browseFilteredEntries()))
+			a.refresh()
+
+			return a.page.Redraw(ctx)
+		case "pageup":
+			a.browseList.scrollBy(-(browseListVisible - 1), len(a.browseFilteredEntries()))
+			a.refresh()
+
+			return a.page.Redraw(ctx)
+		case "home":
+			a.browseList.Offset = 0
+			a.refresh()
+
+			return a.page.Redraw(ctx)
+		case "end":
+			total := len(a.browseFilteredEntries())
+			a.browseList.Offset = browseClampOffset(total, total)
+			a.refresh()
+
+			return a.page.Redraw(ctx)
+		case "enter":
+			rows := a.browseFilteredEntries()
+			if len(rows) > 0 {
+				idx := a.browseList.Offset
+				if idx < 0 || idx >= len(rows) {
+					idx = 0
+				}
+				path := rows[idx].Path
+				if wsl.IsWSLDistrosRoot(path) || wsl.IsWSLDistroRoot(path) || isDir(path) {
+					a.setBrowseRoot(path)
+					a.refresh()
+
+					return a.page.Redraw(ctx)
+				}
+			}
+
+			return a.page.Redraw(ctx)
+		case "escape":
+			if a.browseFilter != "" {
+				a.browseFilter = ""
+				a.page.Form().SetFormValue("browse-filter", "")
+				a.browseList.reset()
+				a.refresh()
+
+				return a.page.Redraw(ctx)
+			}
+			// Empty filter falls through to the browseOpen escape above
+			// on the next pass; keep focus here for now.
+			return nil
 		default:
 			return nil
 		}
@@ -1858,18 +2702,57 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 		return a.page.Redraw(ctx)
 	}
 
+	// A focused split divider resizes the panes from the keyboard: arrows
+	// nudge, Home restores the default. Other keys fall through so the
+	// divider never traps navigation.
+	if a.page.Form().FocusID() == "split-divider" && a.split && a.mode == "explorer" {
+		ratio := a.splitRatio
+
+		switch key {
+		case "arrowleft":
+			ratio -= splitRatioStep
+		case "arrowright":
+			ratio += splitRatioStep
+		case "home":
+			ratio = defaultSplitRatio
+		default:
+			return nil
+		}
+
+		a.setSplitRatio(ratio)
+		a.refresh()
+
+		return a.page.Redraw(ctx)
+	}
+
 	// Ctrl+Z / Ctrl+Y belong to the Undo/Redo chord (desktop) and must not
 	// fall through to the plain-key wrap toggle below.
 	if a.ctrl && (key == "z" || key == "y") {
 		return nil
 	}
 
+	// Rebound chords no home branch names fire here, after every overlay and
+	// editing guard, so precedence for defaults is unchanged. A rebound old
+	// chord is dead by the allows gates in the switch below.
+	if handled, err := a.dispatchCustomKeymap(ctx, key); handled || err != nil {
+		return err
+	}
+
 	switch key {
 	case "1":
+		if !a.keymapAllows("mode-explorer", key) {
+			return nil
+		}
 		a.setMode(ctx, "explorer")
 	case "2":
+		if !a.keymapAllows("mode-changes", key) {
+			return nil
+		}
 		a.setMode(ctx, "changes")
 	case "3":
+		if !a.keymapAllows("toggle-details", key) {
+			return nil
+		}
 		a.toggleDetails()
 	case "arrowdown":
 		a.scrollFocusedGroup(a.zx(scrollStep))
@@ -1896,26 +2779,66 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 	case "end":
 		a.scrollFocusedGroupToEnd()
 	case "f":
+		if !a.keymapAllows("focus-filter", key) {
+			return nil
+		}
 		return a.focusFilter(ctx)
 	case "w":
+		if !a.keymapAllows("close-tab", key) {
+			return nil
+		}
 		if a.mode == "changes" {
 			a.closeWorkingTree(ctx)
+		} else if a.mode == "merge" {
+			a.requestCloseMergeEditor()
 		} else {
-			a.closeTab(a.active)
+			group := a.activeGroup()
+			a.requestCloseTabIn(group, a.groupActive(group))
 		}
 	case "z":
+		if !a.keymapAllows("toggle-wrap", key) {
+			return nil
+		}
 		a.toggleWrap()
+	case "b":
+		// Blame owns the bare B chord: no home branch names it (verified
+		// against the mode/filter/tab keys above), so it fires only when
+		// uncustomized or rebound to B, like the Z wrap toggle beside it.
+		if !a.keymapAllows("toggle-blame", key) {
+			return nil
+		}
+		a.toggleBlame()
+	case "t":
+		if !a.keymapAllows("toggle-sticky", key) {
+			return nil
+		}
+		a.toggleStickyScroll()
 	case "m":
+		if !a.keymapAllows("toggle-preview-key", key) {
+			return nil
+		}
 		a.togglePreview()
 
 		return a.page.Redraw(ctx)
 	case "r":
+		if !a.keymapAllows("reload-file", key) {
+			return nil
+		}
 		if a.mode == "changes" {
 			a.ReloadChanges(ctx, true)
 		} else {
 			a.reloadActive(ctx)
 		}
 	case "s":
+		if a.shift && !a.ctrl && a.keymapAllows("stage-hunk", key) {
+			if a.mode == "changes" {
+				if err := a.stageHunkAtCursor(ctx); err != nil {
+					return err
+				}
+			}
+
+			return a.page.Redraw(ctx)
+		}
 		if a.mode == "changes" {
 			a.setSplit(true)
 		}
@@ -1924,10 +2847,16 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 			a.setSplit(false)
 		}
 	case "n":
+		if !a.keymapAllows("hunk-next", key) {
+			return nil
+		}
 		if a.mode == "changes" {
 			a.jumpHunk(1)
 		}
 	case "p":
+		if !a.keymapAllows("hunk-prev", key) {
+			return nil
+		}
 		if a.mode == "changes" {
 			a.jumpHunk(-1)
 		}
@@ -1968,8 +2897,47 @@ func (a *App) onKeyUp(ctx context.Context, key string) error {
 // onSubmit opens the selected palette row or advances find. Enter and
 // NumpadEnter arrive here.
 func (a *App) onSubmit(ctx context.Context) error {
+	if a.commitDialogOpen && !a.confirmOpen {
+		if a.ctrl {
+			return a.submitCommitDialog(ctx)
+		}
+
+		return nil
+	}
+
+	// Goto and symbol overlays submit from the palette input in or out of
+	// edit mode; they route before the editing branch so Enter jumps
+	// instead of inserting a newline.
+	if a.paletteOpen && a.page.Form().FocusID() == "palette" {
+		switch a.paletteMode {
+		case paletteModeGoto:
+			return a.submitGoto(ctx)
+		case paletteModeSymbols:
+			return a.submitSymbol(ctx)
+		}
+	}
+
 	if a.editing {
-		return a.insertEditText(ctx, "\n")
+		return a.insertNewlineWithIndent(ctx)
+	}
+
+	if a.browseOpen && a.page.Form().FocusID() == "browse-filter" {
+		rows := a.browseFilteredEntries()
+		if len(rows) > 0 {
+			idx := a.browseList.Offset
+			if idx < 0 || idx >= len(rows) {
+				idx = 0
+			}
+			path := rows[idx].Path
+			if wsl.IsWSLDistrosRoot(path) || wsl.IsWSLDistroRoot(path) || isDir(path) {
+				a.setBrowseRoot(path)
+				a.refresh()
+
+				return a.page.Redraw(ctx)
+			}
+		}
+
+		return nil
 	}
 
 	if (a.fileMenu || a.browseOpen) && (a.page.Form().FocusID() == "project-path" ||
@@ -1986,6 +2954,9 @@ func (a *App) onSubmit(ctx context.Context) error {
 			a.refresh()
 			return nil
 		}
+		if a.tryHandoffToWSL(root) {
+			return nil
+		}
 		return a.switchProject(ctx, root)
 	}
 
@@ -1996,6 +2967,24 @@ func (a *App) onSubmit(ctx context.Context) error {
 		}
 
 		a.findStep(delta)
+
+		return a.page.Redraw(ctx)
+	}
+
+	if a.findOpen && a.page.Form().FocusID() == "find-replace" {
+		if a.ctrl {
+			return a.replaceAllInFile(ctx)
+		}
+
+		return a.replaceOne(ctx)
+	}
+
+	if a.searchOpen && a.page.Form().FocusID() == "workspace-replace" {
+		if a.ctrl {
+			return a.openReplaceConfirm(ctx)
+		}
+
+		a.openSearchHit(a.searchIndex)
 
 		return a.page.Redraw(ctx)
 	}
@@ -2018,7 +3007,36 @@ func (a *App) onSubmit(ctx context.Context) error {
 		index = len(rows) - 1
 	}
 
-	a.openFile(rows[index].Path)
+	row := rows[index]
+
+	// A `>` command row dispatches instead of opening a file.
+	if row.Cmd != "" {
+		return a.runPaletteCommand(ctx, row.Cmd)
+	}
+
+	// A ":line" query in the files overlay is a go-to alias.
+	if a.paletteMode == paletteModeFiles && isGotoQuery(a.paletteQuery) {
+		return a.submitGoto(ctx)
+	}
+
+	// A symbol row jumps to its line with the caret, like submitSymbol.
+	if row.Symbol {
+		line := row.No
+		path := row.Path
+
+		if err := a.closePalette(ctx); err != nil {
+			return err
+		}
+
+		if path != "" && (a.activeDoc() == nil || a.activeDoc().Path != path) {
+			a.openFileAtPreview(a.activeGroup(), path, true)
+		}
+
+		return a.gotoLine(ctx, line, 1)
+	}
+
+	// Palette Enter previews: reuses the preview slot instead of pinning.
+	a.openFileAtPreview(a.activeGroup(), row.Path, true)
 
 	if err := a.page.Form().Focus(ctx, ""); err != nil {
 		return err
@@ -2110,8 +3128,9 @@ func isTreeRowID(id string) bool {
 // keyboard, so merge n/p shortcuts do not steal typed characters.
 func mergeTextFocus(focus string) bool {
 	switch focus {
-	case "filter", "palette", "find", "branch-filter", "workspace-search",
-		"project-path", "drawer-path", "editor", "edit-surface":
+	case "filter", "palette", "find", "find-replace", "branch-filter", "workspace-search",
+		"workspace-replace",
+		"project-path", "drawer-path", "browse-filter", "editor", "edit-surface":
 		return true
 	default:
 		return false
@@ -2128,6 +3147,27 @@ func actionIndex(action, prefix string) (int, bool) {
 	return n, true
 }
 
+// parseTermLinkAction parses term-link:row:seg click actions.
+func parseTermLinkAction(action string) (int, int, bool) {
+	rest, ok := strings.CutPrefix(action, "term-link:")
+	if !ok {
+		return 0, 0, false
+	}
+	rowText, segText, ok := strings.Cut(rest, ":")
+	if !ok {
+		return 0, 0, false
+	}
+	row, err := strconv.Atoi(rowText)
+	if err != nil || row < 0 {
+		return 0, 0, false
+	}
+	seg, err := strconv.Atoi(segText)
+	if err != nil || seg < 0 {
+		return 0, 0, false
+	}
+	return row, seg, true
+}
+
 // devMessage is the toast copy for the dock toggle.
 func devMessage(on bool) string {
 	if on {
@@ -2138,18 +3178,38 @@ func devMessage(on bool) string {
 }
 
 // onToggleDir handles expanding or collapsing a directory in the tree.
-// When expanding an unloaded directory, its immediate children are loaded from disk.
+// It is enqueue-only: expanding an unloaded directory marks it Loading and
+// queues a background read. The row paints a spinner in one frame with no
+// input freeze; collapsing drops the token so a late reply is discarded.
 func (a *App) onToggleDir(path string) {
+	for _, suf := range []string{"/\u2026retry", "/\u2026more", "/\u2026"} {
+		if strings.HasSuffix(path, suf) {
+			base := strings.TrimSuffix(path, suf)
+			if strings.HasSuffix(path, "/\u2026retry") && base != "" {
+				a.requestDirLoad(base)
+				a.refresh()
+			}
+			return
+		}
+	}
 	a.folders[path] = !a.folders[path]
 
 	if a.folders[path] {
-		if node := findTreeNode(a.ws.Tree, path); node != nil && node.Dir && !node.Loaded {
-			_ = a.ws.loadNode(node)
-		} else {
-			_ = a.ws.loadDir(path)
-		}
+		a.requestDirLoad(path)
 		a.revealTreeFolder(path)
+	} else {
+		// Collapse cancels: drop the token and the Loading mark.
+		delete(a.dirLoads, path)
+		if node := findTreeNode(a.ws.Tree, path); node != nil {
+			node.Loading = false
+		}
 	}
 
+	a.refresh()
+}
+
+// retryDirLoad re-enqueues a failed directory load (retry row).
+func (a *App) retryDirLoad(path string) {
+	a.requestDirLoad(path)
 	a.refresh()
 }

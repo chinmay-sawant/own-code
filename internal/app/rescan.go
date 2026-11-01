@@ -78,9 +78,26 @@ func workspaceFilesByPath(w *workspace) map[string]*fileMeta {
 }
 
 // rescanDiskWorkspace scans root again and reports how it moved from old. A
-// limit of zero or less means MaxWorkspaceFiles.
+// limit of zero or less means MaxWorkspaceFiles. The previous workspace's
+// scan filter carries over so excludes survive rescans. Lazy workspaces use
+// the incremental mode (re-ReadDir root + each Loaded dir) so a watcher burst
+// never pays a full walk; full walks increment fullWalkCounter.
 func rescanDiskWorkspace(root string, old *workspace, limit int) (*workspace, workspaceDelta, error) {
-	next, err := loadDiskWorkspaceWithLimit(root, limit)
+	if old != nil && old.Lazy && (limit <= 0 || limit == MaxWorkspaceFiles) {
+		return rescanLazyWorkspace(root, old)
+	}
+	var filter *scanExcludes
+	if old != nil {
+		filter = old.scanFilter
+	}
+	return rescanDiskWorkspaceExcludes(root, old, limit, filter)
+}
+
+// rescanDiskWorkspaceExcludes rescans with an explicit custom-excludes
+// filter, replacing the carried-over one. A nil filter drops excludes.
+func rescanDiskWorkspaceExcludes(root string, old *workspace, limit int, filter *scanExcludes) (*workspace, workspaceDelta, error) {
+	noteFullWalk()
+	next, err := loadDiskWorkspaceWithLimitExcludes(root, limit, filter)
 	if err != nil {
 		return nil, workspaceDelta{}, err
 	}
@@ -91,6 +108,65 @@ func rescanDiskWorkspace(root string, old *workspace, limit int) (*workspace, wo
 	}
 
 	return next, diffWorkspace(old, next), nil
+}
+
+// rescanLazyWorkspace re-reads root and each Loaded dir, preserving folders
+// and Loaded bits. Collapsed dirs stay unloaded; new files under loaded dirs
+// appear; deleted dirs prune. No full walk runs.
+func rescanLazyWorkspace(root string, old *workspace) (*workspace, workspaceDelta, error) {
+	if old == nil {
+		noteFullWalk()
+		next, err := loadDiskWorkspaceLazy(root)
+		if err != nil {
+			return nil, workspaceDelta{}, err
+		}
+		return next, diffWorkspace(nil, next), nil
+	}
+	// Snapshot expand state and loaded paths.
+	abs, err := filepathAbs(root)
+	if err != nil {
+		return nil, workspaceDelta{}, err
+	}
+	_ = abs
+	next, err := loadDiskWorkspaceLazy(root)
+	if err != nil {
+		return nil, workspaceDelta{}, err
+	}
+	// Preserve folders; re-load each previously Loaded dir depth-first.
+	next.Lazy = true
+	// Carry over the old expand set; installRescan keeps folders from App.
+	// Reload loaded dirs in depth order so ancestors exist first.
+	var loaded []string
+	var collect func([]*fileNode)
+	collect = func(nodes []*fileNode) {
+		for _, n := range nodes {
+			if n.Dir && n.Loaded {
+				loaded = append(loaded, n.Path)
+			}
+			collect(n.Children)
+		}
+	}
+	collect(old.Tree)
+	// Sort shallow-first.
+	sort.Slice(loaded, func(i, j int) bool {
+		di := strings.Count(loaded[i], "/")
+		dj := strings.Count(loaded[j], "/")
+		if di != dj {
+			return di < dj
+		}
+		return loaded[i] < loaded[j]
+	})
+	for _, path := range loaded {
+		// Ensure ancestors exist in next (loadDir creates them), then load.
+		_ = next.loadDir(path)
+	}
+	next.Truncated = false
+	next.TruncatedNote = ""
+	return next, diffWorkspace(old, next), nil
+}
+
+func filepathAbs(root string) (string, error) {
+	return filepath.Abs(root)
 }
 
 // isGitMetadataChange reports whether path is a git ref, index, or log file
