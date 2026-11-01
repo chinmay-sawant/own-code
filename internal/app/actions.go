@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"runtime"
 	"strconv"
 	"strings"
 
+	"github.com/chinmay-sawant/own-code/internal/wsl"
 	"github.com/chinmay-sawant/ownframe"
 )
 
@@ -68,7 +70,7 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 	case action == "":
 		if box.ID == "filter" || box.ID == "palette" || box.ID == "find" || box.ID == "branch-filter" ||
 			box.ID == "workspace-search" || box.ID == "editor" || box.ID == "edit-surface" || box.ID == "project-path" ||
-			box.ID == "drawer-path" {
+			box.ID == "drawer-path" || box.ID == "browse-filter" {
 			return nil
 		}
 
@@ -218,7 +220,7 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.refresh()
 
 		if a.fileMenu {
-			return a.page.Form().Focus(ctx, "drawer-path")
+			return a.page.Form().Focus(ctx, "project-toggle")
 		}
 
 		return a.page.Form().Focus(ctx, "")
@@ -233,8 +235,6 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 	case action == "file-reset":
 		a.resetLayout()
 		return a.page.Form().Focus(ctx, "")
-	case action == "file-reload-window":
-		return a.reloadWindow(ctx)
 	case action == "file-new-window":
 		a.fileMenu = false
 		a.projectOpen = false
@@ -266,6 +266,9 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 			a.refresh()
 			return nil
 		}
+		if a.tryHandoffToWSL(root) {
+			return nil
+		}
 		a.browseOpen = false
 		return a.switchProject(ctx, root)
 	case strings.HasPrefix(action, "project-open-path:"):
@@ -278,6 +281,9 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 			a.refresh()
 			return nil
 		}
+		if a.tryHandoffToWSL(root) {
+			return nil
+		}
 		a.browseOpen = false
 		return a.switchProject(ctx, root)
 	case action == "browse-open":
@@ -286,49 +292,64 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.recentOpen = false
 		a.startBrowse()
 		a.refresh()
-		return a.page.Form().Focus(ctx, "project-path")
+		return a.page.Form().Focus(ctx, "browse-filter")
 	case action == "browse-close", action == "browse-backdrop":
 		a.browseOpen = false
 		a.refresh()
 		return nil
+	case action == "browse-filter-clear":
+		a.browseFilter = ""
+		a.page.Form().SetFormValue("browse-filter", "")
+		a.browseList.reset()
+		a.refresh()
+		return a.page.Form().Focus(ctx, "browse-filter")
 	case action == "browse-up":
 		next, ok := browseUpTarget(a.browseRoot)
 		if !ok {
 			return nil
 		}
-		a.browseRoot = next
-		a.browseList.reset()
-		a.fileAlert = ""
+		a.setBrowseRoot(next)
 		a.refresh()
 		return nil
 	case action == "browse-wsl":
-		a.browseRoot = a.browseStartRoot()
-		if a.browseRoot == "" {
-			return nil
-		}
-		a.browseList.reset()
-		a.fileAlert = ""
-		a.refresh()
-		return nil
-	case action == "browse-windows":
-		for c := 'c'; c <= 'z'; c++ {
-			candidate := "/mnt/" + string(c)
-			if isDir(candidate) {
-				a.browseRoot = candidate
-				a.browseList.reset()
-				a.fileAlert = ""
-				a.refresh()
-				return nil
-			}
-		}
-		if isDir("/mnt") {
-			a.browseRoot = "/mnt"
-			a.browseList.reset()
-			a.fileAlert = ""
+		// Inside the guest the choice jumps between the Linux home and the
+		// Windows drives under /mnt. On a Windows host with WSL installed
+		// it jumps into the virtual distro list instead.
+		if !isWSL() && runtime.GOOS == "windows" && wsl.Available() {
+			a.setBrowseRoot(wsl.WSLDistrosRoot)
 			a.refresh()
 			return nil
 		}
-		a.fileAlert = "No Windows drives found under /mnt."
+		root := a.browseStartRoot()
+		if root == "" {
+			return nil
+		}
+		a.setBrowseRoot(root)
+		a.refresh()
+		return nil
+	case action == "browse-windows":
+		// Inside the guest this jumps to the first Windows drive under
+		// /mnt. On a Windows host it jumps back to the This PC drives
+		// level, the counterpart of the WSL distro list.
+		if isWSL() {
+			for c := 'c'; c <= 'z'; c++ {
+				candidate := "/mnt/" + string(c)
+				if isDir(candidate) {
+					a.setBrowseRoot(candidate)
+					a.refresh()
+					return nil
+				}
+			}
+			if isDir("/mnt") {
+				a.setBrowseRoot("/mnt")
+				a.refresh()
+				return nil
+			}
+			a.fileAlert = "No Windows drives found under /mnt."
+			a.refresh()
+			return nil
+		}
+		a.setBrowseRoot("")
 		a.refresh()
 		return nil
 	case strings.HasPrefix(action, "browse-enter:"):
@@ -336,14 +357,20 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		if path == "" {
 			return nil
 		}
+		// The virtual levels need no directory probe: the distro list is
+		// virtual and a listed distro exists even when its UNC is not yet
+		// awake (entering it starts the guest on first ReadDir).
+		if wsl.IsWSLDistrosRoot(path) || wsl.IsWSLDistroRoot(path) {
+			a.setBrowseRoot(path)
+			a.refresh()
+			return nil
+		}
 		if !isDir(path) {
 			a.fileAlert = "Folder not found: " + path
 			a.refresh()
 			return nil
 		}
-		a.browseRoot = path
-		a.browseList.reset()
-		a.fileAlert = ""
+		a.setBrowseRoot(path)
 		a.refresh()
 		return nil
 	case action == "browse-select":
@@ -353,6 +380,9 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		if blockedProjectRoot(a.browseRoot) {
 			a.fileAlert = "Drive roots can't be opened as projects. Pick a folder inside it."
 			a.refresh()
+			return nil
+		}
+		if a.tryHandoffToWSL(a.browseRoot) {
 			return nil
 		}
 		a.browseOpen = false
@@ -715,6 +745,15 @@ func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 		}
 
 		a.projectQuery = next
+		a.refresh()
+	case "browse-filter":
+		next := a.view.BrowseQuery
+		if next == a.browseFilter {
+			return nil
+		}
+
+		a.browseFilter = next
+		a.browseList.reset()
 		a.refresh()
 	}
 
@@ -1262,6 +1301,36 @@ func (a *App) onDragStart(ctx context.Context, box ownframe.Box) (bool, error) {
 		return true, nil
 	}
 
+	if box.ID == "browse-thumb" && a.browseOpen && a.view.BrowseScroll {
+		track := a.browseTrackHeight()
+		thumb := a.view.BrowseThumbH
+		total := len(a.browseFilteredEntries())
+		if total <= browseListVisible || track <= thumb {
+			return false, nil
+		}
+
+		a.browseDrag = true
+		a.browseDragAt = a.browseList.Offset
+		a.browseDragScale = float64(total-browseListVisible) / float64(track-thumb)
+
+		return true, nil
+	}
+
+	if box.ID == "browse-scroll" && a.browseOpen && a.view.BrowseScroll {
+		track := a.browseTrackHeight()
+		thumb := a.view.BrowseThumbH
+		total := len(a.browseFilteredEntries())
+		if total <= browseListVisible || track <= thumb {
+			return false, nil
+		}
+
+		a.browseDrag = true
+		a.browseDragAt = a.browseList.Offset
+		a.browseDragScale = float64(total-browseListVisible) / float64(track-thumb)
+
+		return true, nil
+	}
+
 	if box.ID == "drawer-resize" {
 		a.drawerDrag = true
 		a.drawerDragExtra = a.drawerExtra
@@ -1378,6 +1447,28 @@ func (a *App) onDragMove(ctx context.Context, dx, dy float64) error {
 		return a.page.Redraw(ctx)
 	}
 
+	if a.browseDrag {
+		total := len(a.browseFilteredEntries())
+		maxOffset := total - browseListVisible
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		offset := a.browseDragAt + int(dy*a.browseDragScale+roundHalf)
+		if offset < 0 {
+			offset = 0
+		}
+		if offset > maxOffset {
+			offset = maxOffset
+		}
+		if offset == a.browseList.Offset {
+			return nil
+		}
+		a.browseList.Offset = offset
+		a.refresh()
+
+		return a.page.Redraw(ctx)
+	}
+
 	if a.drawerDrag {
 		a.drawerDx += dx
 		extra := a.drawerDragExtra + int(a.drawerDx+roundHalf)
@@ -1440,6 +1531,7 @@ func (a *App) onDragEnd(ctx context.Context) error {
 	a.editorDrag.active = false
 	wasSelect := a.dragSelect
 	wasSearch := a.searchDrag
+	wasBrowse := a.browseDrag
 	a.dragSelect = false
 	a.searchDrag = false
 	a.searchDragScale = 0
@@ -1451,6 +1543,8 @@ func (a *App) onDragEnd(ctx context.Context) error {
 	a.changesScale = 0
 	a.historyListDrag = false
 	a.historyListScale = 0
+	a.browseDrag = false
+	a.browseDragScale = 0
 	a.drawerDrag = false
 	a.drawerDx = 0
 	if a.cardDrag {
@@ -1459,6 +1553,9 @@ func (a *App) onDragEnd(ctx context.Context) error {
 	a.cardDrag = false
 	a.cardDx = 0
 	a.cardDy = 0
+	if wasBrowse && a.browseOpen {
+		return a.page.Form().Focus(ctx, "browse-filter")
+	}
 	if wasSearch && a.searchOpen {
 		return a.page.Form().Focus(ctx, "workspace-search")
 	}
@@ -1573,6 +1670,14 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 
 			return a.page.Redraw(ctx)
 		}
+		if a.browseFilter != "" {
+			a.browseFilter = ""
+			a.page.Form().SetFormValue("browse-filter", "")
+			a.browseList.reset()
+			a.refresh()
+
+			return a.page.Redraw(ctx)
+		}
 		a.browseOpen = false
 		a.refresh()
 		if err := a.page.Redraw(ctx); err != nil {
@@ -1666,7 +1771,7 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 	if a.ctrl && key == "a" && !a.shift {
 		if a.mode == "changes" && !a.confirmOpen {
 			switch a.page.Form().FocusID() {
-			case "filter", "palette", "find", "branch-filter", "workspace-search", "project-path", "drawer-path", "editor", "edit-surface":
+			case "filter", "palette", "find", "branch-filter", "workspace-search", "project-path", "drawer-path", "browse-filter", "editor", "edit-surface":
 			default:
 				a.selectAllFiles()
 				a.refresh()
@@ -1812,6 +1917,73 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 			}
 
 			return a.page.Redraw(ctx)
+		default:
+			return nil
+		}
+	}
+
+	if a.page.Form().FocusID() == "browse-filter" {
+		switch key {
+		case "arrowdown":
+			a.browseList.scrollBy(1, len(a.browseFilteredEntries()))
+			a.refresh()
+
+			return a.page.Redraw(ctx)
+		case "arrowup":
+			a.browseList.scrollBy(-1, len(a.browseFilteredEntries()))
+			a.refresh()
+
+			return a.page.Redraw(ctx)
+		case "pagedown":
+			a.browseList.scrollBy(browseListVisible-1, len(a.browseFilteredEntries()))
+			a.refresh()
+
+			return a.page.Redraw(ctx)
+		case "pageup":
+			a.browseList.scrollBy(-(browseListVisible - 1), len(a.browseFilteredEntries()))
+			a.refresh()
+
+			return a.page.Redraw(ctx)
+		case "home":
+			a.browseList.Offset = 0
+			a.refresh()
+
+			return a.page.Redraw(ctx)
+		case "end":
+			total := len(a.browseFilteredEntries())
+			a.browseList.Offset = browseClampOffset(total, total)
+			a.refresh()
+
+			return a.page.Redraw(ctx)
+		case "enter":
+			rows := a.browseFilteredEntries()
+			if len(rows) > 0 {
+				idx := a.browseList.Offset
+				if idx < 0 || idx >= len(rows) {
+					idx = 0
+				}
+				path := rows[idx].Path
+				if wsl.IsWSLDistrosRoot(path) || wsl.IsWSLDistroRoot(path) || isDir(path) {
+					a.setBrowseRoot(path)
+					a.refresh()
+
+					return a.page.Redraw(ctx)
+				}
+			}
+
+			return a.page.Redraw(ctx)
+		case "escape":
+			if a.browseFilter != "" {
+				a.browseFilter = ""
+				a.page.Form().SetFormValue("browse-filter", "")
+				a.browseList.reset()
+				a.refresh()
+
+				return a.page.Redraw(ctx)
+			}
+			// Empty filter falls through to the browseOpen escape above
+			// on the next pass; keep focus here for now.
+			return nil
 		default:
 			return nil
 		}
@@ -1972,6 +2144,25 @@ func (a *App) onSubmit(ctx context.Context) error {
 		return a.insertEditText(ctx, "\n")
 	}
 
+	if a.browseOpen && a.page.Form().FocusID() == "browse-filter" {
+		rows := a.browseFilteredEntries()
+		if len(rows) > 0 {
+			idx := a.browseList.Offset
+			if idx < 0 || idx >= len(rows) {
+				idx = 0
+			}
+			path := rows[idx].Path
+			if wsl.IsWSLDistrosRoot(path) || wsl.IsWSLDistroRoot(path) || isDir(path) {
+				a.setBrowseRoot(path)
+				a.refresh()
+
+				return a.page.Redraw(ctx)
+			}
+		}
+
+		return nil
+	}
+
 	if (a.fileMenu || a.browseOpen) && (a.page.Form().FocusID() == "project-path" ||
 		a.page.Form().FocusID() == "drawer-path") {
 		root := strings.TrimSpace(a.view.ProjectQuery)
@@ -1984,6 +2175,9 @@ func (a *App) onSubmit(ctx context.Context) error {
 		if blockedProjectRoot(root) {
 			a.fileAlert = "Drive roots can't be opened as projects. Pick a folder inside it."
 			a.refresh()
+			return nil
+		}
+		if a.tryHandoffToWSL(root) {
 			return nil
 		}
 		return a.switchProject(ctx, root)
@@ -2111,7 +2305,7 @@ func isTreeRowID(id string) bool {
 func mergeTextFocus(focus string) bool {
 	switch focus {
 	case "filter", "palette", "find", "branch-filter", "workspace-search",
-		"project-path", "drawer-path", "editor", "edit-surface":
+		"project-path", "drawer-path", "browse-filter", "editor", "edit-surface":
 		return true
 	default:
 		return false

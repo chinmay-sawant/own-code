@@ -151,7 +151,7 @@
           </div>
           {{else}}
           <div class="mrow merge-line {{.Side}}{{if .Current}} current{{end}}" id="merge-side-{{.Conflict}}-{{if .No}}{{.No}}{{else}}meta{{end}}">
-            <span class="merge-side">{{if eq .Side "ours"}}Current{{else if eq .Side "theirs"}}Incoming{{else}}Base{{end}}</span>
+            <span class="merge-side">{{if .SideFirst}}{{if eq .Side "ours"}}Current{{else if eq .Side "theirs"}}Incoming{{else}}Base{{end}}{{end}}</span>
             <span class="merge-no">{{.No}}</span>
             <span class="merge-text">{{.Text}}</span>
           </div>

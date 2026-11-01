@@ -4,12 +4,14 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
 	"github.com/chinmay-sawant/own-code/internal/edit"
 	"github.com/chinmay-sawant/own-code/internal/merge"
 	"github.com/chinmay-sawant/own-code/internal/terminal"
+	"github.com/chinmay-sawant/own-code/internal/wsl"
 	"github.com/chinmay-sawant/ownframe"
 	"github.com/fsnotify/fsnotify"
 )
@@ -290,25 +292,29 @@ type App struct {
 	lastScroll    int
 	toast         toastView
 
-	settingsOpen bool
-	theme        string
-	fileMenu     bool
-	projectOpen  bool
-	projectQuery string
-	recentOpen   bool
-	recentRoots  []string
-	browseOpen   bool
-	browseRoot   string
-	browseList   browseListWindow
-	fileAlert    string
-	paletteOpen  bool
-	recent       []string
-	paletteQuery string
-	paletteIndex int
-	nav          []string
-	navAt        int
-	ctrl         bool
-	shift        bool
+	settingsOpen    bool
+	theme           string
+	fileMenu        bool
+	projectOpen     bool
+	projectQuery    string
+	recentOpen      bool
+	recentRoots     []string
+	browseOpen      bool
+	browseRoot      string
+	browseFilter    string
+	browseList      browseListWindow
+	browseDrag      bool
+	browseDragAt    int
+	browseDragScale float64
+	fileAlert       string
+	paletteOpen     bool
+	recent          []string
+	paletteQuery    string
+	paletteIndex    int
+	nav             []string
+	navAt           int
+	ctrl            bool
+	shift           bool
 	// pasteStaged is one in-app file copy staged for Ctrl+V. It is the
 	// Task 3 seam: the explorer Copy menu row stages here (see
 	// stageExplorerCopy), and the Ctrl+V/menu paste path consumes it
@@ -407,6 +413,7 @@ func NewWithLimit(root string, limit int) (*App, error) {
 		term:          terminal.NewManager(),
 		termHeight:    termDefaultHeight,
 	}
+	a.term.SetNotify(a.requestTerminalFrame)
 
 	if ws.Sample {
 		a.folders["backend"] = true
@@ -638,84 +645,6 @@ func (a *App) openNewWindow() error {
 	return nil
 }
 
-// reloadWindow rescans the current project and restores the saved layout.
-// The OS window keeps its size, so the page stays at the same resolution;
-// tabs that still exist stay open and the scroll offset is preserved.
-func (a *App) reloadWindow(ctx context.Context) error {
-	a.persistSession()
-	keepTabs := append([]string(nil), a.tabs...)
-	keepTabs2 := append([]string(nil), a.tabs2...)
-	keepActive, keepActive2 := a.active, a.active2
-	keepScroll, keepGroup := a.scrollY, a.scrollGroup
-	keepMode := a.mode
-
-	var ws *workspace
-	var err error
-
-	switch {
-	case a.ws.Sample:
-		ws, err = loadSampleWorkspace()
-	case a.scanLimit > 0 && a.scanLimit != MaxWorkspaceFiles:
-		ws, err = loadDiskWorkspaceWithLimit(a.ws.Root, a.scanLimit)
-	default:
-		ws, err = loadDiskWorkspaceLazy(a.ws.Root)
-	}
-
-	if err != nil {
-		a.showToast("error", "Reload failed", err.Error())
-		a.refresh()
-
-		return nil
-	}
-
-	a.StopWatcher()
-	a.ws = ws
-	a.docs = map[string]*fileDoc{}
-	a.dirty = map[string]bool{}
-	a.fileMenu = false
-	a.projectOpen = false
-	a.revertUndo = nil
-	a.revertRedo = nil
-	a.tabs = keepExistingTabs(keepTabs, ws)
-	a.tabs2 = keepExistingTabs(keepTabs2, ws)
-	a.active = clampSessionIndex(keepActive, len(a.tabs))
-	a.active2 = clampSessionIndex(keepActive2, len(a.tabs2))
-	a.mode = keepMode
-	a.statuses = statusMap(a.changes)
-	a.syncFileNav()
-	a.selectFirstDiff()
-
-	if len(a.tabs) == 0 {
-		a.openInitial()
-	} else {
-		a.addRecent(a.tabs[a.active])
-		a.pruneNavHistory()
-		if current := a.activeDocPath(); current != "" {
-			if len(a.nav) == 0 {
-				a.resetNavHistory(current)
-			} else if a.navAt < 0 || a.navAt >= len(a.nav) || a.nav[a.navAt] != current {
-				a.pushNavHistory(current)
-			}
-		}
-	}
-
-	a.scrollY = keepScroll
-	a.scrollGroup = keepGroup
-	a.resetScroll()
-	a.Page().Scroll().SetScrollOffset(0, keepScroll)
-	a.refresh()
-
-	if err := a.StartWatcher(ctx); err != nil {
-		a.setWatchError(err)
-		a.refresh()
-	}
-
-	a.showToast("success", "Window reloaded", "Same size, same project, fresh scan.")
-	a.refresh()
-
-	return nil
-}
-
 // resetLayout closes secondary UI and restores the default explorer layout.
 func (a *App) resetLayout() {
 	a.tabs = nil
@@ -736,6 +665,9 @@ func (a *App) resetLayout() {
 	a.fileMenu = false
 	a.browseOpen = false
 	a.browseRoot = ""
+	a.browseFilter = ""
+	a.browseDrag = false
+	a.browseDragScale = 0
 	a.fileAlert = ""
 	a.scrollY = 0
 	a.scrollGroup = [2]int{}
@@ -898,8 +830,12 @@ func (a *App) buildView() View {
 		BrowseOpen:    a.browseOpen,
 		BrowseRoot:    a.browseRoot,
 		BrowseName:    clipBrowsePath(winW, a.browseDisplayName()),
+		BrowseQuery:   a.browseFilter,
 		BrowseEntries: a.browseWindowedEntries(),
+		BrowseTotal:   len(a.browseFilteredEntries()),
 		IsWSL:         isWSL(),
+		IsWindows:     runtime.GOOS == "windows",
+		HasWSL:        wsl.Available(),
 		Alert:         a.fileAlert,
 		Themes:        a.themeRows(),
 		Workspace:     baseName(a.ws.Root),
@@ -932,6 +868,7 @@ func (a *App) buildView() View {
 	v.StickyTree = a.stickyTreeRows()
 	v.TreeVisible = a.treeVisibleRows()
 	a.fillTreeScroll(&v)
+	a.fillBrowseScroll(&v)
 	v.Tabs, v.TabsPrev, v.TabsNext = a.windowTabRows(0)
 	v.Recent = a.recentRows()
 	v.ActiveTab = a.active

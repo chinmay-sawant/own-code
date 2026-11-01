@@ -30,7 +30,7 @@ func (a *App) pasteTargetReady() bool {
 	}
 
 	switch a.page.Form().FocusID() {
-	case "palette", "workspace-search", "find", "filter", "branch-filter", "project-path", "drawer-path":
+	case "palette", "workspace-search", "find", "filter", "branch-filter", "project-path", "drawer-path", "browse-filter":
 		return false
 	}
 

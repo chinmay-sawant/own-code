@@ -14,6 +14,11 @@ const (
 	// browseListVisible is the rows the panel shows: the 320px panel
 	// max-height holds ten full 30px rows (see .file-item height).
 	browseListVisible = 10
+	// browseRowH is the 1x height of one .file-item row in the browse list.
+	// It feeds the scrollbar thumb geometry through a.zx like the tree.
+	browseRowH = 30
+	// browseThumbMin is the smallest thumb paint, matching the tree rail.
+	browseThumbMin = 18
 )
 
 // browseListWindow is the vertical scroll model for the browse dialog
@@ -75,12 +80,50 @@ func browseClampOffset(offset, total int) int {
 	return max(0, min(offset, maxOffset))
 }
 
-// browseWindowedEntries lists the browse root's subdirectories and returns
-// only the visible window. It keeps entry order, markup, ids, and actions
-// identical: buildView renders the slice the same way it rendered the full
-// list, so clicks keep working.
+// browseWindowedEntries lists the browse root's filtered subdirectories and
+// returns only the visible window. It keeps entry order, markup, ids, and
+// actions identical: buildView renders the slice the same way it rendered
+// the full list, so clicks keep working.
 func (a *App) browseWindowedEntries() []recentRootRow {
-	return a.browseList.windowed(a.browseEntries())
+	return a.browseList.windowed(a.browseFilteredEntries())
+}
+
+// fillBrowseScroll publishes the browse list scrollbar thumb geometry, the
+// same proportional-thumb math the explorer tree uses. The rail shows only
+// when the filtered list overflows the ten-row window.
+func (a *App) fillBrowseScroll(v *View) {
+	total := len(a.browseFilteredEntries())
+	v.BrowseTotal = total
+	if total <= browseListVisible {
+		v.BrowseScroll = false
+		return
+	}
+
+	track := browseListVisible * a.zx(browseRowH)
+	thumb := track * browseListVisible / total
+	if thumb < a.zx(browseThumbMin) {
+		thumb = a.zx(browseThumbMin)
+	}
+	if thumb > track {
+		thumb = track
+	}
+
+	maxOffset := total - browseListVisible
+	room := track - thumb
+	top := 0
+	if maxOffset > 0 && room > 0 {
+		top = a.browseList.Offset * room / maxOffset
+	}
+
+	v.BrowseScroll = true
+	v.BrowseThumbH = thumb
+	v.BrowseThumbTop = top
+	v.BrowseTrackH = track
+}
+
+// browseTrackHeight returns the 1x-scaled rail height the thumb drag uses.
+func (a *App) browseTrackHeight() int {
+	return browseListVisible * a.zx(browseRowH)
 }
 
 // browseWheelAt scrolls the folder list when a vertical wheel lands on it.
@@ -94,11 +137,16 @@ func (a *App) browseWheelAt(ctx context.Context, x, y, dy float64) (bool, error)
 
 	list, ok := findBoxID(a.page.Boxes(), "browse-list")
 	if !ok || x < list.X || x > list.X+list.W || y < list.Y || y > list.Y+list.H {
-		return false, nil
+		// The scroll rail sits beside the list: a wheel over the rail
+		// scrolls the same windowed rows.
+		rail, ok := findBoxID(a.page.Boxes(), "browse-scroll")
+		if !ok || x < rail.X || x > rail.X+rail.W || y < rail.Y || y > rail.Y+rail.H {
+			return false, nil
+		}
 	}
 
 	if rows := a.browseList.wheelRows(-dy * treeWheelRows); rows != 0 {
-		a.browseList.scrollBy(rows, len(a.browseEntries()))
+		a.browseList.scrollBy(rows, len(a.browseFilteredEntries()))
 		a.refresh()
 	}
 

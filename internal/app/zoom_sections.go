@@ -62,6 +62,12 @@ func zoomWindowControlCSS(b *strings.Builder, px func(int) string) {
 		{".browse-path", []string{" padding:0 ", " !important;"}, []int{4}},
 		{".browse-list", []string{" max-height:", " !important;"}, []int{180}},
 		{".browse-panel .browse-list", []string{" max-height:", " !important;"}, []int{320}},
+		{".browse-filter", []string{" gap:", " !important; padding:0 ", " !important; border-radius:", " !important;"}, []int{7, 8, 6}},
+		{".browse-filter-input", []string{" height:", " !important; line-height:", " !important;"}, []int{28, 28}},
+		{".browse-scroll", []string{" top:", " !important; bottom:", " !important; width:", " !important;"}, []int{1, 4, 8}},
+		{".browse-thumb", []string{" left:", " !important; width:", " !important; min-height:", " !important; border-radius:", " !important;"}, []int{1, 6, 18, 3}},
+		{".browse-actions", []string{" gap:", " !important;"}, []int{8}},
+		{".browse-meta", []string{" gap:", " !important; padding:0 ", " !important;"}, []int{8, 4}},
 		// Alerts and toast window controls.
 		{".file-alert", []string{" right:", " !important; width:", " !important; padding:", " ", " ", " ", " !important; border-radius:", " !important;"}, []int{14, 300, 8, 8, 8, 10, 8}},
 		{".file-alert-x", []string{" min-height:", " !important; height:", " !important; line-height:", " !important;"}, []int{24, 24, 24}},

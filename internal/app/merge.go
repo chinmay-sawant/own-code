@@ -313,12 +313,13 @@ func (a *App) mergeRowModels() []mergeRow {
 		oursStart := conflict.StartLine + 1
 		for j, line := range conflict.Ours {
 			rows = append(rows, mergeRow{
-				Kind:     mergeRowSide,
-				Side:     "ours",
-				Conflict: i,
-				Current:  current,
-				No:       strconv.Itoa(oursStart + j),
-				Text:     expandTabs(line),
+				Kind:      mergeRowSide,
+				Side:      "ours",
+				Conflict:  i,
+				Current:   current,
+				SideFirst: j == 0,
+				No:        strconv.Itoa(oursStart + j),
+				Text:      expandTabs(line),
 			})
 		}
 
@@ -332,12 +333,13 @@ func (a *App) mergeRowModels() []mergeRow {
 				baseStart := conflict.StartLine + 2 + len(conflict.Ours)
 				for j, line := range conflict.Base {
 					rows = append(rows, mergeRow{
-						Kind:     mergeRowSide,
-						Side:     "base",
-						Conflict: i,
-						Current:  current,
-						No:       strconv.Itoa(baseStart + j),
-						Text:     expandTabs(line),
+						Kind:      mergeRowSide,
+						Side:      "base",
+						Conflict:  i,
+						Current:   current,
+						SideFirst: j == 0,
+						No:        strconv.Itoa(baseStart + j),
+						Text:      expandTabs(line),
 					})
 				}
 
@@ -370,12 +372,13 @@ func (a *App) mergeRowModels() []mergeRow {
 
 		for j, line := range conflict.Theirs {
 			rows = append(rows, mergeRow{
-				Kind:     mergeRowSide,
-				Side:     "theirs",
-				Conflict: i,
-				Current:  current,
-				No:       strconv.Itoa(theirsStart + j),
-				Text:     expandTabs(line),
+				Kind:      mergeRowSide,
+				Side:      "theirs",
+				Conflict:  i,
+				Current:   current,
+				SideFirst: j == 0,
+				No:        strconv.Itoa(theirsStart + j),
+				Text:      expandTabs(line),
 			})
 		}
 

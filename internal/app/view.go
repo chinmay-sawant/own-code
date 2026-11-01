@@ -104,38 +104,46 @@ type View struct {
 	PaneWidth  int
 	Second     secondaryView
 
-	Diff          diffView
-	Merge         mergeView
-	History       historyView
-	Terminal      terminalView
-	Outline       []symbolRow
-	Toast         toastView
-	Confirm       confirmView
-	SettingsOpen  bool
-	Themes        []themeRow
-	Palette       paletteView
-	PaletteQuery  string
-	SearchQuery   string
-	Search        searchView
-	FileNav       fileNavView
-	ChangeLabel   string
-	CommitTip     commitFloatView
-	InlineCard    inlineCard
-	FileMenu      bool
-	ProjectOpen   bool
-	ProjectQuery  string
-	RecentOpen    bool
-	RecentFlyX    int
-	RecentFlyY    int
-	RecentRoots   []recentRootRow
-	QuickRoots    []recentRootRow
-	BrowseOpen    bool
-	BrowseRoot    string
-	BrowseName    string
-	BrowseEntries []recentRootRow
-	IsWSL         bool
-	Alert         string
-	ZoomLabel     string
+	Diff           diffView
+	Merge          mergeView
+	History        historyView
+	Terminal       terminalView
+	Outline        []symbolRow
+	Toast          toastView
+	Confirm        confirmView
+	SettingsOpen   bool
+	Themes         []themeRow
+	Palette        paletteView
+	PaletteQuery   string
+	SearchQuery    string
+	Search         searchView
+	FileNav        fileNavView
+	ChangeLabel    string
+	CommitTip      commitFloatView
+	InlineCard     inlineCard
+	FileMenu       bool
+	ProjectOpen    bool
+	ProjectQuery   string
+	RecentOpen     bool
+	RecentFlyX     int
+	RecentFlyY     int
+	RecentRoots    []recentRootRow
+	QuickRoots     []recentRootRow
+	BrowseOpen     bool
+	BrowseRoot     string
+	BrowseName     string
+	BrowseQuery    string
+	BrowseEntries  []recentRootRow
+	BrowseTotal    int
+	BrowseScroll   bool
+	BrowseThumbTop int
+	BrowseThumbH   int
+	BrowseTrackH   int
+	IsWSL          bool
+	IsWindows      bool
+	HasWSL         bool
+	Alert          string
+	ZoomLabel      string
 }
 
 // recentRootRow is one recently opened project root.
@@ -527,9 +535,12 @@ type mergeRow struct {
 	Side     string
 	Conflict int
 	Current  bool
-	Label    string
-	No       string
-	Text     string
+	// SideFirst marks the first line of a side block. Only that row prints
+	// the side name; the rest keep the side background without the label.
+	SideFirst bool
+	Label     string
+	No        string
+	Text      string
 }
 
 // symbolRow is one outline entry in the details panel.

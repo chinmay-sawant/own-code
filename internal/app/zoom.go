@@ -146,6 +146,8 @@ func zoomFontTable() []zoomFont {
 		{".file-item, .project-input", 11},
 		{".locations-label", 9},
 		{".browse-path", 10},
+		{".browse-filter-input", 11},
+		{".browse-meta", 9},
 		{".file-alert", 11},
 		{".file-alert-x", 10},
 		// Explorer tree and filter.

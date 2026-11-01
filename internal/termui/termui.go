@@ -56,16 +56,15 @@ func Render(snapshot terminal.Snapshot, visibleRows, scroll int) View {
 	}
 
 	total := len(snapshot.Lines)
+	if snapshot.TotalLines > 0 {
+		total = snapshot.TotalLines
+	}
 	scroll, maxScroll := ClampScroll(scroll, total, visibleRows)
 
-	start := total - visibleRows - scroll
-	if start < 0 {
-		start = 0
-	}
-	end := start + visibleRows
-	if end > total {
-		end = total
-	}
+	start := max(0, total-visibleRows-scroll)
+	end := min(total, start+visibleRows)
+	start = max(start, snapshot.LineOffset)
+	end = max(start, min(end, snapshot.LineOffset+len(snapshot.Lines)))
 
 	view := View{
 		Rows:      make([]Row, 0, end-start),
@@ -77,7 +76,7 @@ func Render(snapshot terminal.Snapshot, visibleRows, scroll int) View {
 	cursorLine := -1
 	if snapshot.CursorVisible && snapshot.Running &&
 		snapshot.CursorLine >= start && snapshot.CursorLine < end {
-		lineLen := len(snapshot.Lines[snapshot.CursorLine])
+		lineLen := len(snapshot.Lines[snapshot.CursorLine-snapshot.LineOffset])
 		if snapshot.CursorCol >= 0 && snapshot.CursorCol <= lineLen {
 			cursorLine = snapshot.CursorLine
 			view.CursorRow = snapshot.CursorLine
@@ -87,7 +86,7 @@ func Render(snapshot terminal.Snapshot, visibleRows, scroll int) View {
 
 	for line := start; line < end; line++ {
 		view.Rows = append(view.Rows, renderLine(
-			snapshot.Lines[line],
+			snapshot.Lines[line-snapshot.LineOffset],
 			line == cursorLine,
 			snapshot.CursorCol,
 		))
@@ -254,6 +253,24 @@ func KeyBytes(key string, ctrl, shift, alt bool) ([]byte, bool) {
 // is true, unmodified arrows and Home/End use the SS3 forms the shell asked
 // for; modified keys keep the CSI form.
 func KeyBytesFor(key string, ctrl, shift, alt, appCursor bool) ([]byte, bool) {
+	// The native window sends modifier prefixes on caret keys.
+	for {
+		prefix, rest, ok := strings.Cut(key, "+")
+		if !ok {
+			break
+		}
+		switch prefix {
+		case "ctrl":
+			ctrl = true
+		case "shift":
+			shift = true
+		case "alt":
+			alt = true
+		default:
+			return nil, false
+		}
+		key = rest
+	}
 	name := key
 	if len(name) > 1 {
 		name = strings.ToLower(name)

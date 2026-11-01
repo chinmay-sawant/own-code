@@ -121,7 +121,7 @@
   overflow: hidden;
   padding: 0 4px;
   border-radius: 3px;
-  background-color: rgba(255, 255, 255, 0.045);
+  background-color: var(--panel-3);
   color: var(--dim);
   font-family: var(--mono);
   font-size: 7.5px;
@@ -165,7 +165,7 @@
 }
 
 .term-tool:hover { background-color: var(--panel-3); color: var(--text); }
-.term-tool:disabled { color: #3a4152; }
+.term-tool:disabled { color: var(--dim); opacity: 0.45; }
 .term-tool.term-text { width: auto; flex: 0 0 auto; padding: 0 5px; font-size: 8.5px; }
 .term-add { font-size: 15px; font-weight: 500; }
 
@@ -197,7 +197,7 @@
   overflow: hidden;
   padding: 6px 10px;
   border: 0;
-  background-color: #080a10;
+  background-color: var(--term-bg);
   color: var(--text);
   cursor: text;
   font-family: var(--mono);
@@ -208,7 +208,7 @@
 }
 
 .terminal .term-body:focus,
-.terminal .term-body:focus-visible { outline: 0; background-color: #080a10; }
+.terminal .term-body:focus-visible { outline: 0; background-color: var(--term-bg); }
 .term-body.focus { box-shadow: inset 0 0 0 1px rgba(122, 162, 247, 0.45); }
 
 .term-row {
@@ -263,39 +263,39 @@
    both the prefixed names and the remaining bare tokens inside a terminal
    row. Scoping every rule to .term-row keeps the shared t- names in
    base.css out of the editor and diff renderers. */
-.term-row .t-fg0, .term-row .fg0 { color: #1b1f27; }
-.term-row .t-fg1, .term-row .fg1 { color: #f07178; }
-.term-row .t-fg2, .term-row .fg2 { color: #c3e88d; }
-.term-row .t-fg3, .term-row .fg3 { color: #ffcb6b; }
-.term-row .t-fg4, .term-row .fg4 { color: #82aaff; }
-.term-row .t-fg5, .term-row .fg5 { color: #c792ea; }
-.term-row .t-fg6, .term-row .fg6 { color: #89ddff; }
-.term-row .t-fg7, .term-row .fg7 { color: #c5cad6; }
-.term-row .t-fg8, .term-row .fg8 { color: #4a5262; }
-.term-row .t-fg9, .term-row .fg9 { color: #ff8b92; }
-.term-row .t-fg10, .term-row .fg10 { color: #b9f18d; }
-.term-row .t-fg11, .term-row .fg11 { color: #ffe0a3; }
-.term-row .t-fg12, .term-row .fg12 { color: #9ab8ff; }
-.term-row .t-fg13, .term-row .fg13 { color: #d7b4ff; }
-.term-row .t-fg14, .term-row .fg14 { color: #b6f2ff; }
-.term-row .t-fg15, .term-row .fg15 { color: #f7f9ff; }
+.term-row .t-fg0, .term-row .fg0 { color: var(--term0); }
+.term-row .t-fg1, .term-row .fg1 { color: var(--term1); }
+.term-row .t-fg2, .term-row .fg2 { color: var(--term2); }
+.term-row .t-fg3, .term-row .fg3 { color: var(--term3); }
+.term-row .t-fg4, .term-row .fg4 { color: var(--term4); }
+.term-row .t-fg5, .term-row .fg5 { color: var(--term5); }
+.term-row .t-fg6, .term-row .fg6 { color: var(--term6); }
+.term-row .t-fg7, .term-row .fg7 { color: var(--term7); }
+.term-row .t-fg8, .term-row .fg8 { color: var(--term8); }
+.term-row .t-fg9, .term-row .fg9 { color: var(--term9); }
+.term-row .t-fg10, .term-row .fg10 { color: var(--term10); }
+.term-row .t-fg11, .term-row .fg11 { color: var(--term11); }
+.term-row .t-fg12, .term-row .fg12 { color: var(--term12); }
+.term-row .t-fg13, .term-row .fg13 { color: var(--term13); }
+.term-row .t-fg14, .term-row .fg14 { color: var(--term14); }
+.term-row .t-fg15, .term-row .fg15 { color: var(--term15); }
 
-.term-row .t-bg0, .term-row .bg0 { background-color: #1b1f27; }
-.term-row .t-bg1, .term-row .bg1 { background-color: #f07178; }
-.term-row .t-bg2, .term-row .bg2 { background-color: #c3e88d; }
-.term-row .t-bg3, .term-row .bg3 { background-color: #ffcb6b; }
-.term-row .t-bg4, .term-row .bg4 { background-color: #82aaff; }
-.term-row .t-bg5, .term-row .bg5 { background-color: #c792ea; }
-.term-row .t-bg6, .term-row .bg6 { background-color: #89ddff; }
-.term-row .t-bg7, .term-row .bg7 { background-color: #c5cad6; }
-.term-row .t-bg8, .term-row .bg8 { background-color: #4a5262; }
-.term-row .t-bg9, .term-row .bg9 { background-color: #ff8b92; }
-.term-row .t-bg10, .term-row .bg10 { background-color: #b9f18d; }
-.term-row .t-bg11, .term-row .bg11 { background-color: #ffe0a3; }
-.term-row .t-bg12, .term-row .bg12 { background-color: #9ab8ff; }
-.term-row .t-bg13, .term-row .bg13 { background-color: #d7b4ff; }
-.term-row .t-bg14, .term-row .bg14 { background-color: #b6f2ff; }
-.term-row .t-bg15, .term-row .bg15 { background-color: #f7f9ff; }
+.term-row .t-bg0, .term-row .bg0 { background-color: var(--term0); }
+.term-row .t-bg1, .term-row .bg1 { background-color: var(--term1); }
+.term-row .t-bg2, .term-row .bg2 { background-color: var(--term2); }
+.term-row .t-bg3, .term-row .bg3 { background-color: var(--term3); }
+.term-row .t-bg4, .term-row .bg4 { background-color: var(--term4); }
+.term-row .t-bg5, .term-row .bg5 { background-color: var(--term5); }
+.term-row .t-bg6, .term-row .bg6 { background-color: var(--term6); }
+.term-row .t-bg7, .term-row .bg7 { background-color: var(--term7); }
+.term-row .t-bg8, .term-row .bg8 { background-color: var(--term8); }
+.term-row .t-bg9, .term-row .bg9 { background-color: var(--term9); }
+.term-row .t-bg10, .term-row .bg10 { background-color: var(--term10); }
+.term-row .t-bg11, .term-row .bg11 { background-color: var(--term11); }
+.term-row .t-bg12, .term-row .bg12 { background-color: var(--term12); }
+.term-row .t-bg13, .term-row .bg13 { background-color: var(--term13); }
+.term-row .t-bg14, .term-row .bg14 { background-color: var(--term14); }
+.term-row .t-bg15, .term-row .bg15 { background-color: var(--term15); }
 
 .term-row .t-bold, .term-row .bold { font-weight: 700; }
 .term-row .t-dim, .term-row .dim { opacity: 0.65; }

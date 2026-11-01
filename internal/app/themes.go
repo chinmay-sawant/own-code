@@ -1,6 +1,9 @@
 package app
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type theme struct {
 	ID, Name, Description                                                string
@@ -75,7 +78,79 @@ func themeCSS(id string) string {
 .lang-shell { background:#e5eed9 !important; color:#466420 !important; }
 .lang-plain { background:#e4e7eb !important; color:#485464 !important; }`
 		}
-		return fmt.Sprintf(`:root { %s --bg:%s !important; --panel:%s !important; --panel-2:%s !important; --panel-3:%s !important; --line:%s !important; --line-soft:%s !important; --text:%s !important; --muted:%s !important; --dim:%s !important; --icon:%s !important; --icon-strong:%s !important; --accent:%s !important; --syntax-keyword:%s !important; --syntax-type:%s !important; --syntax-function:%s !important; --syntax-string:%s !important; --syntax-number:%s !important; --syntax-comment:%s !important; --syntax-operator:%s !important; --syntax-variable:%s !important; --selection:%s !important; }`, semantic, t.Background, t.Panel, t.Panel2, t.Panel3, t.Line, t.Line, t.Text, t.Muted, t.Dim, t.Muted, t.Muted, t.Accent, t.Keyword, t.Type, t.Function, t.String, t.Number, t.Comment, t.Operator, t.Variable, t.Selection) + icons
+		return fmt.Sprintf(`:root { %s --bg:%s !important; --panel:%s !important; --panel-2:%s !important; --panel-3:%s !important; --line:%s !important; --line-soft:%s !important; --text:%s !important; --muted:%s !important; --dim:%s !important; --icon:%s !important; --icon-strong:%s !important; --accent:%s !important; --syntax-keyword:%s !important; --syntax-type:%s !important; --syntax-function:%s !important; --syntax-string:%s !important; --syntax-number:%s !important; --syntax-comment:%s !important; --syntax-operator:%s !important; --syntax-variable:%s !important; --selection:%s !important; }`, semantic, t.Background, t.Panel, t.Panel2, t.Panel3, t.Line, t.Line, t.Text, t.Muted, t.Dim, t.Muted, t.Muted, t.Accent, t.Keyword, t.Type, t.Function, t.String, t.Number, t.Comment, t.Operator, t.Variable, t.Selection) + icons + termCSS(id)
 	}
 	return ""
+}
+
+// termPalette is the terminal background plus the 16 ANSI colors for one
+// app theme. Dark themes keep a dark terminal body; light themes use a
+// light body with darkened ANSI colors so output stays readable.
+type termPalette struct {
+	bg     string
+	colors [16]string
+}
+
+func termPaletteFor(id string) termPalette {
+	switch id {
+	case "dracula":
+		return termPalette{"#282a36", [16]string{
+			"#21222c", "#ff5555", "#50fa7b", "#f1fa8c",
+			"#bd93f9", "#ff79c6", "#8be9fd", "#f8f8f2",
+			"#6272a4", "#ff6e6e", "#69ff94", "#ffffa5",
+			"#d6acff", "#ff92df", "#a4ffff", "#ffffff",
+		}}
+	case "light":
+		return termPalette{"#f4f4f4", [16]string{
+			"#1e1e1e", "#c50f1f", "#117743", "#7c4a03",
+			"#005fb8", "#af00db", "#267f99", "#595959",
+			"#717171", "#e51400", "#098658", "#9d6b00",
+			"#0067c0", "#c000df", "#038387", "#1e1e1e",
+		}}
+	case "solarized":
+		return termPalette{"#fdf6e3", [16]string{
+			"#073642", "#dc322f", "#859900", "#b58900",
+			"#268bd2", "#d33682", "#2aa198", "#657b83",
+			"#839496", "#cb4b16", "#586e75", "#657b83",
+			"#839496", "#6c71c4", "#93a1a1", "#002b36",
+		}}
+	case "nord":
+		return termPalette{"#2e3440", [16]string{
+			"#3b4252", "#bf616a", "#a3be8c", "#ebcb8b",
+			"#81a1c1", "#b48ead", "#88c0d0", "#e5e9f0",
+			"#4c566a", "#bf616a", "#a3be8c", "#ebcb8b",
+			"#81a1c1", "#b48ead", "#8fbcbb", "#eceff4",
+		}}
+	case "contrast":
+		return termPalette{"#000000", [16]string{
+			"#000000", "#ff9a9a", "#a5f79a", "#ffdf75",
+			"#75caff", "#ff9dff", "#a6eaff", "#ffffff",
+			"#858585", "#ffb3b3", "#c4ffb8", "#fff3b3",
+			"#a8dcff", "#ffc2ff", "#cdf4ff", "#ffffff",
+		}}
+	default:
+		return termPalette{"#080a10", [16]string{
+			"#1b1f27", "#f07178", "#c3e88d", "#ffcb6b",
+			"#82aaff", "#c792ea", "#89ddff", "#c5cad6",
+			"#4a5262", "#ff8b92", "#b9f18d", "#ffe0a3",
+			"#9ab8ff", "#d7b4ff", "#b6f2ff", "#f7f9ff",
+		}}
+	}
+}
+
+// termCSS layers the terminal palette after the theme so it wins over the
+// base defaults without touching the catalog above.
+func termCSS(id string) string {
+	p := termPaletteFor(id)
+
+	var b strings.Builder
+	b.WriteString(":root { --term-bg:" + p.bg + " !important;")
+
+	for i, c := range p.colors {
+		fmt.Fprintf(&b, " --term%d:%s !important;", i, c)
+	}
+
+	b.WriteString(" }")
+
+	return b.String()
 }
