@@ -621,6 +621,7 @@ func keymapCatalog() []keymapEntry {
 		{"focus-left", "Focus left editor", "Ctrl+1", false},
 		{"focus-right", "Focus right editor", "Ctrl+2", false},
 		{"cycle-pane", "Cycle editor pane", "F6", false},
+		{"goto-definition", "Go to definition", "Ctrl+D", false},
 		{"toggle-preview", "Toggle preview", "Ctrl+Shift+V", false},
 		{"paste-explorer", "Paste in explorer", "Ctrl+V", false},
 		{"copy-path", "Copy path / file", "Ctrl+C", false},
@@ -968,6 +969,8 @@ func (a *App) runKeymapAction(ctx context.Context, action string) error {
 			a.setFocusGroup(1)
 		}
 		return a.page.Redraw(ctx)
+	case "goto-definition":
+		return a.gotoDefinitionAtCaret(ctx)
 	case "toggle-preview", "toggle-preview-key":
 		a.togglePreview()
 		return a.page.Redraw(ctx)
