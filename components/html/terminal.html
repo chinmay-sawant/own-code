@@ -34,7 +34,7 @@
 
   {{if .Terminal.Note}}<div class="term-note" title="{{.Terminal.Note}}">{{.Terminal.Note}}</div>{{end}}
 
-  <div class="term-body{{if .Terminal.Focus}} focus{{end}}" id="term-body" data-action="term-focus" role="log" tabindex="0" aria-label="Terminal output and input">{{if .Terminal.Sessions}}{{range .Terminal.Rows}}<div class="term-row">{{range .Segments}}<span class="t-{{.Class}}">{{.Text}}</span>{{end}}</div>{{end}}{{else}}<span class="term-empty">Open a session with +</span>{{end}}</div>
+  <div class="term-body{{if .Terminal.Focus}} focus{{end}}" id="term-body" data-action="term-focus" role="log" tabindex="0" aria-label="Terminal output and input">{{if .Terminal.Sessions}}{{range $ri, $row := .Terminal.Rows}}<div class="term-row">{{range $si, $seg := $row.Segments}}{{if $seg.LinkPath}}<button class="term-link t-{{$seg.Class}}" id="term-link-{{$ri}}-{{$si}}" data-action="term-link:{{$ri}}:{{$si}}" type="button" tabindex="-1" title="{{$seg.LinkPath}}:{{$seg.LinkLine}}{{if $seg.LinkCol}}:{{$seg.LinkCol}}{{end}}">{{$seg.Text}}</button>{{else}}<span class="t-{{$seg.Class}}">{{$seg.Text}}</span>{{end}}{{end}}</div>{{end}}{{else}}<span class="term-empty">Open a session with +</span>{{end}}</div>
 
   <footer class="term-foot">
     <span class="term-foot-shell" title="{{.Terminal.Shell}}">{{.Terminal.Shell}}</span>

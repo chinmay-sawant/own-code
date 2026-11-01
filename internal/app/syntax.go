@@ -7,10 +7,14 @@ import (
 
 // segment is one run of source text with one highlight class. Templates print
 // it as <span class="t-{{.Class}}">{{.Text}}</span>; every value is a plain
-// string, so html/template escapes it.
+// string, so html/template escapes it. Terminal rows reuse it with LinkPath
+// set for clickable file locations.
 type segment struct {
-	Text  string
-	Class string
+	Text     string
+	Class    string
+	LinkPath string
+	LinkLine int
+	LinkCol  int
 }
 
 const (
