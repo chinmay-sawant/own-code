@@ -290,22 +290,29 @@ type App struct {
 	autosaveDue     int64
 	autosaveTimer   *time.Timer
 
-	commits          commitLog
-	branches         []branchRow
-	headBranch       string
-	historyRef       string
-	historyLabel     string
-	branchOpen       bool
-	branchQuery      string
-	commitDetails    map[string]*changedFile
-	commitKeys       []string
-	commitErrors     map[string]string
-	commitOpen       string
-	commitFile       string
-	commitRows       []diffRow
-	commitPreview    []diffRow
-	patchLoader      *commitPatchLoader
-	branchLogs       *branchLogCache
+	commits       commitLog
+	branches      []branchRow
+	headBranch    string
+	historyRef    string
+	historyLabel  string
+	branchOpen    bool
+	branchQuery   string
+	commitDetails map[string]*changedFile
+	commitKeys    []string
+	commitErrors  map[string]string
+	commitOpen    string
+	commitFile    string
+	commitRows    []diffRow
+	commitPreview []diffRow
+	patchLoader   *commitPatchLoader
+	branchLogs    *branchLogCache
+	// blameOn toggles the per-line blame gutter (off by default). The async
+	// blameLoader reads git off the page loop; blameCache holds the finished
+	// lines per path and blamePending dedups in-flight stat keys.
+	blameOn          bool
+	blameLoader      *blameLoader
+	blameCache       map[string]blameEntry
+	blamePending     map[string]bool
 	historyScroll    historyScroll
 	historyLimit     int
 	historyDone      bool
@@ -583,6 +590,8 @@ func NewWithLimit(root string, limit int) (*App, error) {
 		wrap:            true,
 		branchLogs:      newBranchLogCache(branchLogLimit),
 		searchResult:    make(chan searchReply, 1),
+		blameCache:      map[string]blameEntry{},
+		blamePending:    map[string]bool{},
 		scanLimit:       ws.Limit,
 		historyLimit:    maxCommits,
 		historyScroll:   historyScroll{Limit: maxCommits},
@@ -648,6 +657,9 @@ func NewWithLimit(root string, limit int) (*App, error) {
 		// New has no caller context. The patch worker lives for the app and
 		// Close cancels its in-flight git read.
 		a.patchLoader = NewCommitPatchLoader(ws.Root, maxCommitPatchCache)
+		// The blame worker lives for the app too; Close cancels its
+		// in-flight git read.
+		a.blameLoader = NewBlameLoader(ws.Root)
 	}
 
 	page.Handle(ownframe.Handlers{
@@ -943,8 +955,18 @@ func (a *App) switchProject(ctx context.Context, root string) error {
 		a.patchLoader.Close()
 		a.patchLoader = nil
 	}
+	// The blame worker closes over its root too; blame lines belong to the
+	// old project, so the toggle resets with the switch.
+	if a.blameLoader != nil {
+		a.blameLoader.Close()
+		a.blameLoader = nil
+	}
+	a.blameOn = false
+	a.blameCache = map[string]blameEntry{}
+	a.blamePending = map[string]bool{}
 	if !ws.Sample {
 		a.patchLoader = NewCommitPatchLoader(ws.Root, maxCommitPatchCache)
+		a.blameLoader = NewBlameLoader(ws.Root)
 	}
 	a.commitDetails = map[string]*changedFile{}
 	a.commitKeys = nil
@@ -1277,6 +1299,8 @@ func (a *App) buildView() View {
 // fillCode fills the first editor group, its visible rows, and the empty state.
 func (a *App) fillCode(v *View) {
 	doc := a.groupDoc(0)
+	v.BlameOn = a.blameOn
+	v.BlameNote, v.BlameShow = a.blameStatus(doc)
 	if doc == nil {
 		v.Welcome = true
 		v.Active = ""
@@ -1307,6 +1331,9 @@ func (a *App) fillCode(v *View) {
 	cols := a.codeColsForGroup(0)
 
 	if v.Preview {
+		// The blame column paints code rows only; the rendered preview
+		// keeps its own gutter.
+		v.BlameNote, v.BlameShow = "", false
 		doc.ensurePreview(cols)
 		start, end, track := a.windowSliceForGroup(0, len(doc.Preview))
 		v.TrackTop = track
@@ -1341,6 +1368,7 @@ func (a *App) fillCode(v *View) {
 		v.Rows = a.markBracketRows(v.Rows)
 		a.decorateCodeRows(doc, v.Rows, 0)
 		a.decorateEditRows(v.Rows)
+		a.decorateBlame(doc, v.Rows, 0)
 
 		return
 	}
@@ -1360,6 +1388,7 @@ func (a *App) fillCode(v *View) {
 	v.Rows = a.markBracketRows(v.Rows)
 	a.decorateCodeRows(doc, v.Rows, 0)
 	a.decorateEditRows(v.Rows)
+	a.decorateBlame(doc, v.Rows, 0)
 
 	a.sliceUnwrappedCodeRowsFor(v.Rows, cols, 0)
 }

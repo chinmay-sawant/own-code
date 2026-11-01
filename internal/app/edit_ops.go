@@ -213,6 +213,9 @@ func (a *App) saveEdit() {
 	a.docs[path] = a.ws.openDoc(path)
 	a.commitEditBuffer()
 	a.cancelAutoSave()
+	// A save moves the file's mtime, so the cached blame lines are stale:
+	// drop them and let the next frame re-request the new stat key.
+	a.invalidateBlame(path)
 	a.showToast("success", "File saved", path)
 	a.refresh()
 }

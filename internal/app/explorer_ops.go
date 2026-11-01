@@ -41,6 +41,7 @@ const (
 	paletteCmdCloseLeft    = "close-left"
 	paletteCmdCloseRight   = "close-right"
 	paletteCmdCloseAllTabs = "close-all-tabs"
+	paletteCmdBlame        = "blame-toggle"
 )
 
 // Context-menu ids for the explorer file operations, alongside the cut/copy
@@ -1050,6 +1051,7 @@ func paletteCommandCatalog() []paletteRow {
 		{Cmd: paletteCmdCloseLeft, Name: "Tab: Close to the Left", Dir: "Close tabs left of the active one"},
 		{Cmd: paletteCmdCloseRight, Name: "Tab: Close to the Right", Dir: "Close tabs right of the active one"},
 		{Cmd: paletteCmdCloseAllTabs, Name: "Tab: Close All", Dir: "Close every tab in the focused group"},
+		{Cmd: paletteCmdBlame, Name: "View: Toggle Blame", Dir: "Show the last commit for every line (B)"},
 	}
 }
 
@@ -1155,6 +1157,11 @@ func (a *App) runPaletteCommand(ctx context.Context, id string) error {
 	case paletteCmdPinTab:
 		closePalette()
 		a.togglePinFocused()
+
+		return redraw()
+	case paletteCmdBlame:
+		closePalette()
+		a.toggleBlame()
 
 		return redraw()
 	case paletteCmdReopenTab:

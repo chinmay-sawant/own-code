@@ -147,7 +147,18 @@ func (a *App) codeColsForGroup(group int) int {
 		return a.previewColsForDoc(width, doc)
 	}
 
-	return a.codeColsFor(width)
+	cols := a.codeColsFor(width)
+	// The blame column takes horizontal room like the number gutter, so the
+	// wrap budget shrinks while it shows and wrapped rows never slide under
+	// the annotations.
+	if doc := a.groupDoc(group); a.blameShows(doc) {
+		cols -= int(float64(a.zx(blameGutterW)) / a.zf(codeCellW))
+		if cols < wrapMinCols {
+			cols = wrapMinCols
+		}
+	}
+
+	return cols
 }
 
 // previewCols is the column budget for rendered Markdown.
@@ -247,6 +258,7 @@ func (a *App) secondView() secondaryView {
 	s.ActiveName = baseName(doc.Path)
 	winW, _ := a.page.Size()
 	s.ActiveNameShort, s.ActiveDirShort = clipSecondCrumbPath(s.Width, winW, s.ActiveName, s.ActiveDir)
+	s.BlameNote, s.BlameShow = a.blameStatus(doc)
 	s.Lang = doc.Lang
 	s.LangLabel = languageInfo(doc.Lang).Label
 	s.Badge = languageInfo(doc.Lang).Badge
@@ -283,6 +295,7 @@ func (a *App) secondView() secondaryView {
 	cols := a.codeColsForGroup(1)
 
 	if s.Preview {
+		s.BlameNote, s.BlameShow = "", false
 		doc.ensurePreview(cols)
 		start, end, track := a.windowSliceForGroup(1, len(doc.Preview))
 		s.TrackTop = track
@@ -310,6 +323,7 @@ func (a *App) secondView() secondaryView {
 		s.TrackTop = track
 		s.Rows = cloneCodeRows(plan.Rows[start:end])
 		a.decorateCodeRows(doc, s.Rows, 1)
+		a.decorateBlame(doc, s.Rows, 1)
 
 		return s
 	}
@@ -329,6 +343,7 @@ func (a *App) secondView() secondaryView {
 	}
 
 	a.decorateCodeRows(doc, s.Rows, 1)
+	a.decorateBlame(doc, s.Rows, 1)
 	a.sliceUnwrappedCodeRowsFor(s.Rows, cols, 1)
 
 	return s

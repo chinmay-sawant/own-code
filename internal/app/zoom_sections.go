@@ -138,6 +138,8 @@ func zoomEditorCSS(b *strings.Builder, px func(int) string) {
 		// Gutter and code geometry.
 		{".gutter-mark", []string{" width:", " !important; flex-basis:", " !important;"}, []int{16, 16}},
 		{".ln", []string{" width:", " !important; flex-basis:", " !important; padding-right:", " !important; line-height:var(--row-h) !important;"}, []int{44, 44, 10}},
+		{".blame", []string{" width:", " !important; flex-basis:", " !important; padding-right:", " !important;"}, []int{72, 72, 8}},
+		{".code-body.blame .edit-surface, .code-body.blame .edit-line-hit", []string{" left:", " !important;"}, []int{132}},
 		{".cline", []string{" padding-right:", " !important;"}, []int{22}},
 		{".edit-caret", []string{" top:", " !important; width:", " !important; height:", " !important;"}, []int{2, 2, 13}},
 		{".edit-surface, .edit-line-hit", []string{" left:", " !important;"}, []int{60}},
