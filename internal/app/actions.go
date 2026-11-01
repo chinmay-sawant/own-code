@@ -822,6 +822,14 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		if line, ok := actionIndex(action, "outline:"); ok {
 			a.outlineLine(line)
 		}
+	case strings.HasPrefix(action, "sticky2:"):
+		if line, ok := actionIndex(action, "sticky2:"); ok {
+			a.scrollToSticky(1, line)
+		}
+	case strings.HasPrefix(action, "sticky:"):
+		if line, ok := actionIndex(action, "sticky:"); ok {
+			a.scrollToSticky(0, line)
+		}
 	}
 
 	return a.page.Form().Focus(ctx, "")
@@ -2610,6 +2618,11 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 			return nil
 		}
 		a.toggleWrap()
+	case "t":
+		if !a.keymapAllows("toggle-sticky", key) {
+			return nil
+		}
+		a.toggleStickyScroll()
 	case "m":
 		if !a.keymapAllows("toggle-preview-key", key) {
 			return nil

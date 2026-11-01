@@ -209,6 +209,8 @@ func zoomFontTable() []zoomFont {
 	return []zoomFont{
 		{"body", 12},
 		{".cline", 12},
+		{".srow", 12},
+		{".sticky-kind", 10},
 		{".ln", 10},
 		{".ln.cont", 9},
 		{".tab-name", 9.5},

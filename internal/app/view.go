@@ -83,6 +83,10 @@ type View struct {
 	SpaceHeight int
 	Wrap        bool
 	ScrollX     int
+	// Sticky pins the enclosing symbol chain above the code while it
+	// scrolls. Empty in diff, preview, and merge modes and in files with
+	// no symbols.
+	Sticky      []stickyRow
 	FindQuery   string
 	FindOpen    bool
 	FindCase    bool
@@ -280,9 +284,12 @@ type secondaryView struct {
 	StatusClass     string
 	Truncated       bool
 
-	Rows        []codeRow
-	TrackTop    int
-	ScrollX     int
+	Rows     []codeRow
+	TrackTop int
+	ScrollX  int
+	// Sticky pins the enclosing symbol chain above the second pane's
+	// code. Same exclusions as the first pane's Sticky.
+	Sticky      []stickyRow
 	Welcome     bool
 	Preview     bool
 	Previewable bool

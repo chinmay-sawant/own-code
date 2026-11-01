@@ -477,9 +477,12 @@ type App struct {
 	// Task 3 seam: the explorer Copy menu row stages here (see
 	// stageExplorerCopy), and the Ctrl+V/menu paste path consumes it
 	// before reading the OS clipboard.
-	pasteStaged  *pasteStagedCopy
-	preview      bool
-	wrap         bool
+	pasteStaged *pasteStagedCopy
+	preview     bool
+	wrap        bool
+	// stickyOff disables the pinned enclosing-symbol headers. Default
+	// false: headers show whenever the mode and file allow them.
+	stickyOff    bool
 	scrollX      int
 	viewportCols int
 	findOpen     bool
@@ -1318,10 +1321,18 @@ func (a *App) fillCode(v *View) {
 		return
 	}
 
-	start, end, track := a.windowSliceForGroup(0, len(doc.Lines))
+	// The sticky block takes headroom above the windowed rows: the track
+	// shifts down by its height and the slice shrinks by the same rows so
+	// the pane stays exactly full.
+	sticky := a.stickyForGroup(0)
+	v.Sticky = sticky
+	reserve := len(sticky)
+	v.TrackTop = reserve * a.zx(rowH)
+
+	start, end, _ := a.windowSliceReserve(0, len(doc.Lines), reserve)
 	if a.wrap {
 		plan := doc.wrapped(cols)
-		start, end, track = a.windowSliceForGroup(0, len(plan.Rows))
+		start, end, _ = a.windowSliceReserve(0, len(plan.Rows), reserve)
 		// Never start mid-line: a scroll offset landing inside a wrapped
 		// source line would fill the viewport with No==0 continuations and
 		// blank the gutter. Snap back to the line start and keep the same
@@ -1336,7 +1347,6 @@ func (a *App) fillCode(v *View) {
 				}
 			}
 		}
-		v.TrackTop = track
 		v.Rows = a.copyFindRows(cloneCodeRows(plan.Rows[start:end]))
 		v.Rows = a.markBracketRows(v.Rows)
 		a.decorateCodeRows(doc, v.Rows, 0)
@@ -1345,7 +1355,6 @@ func (a *App) fillCode(v *View) {
 		return
 	}
 
-	v.TrackTop = track
 	v.Rows = make([]codeRow, 0, end-start)
 
 	for i := start; i < end; i++ {

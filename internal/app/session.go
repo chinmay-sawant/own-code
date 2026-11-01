@@ -28,24 +28,27 @@ const (
 // after a restart. Paths are workspace-relative, the two tab lists belong to
 // the two editor groups, and the ratios are fractions of the editor body.
 type sessionState struct {
-	Root          string   `json:"root"`
-	Mode          string   `json:"mode"`
-	Theme         string   `json:"theme,omitempty"`
-	Recents       []string `json:"recents"`
-	Tabs          []string `json:"tabs"`
-	Active        int      `json:"active"`
-	Tabs2         []string `json:"tabs2"`
-	Active2       int      `json:"active2"`
-	FocusGroup    int      `json:"focusGroup"`
-	Split         bool     `json:"split"`
-	SplitRatio    float64  `json:"splitRatio"`
-	Details       bool     `json:"details"`
-	DevTools      bool     `json:"devTools"`
-	Wrap          bool     `json:"wrap"`
-	Preview       bool     `json:"preview"`
-	DiffSplit     bool     `json:"diffSplit"`
-	HistoryRatio  float64  `json:"historyRatio"`
-	HistoryManual bool     `json:"historyManual"`
+	Root       string   `json:"root"`
+	Mode       string   `json:"mode"`
+	Theme      string   `json:"theme,omitempty"`
+	Recents    []string `json:"recents"`
+	Tabs       []string `json:"tabs"`
+	Active     int      `json:"active"`
+	Tabs2      []string `json:"tabs2"`
+	Active2    int      `json:"active2"`
+	FocusGroup int      `json:"focusGroup"`
+	Split      bool     `json:"split"`
+	SplitRatio float64  `json:"splitRatio"`
+	Details    bool     `json:"details"`
+	DevTools   bool     `json:"devTools"`
+	Wrap       bool     `json:"wrap"`
+	Preview    bool     `json:"preview"`
+	DiffSplit  bool     `json:"diffSplit"`
+	// NoSticky persists the sticky-scroll toggle. Missing (old sessions)
+	// means enabled, matching the fresh-app default.
+	NoSticky      bool    `json:"noSticky,omitempty"`
+	HistoryRatio  float64 `json:"historyRatio"`
+	HistoryManual bool    `json:"historyManual"`
 	// Match toggles for the find/replace bar and the workspace search.
 	// Queries are never persisted; only the sticky toggles survive.
 	FindCase        bool    `json:"findCase,omitempty"`

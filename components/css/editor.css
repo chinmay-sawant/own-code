@@ -367,6 +367,62 @@
 
 .track { position: absolute; left: 0; right: 0; top: 0; }
 
+/* Sticky scroll ------------------------------------------------------------
+   Pinned enclosing-symbol headers above the code. The block is absolutely
+   positioned at the top of the code body (Go shifts the .track down by its
+   height), so the headers stay put while the rows window underneath them.
+   Heights ride var(--row-h) and the gutter spans reuse .gutter-mark/.ln,
+   so zoom scaling and the gutter layout apply without extra rules. */
+
+.code-sticky {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  background-color: var(--bg);
+  border-bottom: 1px solid var(--line-soft);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
+}
+
+.srow {
+  width: 100%;
+  height: var(--row-h);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 22px 0 0;
+  border: 0;
+  background-color: var(--panel-2);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: var(--row-h);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.srow:hover { background-color: var(--panel-3); color: var(--text); }
+
+.sticky-kind {
+  flex: 0 0 auto;
+  min-width: 36px;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.sticky-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+  font-family: var(--mono);
+}
+
 .crow { position: relative; height: var(--row-h); display: flex; align-items: stretch; overflow: hidden; }
 .edit-line-hit {
   position: absolute;
