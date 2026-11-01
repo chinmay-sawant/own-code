@@ -307,9 +307,16 @@ func (a *App) secondView() secondaryView {
 		return s
 	}
 
+	// Like the first pane, the sticky block takes headroom above the
+	// windowed rows so the pane stays exactly full.
+	sticky := a.stickyForGroup(1)
+	s.Sticky = sticky
+	reserve := len(sticky)
+	s.TrackTop = reserve * a.zx(rowH)
+
 	if a.wrap {
 		plan := doc.wrapped(cols)
-		start, end, track := a.windowSliceForGroup(1, len(plan.Rows))
+		start, end, _ := a.windowSliceReserve(1, len(plan.Rows), reserve)
 		if len(plan.Rows) > 0 && start > 0 && start < len(plan.Rows) {
 			if lineStart := plan.firstRow(plan.lineAt(start)); lineStart < start {
 				shift := start - lineStart
@@ -320,7 +327,6 @@ func (a *App) secondView() secondaryView {
 				}
 			}
 		}
-		s.TrackTop = track
 		s.Rows = cloneCodeRows(plan.Rows[start:end])
 		a.decorateCodeRows(doc, s.Rows, 1)
 		a.decorateBlame(doc, s.Rows, 1)
@@ -328,8 +334,7 @@ func (a *App) secondView() secondaryView {
 		return s
 	}
 
-	start, end, track := a.windowSliceForGroup(1, len(doc.Lines))
-	s.TrackTop = track
+	start, end, _ := a.windowSliceReserve(1, len(doc.Lines), reserve)
 	if !a.wrap {
 		s.ScrollX = a.scrollXFor(1)
 	}

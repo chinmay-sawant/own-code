@@ -311,6 +311,18 @@
       </div>
       {{if .CanEdit}}<button class="edit-surface" id="edit-surface" data-action="edit-begin" type="button" title="Click to edit" aria-label="Edit {{.Active}}"{{if .Modal}} tabindex="-1"{{end}}></button>{{end}}
     {{end}}
+    {{if .Sticky}}
+    <div class="code-sticky" id="code-sticky">
+      {{range .Sticky}}
+      <button class="srow" id="sticky-{{.Line}}" data-action="sticky:{{.Line}}" type="button" title="Jump to {{.Name}} (line {{.No}})" aria-label="Jump to {{.Name}}"{{if $.Modal}} tabindex="-1"{{end}}>
+        <span class="gutter-mark"></span>
+        <span class="ln">{{.No}}</span>
+        <span class="sticky-kind">{{.Kind}}</span>
+        <span class="sticky-name">{{.Name}}</span>
+      </button>
+      {{end}}
+    </div>
+    {{end}}
     {{if .EditorScroll.Show}}<button class="editor-scroll-thumb" id="editor-scroll-thumb" type="button" aria-label="Scroll editor" tabindex="-1" style="top:{{.EditorScroll.Top}}px;height:{{.EditorScroll.Height}}px"><svg width="8" height="{{.EditorScroll.Height}}" aria-hidden="true"><rect width="8" height="{{.EditorScroll.Height}}" fill="#a6adba"/></svg></button>{{end}}
   </div>
 </section>
@@ -396,6 +408,18 @@
         </div>
         {{end}}
       </div>
+    {{end}}
+    {{if .Second.Sticky}}
+    <div class="code-sticky" id="code-sticky-2">
+      {{range .Second.Sticky}}
+      <button class="srow" id="sticky2-{{.Line}}" data-action="sticky2:{{.Line}}" type="button" title="Jump to {{.Name}} (line {{.No}})" aria-label="Jump to {{.Name}}"{{if $.Modal}} tabindex="-1"{{end}}>
+        <span class="gutter-mark"></span>
+        <span class="ln">{{.No}}</span>
+        <span class="sticky-kind">{{.Kind}}</span>
+        <span class="sticky-name">{{.Name}}</span>
+      </button>
+      {{end}}
+    </div>
     {{end}}
     {{if .Second.EditorScroll.Show}}<button class="editor-scroll-thumb" id="editor-scroll-thumb-2" type="button" aria-label="Scroll second editor" tabindex="-1" style="top:{{.Second.EditorScroll.Top}}px;height:{{.Second.EditorScroll.Height}}px"><svg width="8" height="{{.Second.EditorScroll.Height}}" aria-hidden="true"><rect width="8" height="{{.Second.EditorScroll.Height}}" fill="#a6adba"/></svg></button>{{end}}
   </div>

@@ -122,6 +122,10 @@ func (a *App) editPointAt(x, y float64) (int, int, bool) {
 		return 0, 0, false
 	}
 
+	// The pinned headers shift the painted rows down: map the point past
+	// them before resolving the visual row.
+	y -= float64(a.stickyTopPx(0))
+
 	cols := a.codeColsForGroup(0)
 	visual := visualRowAt(int(y), int(box.Y), a.scrollY, a.zx(rowH))
 	line := visual

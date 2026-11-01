@@ -44,6 +44,8 @@ const (
 	// Go command id: jumps to the definition of the symbol at the caret.
 	paletteCmdGotoDefinition = "goto-definition"
 	paletteCmdBlame          = "blame-toggle"
+	// View command id for the sticky-scroll toggle.
+	paletteCmdStickyScroll = "toggle-sticky"
 )
 
 // Context-menu ids for the explorer file operations, alongside the cut/copy
@@ -1055,6 +1057,7 @@ func paletteCommandCatalog() []paletteRow {
 		{Cmd: paletteCmdCloseAllTabs, Name: "Tab: Close All", Dir: "Close every tab in the focused group"},
 		{Cmd: paletteCmdGotoDefinition, Name: "Go: Go to Definition", Dir: "Jump to the definition at the caret (Ctrl+D)"},
 		{Cmd: paletteCmdBlame, Name: "View: Toggle Blame", Dir: "Show the last commit for every line (B)"},
+		{Cmd: paletteCmdStickyScroll, Name: "View: Toggle Sticky Scroll", Dir: "Pin the enclosing symbols above the editor (T)"},
 	}
 }
 
@@ -1169,6 +1172,11 @@ func (a *App) runPaletteCommand(ctx context.Context, id string) error {
 	case paletteCmdBlame:
 		closePalette()
 		a.toggleBlame()
+
+		return redraw()
+	case paletteCmdStickyScroll:
+		closePalette()
+		a.toggleStickyScroll()
 
 		return redraw()
 	case paletteCmdReopenTab:

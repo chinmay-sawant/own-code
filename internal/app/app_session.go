@@ -194,6 +194,7 @@ func (a *App) restoreState(state sessionState) {
 	a.searchRegex = state.SearchRegex
 	a.searchWholeWord = state.SearchWholeWord
 	a.wrap = state.Wrap
+	a.stickyOff = state.NoSticky
 	a.preview = state.Preview
 	a.diffSplit = state.DiffSplit
 	a.historyManual = state.HistoryManual
@@ -302,6 +303,7 @@ func (a *App) sessionState() sessionState {
 		Details:         a.details,
 		DevTools:        a.devOn,
 		Wrap:            a.wrap,
+		NoSticky:        a.stickyOff,
 		FindCase:        a.findCase,
 		FindRegex:       a.replaceRegex,
 		FindWholeWord:   a.replaceWholeWord,

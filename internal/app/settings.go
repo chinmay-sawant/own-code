@@ -635,6 +635,7 @@ func keymapCatalog() []keymapEntry {
 		{"close-tab", "Close tab", "W", false},
 		{"toggle-wrap", "Toggle word wrap", "Z", false},
 		{"toggle-blame", "Toggle blame", "B", false},
+		{"toggle-sticky", "Toggle sticky scroll", "T", false},
 		{"toggle-preview-key", "Toggle preview (M)", "M", false},
 		{"reload-file", "Reload file", "R", false},
 		{"hunk-next", "Next hunk/change", "N", false},
@@ -1028,6 +1029,9 @@ func (a *App) runKeymapAction(ctx context.Context, action string) error {
 		return a.page.Redraw(ctx)
 	case "toggle-blame":
 		a.toggleBlame()
+		return a.page.Redraw(ctx)
+	case "toggle-sticky":
+		a.toggleStickyScroll()
 		return a.page.Redraw(ctx)
 	case "reload-file":
 		if a.mode == "changes" {

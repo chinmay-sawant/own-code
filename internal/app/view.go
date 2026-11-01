@@ -86,9 +86,13 @@ type View struct {
 	// BlameOn is the blame gutter toggle. BlameShow reports whether the
 	// column paints for the open file; BlameNote carries the busy or
 	// unavailable reason (loading, sample, binary, or large file).
-	BlameOn     bool
-	BlameShow   bool
-	BlameNote   string
+	BlameOn   bool
+	BlameShow bool
+	BlameNote string
+	// Sticky pins the enclosing symbol chain above the code while it
+	// scrolls. Empty in diff, preview, and merge modes and in files with
+	// no symbols.
+	Sticky      []stickyRow
 	FindQuery   string
 	FindOpen    bool
 	FindCase    bool
@@ -294,8 +298,11 @@ type secondaryView struct {
 	// BlameShow/BlameNote mirror the top-level blame gutter for the right
 	// pane: per-group docs can differ (binary on one side, text on the
 	// other), so each pane carries its own state.
-	BlameShow   bool
-	BlameNote   string
+	BlameShow bool
+	BlameNote string
+	// Sticky pins the enclosing symbol chain above the second pane's
+	// code. Same exclusions as the first pane's Sticky.
+	Sticky      []stickyRow
 	Welcome     bool
 	Preview     bool
 	Previewable bool
