@@ -241,15 +241,37 @@ func (a *App) stageTreeCopy(paths []string, isCut bool) {
 	a.refresh()
 }
 
-// copyTreePath writes one slash-relative tree path to the clipboard. It
-// mirrors copyActive(false).
+// copyTreePath writes the slash-relative tree paths to the clipboard. It
+// mirrors copyActive(false). When the row belongs to the multi-select it
+// copies every selected path (sorted, newline-separated) like VS Code; else
+// it copies just the row. Invalid rows show an error instead of leaving a
+// stale clipboard behind.
 func (a *App) copyTreePath(path string) {
-	if _, ok := a.lookupTreePath(path); !ok {
+	kept := make([]string, 0, 1)
+	for _, target := range a.copyTargets(path) {
+		if _, ok := a.lookupTreePath(target); !ok {
+			continue
+		}
+
+		kept = append(kept, target)
+	}
+
+	if len(kept) == 0 {
+		a.showToast("error", "Cannot copy path", "The file is not in the workspace.")
+		a.refresh()
+
 		return
 	}
 
-	ownframe.Write(path)
-	a.showToast("success", "Path copied", path)
+	text := strings.Join(kept, "\n")
+	ownframe.Write(text)
+
+	if len(kept) == 1 {
+		a.showToast("success", "Path copied", kept[0])
+	} else {
+		a.showToast("success", fmt.Sprintf("%d paths copied", len(kept)), text)
+	}
+
 	a.refresh()
 }
 
@@ -288,16 +310,40 @@ func (a *App) explorerAbsPath(rel string) string {
 	return abs
 }
 
-// copyTreeAbsPath writes the machine-native absolute path of one tree row
-// to the clipboard.
+// copyTreeAbsPath writes the machine-native absolute paths of the tree
+// rows to the clipboard. Like copyTreePath it copies the whole multi-select
+// when the row belongs to it, else just the row.
 func (a *App) copyTreeAbsPath(path string) {
-	if _, ok := a.lookupTreePath(path); !ok {
+	kept := make([]string, 0, 1)
+	for _, target := range a.copyTargets(path) {
+		if _, ok := a.lookupTreePath(target); !ok {
+			continue
+		}
+
+		kept = append(kept, target)
+	}
+
+	if len(kept) == 0 {
+		a.showToast("error", "Cannot copy path", "The file is not in the workspace.")
+		a.refresh()
+
 		return
 	}
 
-	abs := a.explorerAbsPath(path)
-	ownframe.Write(abs)
-	a.showToast("success", "Absolute path copied", abs)
+	abs := make([]string, 0, len(kept))
+	for _, rel := range kept {
+		abs = append(abs, a.explorerAbsPath(rel))
+	}
+
+	text := strings.Join(abs, "\n")
+	ownframe.Write(text)
+
+	if len(abs) == 1 {
+		a.showToast("success", "Absolute path copied", abs[0])
+	} else {
+		a.showToast("success", fmt.Sprintf("%d absolute paths copied", len(abs)), text)
+	}
+
 	a.refresh()
 }
 
