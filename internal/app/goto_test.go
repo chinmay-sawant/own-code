@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -93,6 +95,28 @@ func TestGotoLineEntersEdit(t *testing.T) {
 	line, _ := offsetLineCol(app.edit.Text(), app.editCaret)
 	if line != 1 {
 		t.Fatalf("caret line = %d, want 1", line)
+	}
+}
+
+func TestGotoLineEmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "empty.go"), nil, 0o644); err != nil {
+		t.Fatalf("write empty file: %v", err)
+	}
+
+	app, err := New(dir)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	app.openFile("empty.go")
+
+	if err := app.gotoLine(context.Background(), 1, 1); err != nil {
+		t.Fatalf("gotoLine: %v", err)
+	}
+
+	if !app.editing || app.editCaret != 0 {
+		t.Fatalf("editing = %v, caret = %d, want edit mode at offset 0", app.editing, app.editCaret)
 	}
 }
 

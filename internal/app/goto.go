@@ -127,6 +127,10 @@ func (a *App) gotoLine(ctx context.Context, line, col int) error {
 		lines = append([]string(nil), doc.Lines...)
 	}
 
+	if len(lines) == 0 {
+		lines = []string{""}
+	}
+
 	if line < 1 {
 		line = 1
 	}
