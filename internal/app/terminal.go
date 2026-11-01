@@ -40,6 +40,10 @@ func (a *App) Close() {
 		a.patchLoader.Close()
 	}
 
+	if a.blameLoader != nil {
+		a.blameLoader.Close()
+	}
+
 	if a.term == nil {
 		return
 	}

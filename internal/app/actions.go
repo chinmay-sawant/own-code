@@ -117,6 +117,8 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		if line, ok := actionIndex(action, "inline-card-line:"); ok {
 			a.showInlineCard(line + 1)
 		}
+	case strings.HasPrefix(action, "blame-commit:"):
+		a.openBlameCommit(ctx, strings.TrimPrefix(action, "blame-commit:"))
 	case action == "toast-close":
 		a.clearToast()
 	case action == "split-toggle":
@@ -676,6 +678,8 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.togglePreview()
 	case action == "wrap-toggle":
 		a.toggleWrap()
+	case action == "blame-toggle":
+		a.toggleBlame()
 	case action == "find-close":
 		return a.closeFind(ctx)
 	case action == "find-prev":
@@ -2626,6 +2630,14 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 			return nil
 		}
 		a.toggleWrap()
+	case "b":
+		// Blame owns the bare B chord: no home branch names it (verified
+		// against the mode/filter/tab keys above), so it fires only when
+		// uncustomized or rebound to B, like the Z wrap toggle beside it.
+		if !a.keymapAllows("toggle-blame", key) {
+			return nil
+		}
+		a.toggleBlame()
 	case "m":
 		if !a.keymapAllows("toggle-preview-key", key) {
 			return nil

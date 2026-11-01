@@ -43,6 +43,7 @@ const (
 	paletteCmdCloseAllTabs = "close-all-tabs"
 	// Go command id: jumps to the definition of the symbol at the caret.
 	paletteCmdGotoDefinition = "goto-definition"
+	paletteCmdBlame          = "blame-toggle"
 )
 
 // Context-menu ids for the explorer file operations, alongside the cut/copy
@@ -1053,6 +1054,7 @@ func paletteCommandCatalog() []paletteRow {
 		{Cmd: paletteCmdCloseRight, Name: "Tab: Close to the Right", Dir: "Close tabs right of the active one"},
 		{Cmd: paletteCmdCloseAllTabs, Name: "Tab: Close All", Dir: "Close every tab in the focused group"},
 		{Cmd: paletteCmdGotoDefinition, Name: "Go: Go to Definition", Dir: "Jump to the definition at the caret (Ctrl+D)"},
+		{Cmd: paletteCmdBlame, Name: "View: Toggle Blame", Dir: "Show the last commit for every line (B)"},
 	}
 }
 
@@ -1164,6 +1166,11 @@ func (a *App) runPaletteCommand(ctx context.Context, id string) error {
 		closePalette()
 
 		return a.gotoDefinitionAtCaret(ctx)
+	case paletteCmdBlame:
+		closePalette()
+		a.toggleBlame()
+
+		return redraw()
 	case paletteCmdReopenTab:
 		closePalette()
 		a.reopenClosedTab()

@@ -83,6 +83,12 @@ type View struct {
 	SpaceHeight int
 	Wrap        bool
 	ScrollX     int
+	// BlameOn is the blame gutter toggle. BlameShow reports whether the
+	// column paints for the open file; BlameNote carries the busy or
+	// unavailable reason (loading, sample, binary, or large file).
+	BlameOn     bool
+	BlameShow   bool
+	BlameNote   string
 	FindQuery   string
 	FindOpen    bool
 	FindCase    bool
@@ -280,9 +286,14 @@ type secondaryView struct {
 	StatusClass     string
 	Truncated       bool
 
-	Rows        []codeRow
-	TrackTop    int
-	ScrollX     int
+	Rows     []codeRow
+	TrackTop int
+	ScrollX  int
+	// BlameShow/BlameNote mirror the top-level blame gutter for the right
+	// pane: per-group docs can differ (binary on one side, text on the
+	// other), so each pane carries its own state.
+	BlameShow   bool
+	BlameNote   string
 	Welcome     bool
 	Preview     bool
 	Previewable bool
@@ -415,13 +426,21 @@ type tabRow struct {
 // codeRow is one visual source row with its prebuilt spans. No is zero on a
 // wrapped continuation row.
 type codeRow struct {
-	No             int
-	Line           int
-	Start          int
-	Segments       []segment
-	Mark           string
-	MarkClass      string
-	Hint           string
+	No        int
+	Line      int
+	Start     int
+	Segments  []segment
+	Mark      string
+	MarkClass string
+	Hint      string
+	// Blame is the gutter annotation for the line's last commit: the short
+	// hash, or "Not committed" for uncommitted lines. BlameTitle is the
+	// hover text (hash plus author) and BlameHash is the full commit hash,
+	// empty for uncommitted lines. All three are empty on wrapped
+	// continuation rows and while blame is off.
+	Blame          string
+	BlameTitle     string
+	BlameHash      string
 	ChangeClass    string
 	ChangeCurrent  bool
 	ChangeLine     int

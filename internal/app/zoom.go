@@ -211,6 +211,7 @@ func zoomFontTable() []zoomFont {
 		{".cline", 12},
 		{".ln", 10},
 		{".ln.cont", 9},
+		{".blame", 10},
 		{".tab-name", 9.5},
 		{".crumb-path, .diff-path, .file-path", 9.5},
 		{".tname", 11},
@@ -472,6 +473,7 @@ func zoomPerViewCSS(b *strings.Builder, fontSize float64, perView map[string]flo
 		fmt.Fprintf(b, ".cline { font-size:%s !important; }", ed(12))
 		fmt.Fprintf(b, ".drow { font-size:%s !important; }", ed(12))
 		fmt.Fprintf(b, ".ln { font-size:%s !important; }", ed(10))
+		fmt.Fprintf(b, ".blame { font-size:%s !important; }", ed(10))
 		fmt.Fprintf(b, ".mrow { font-size:%s !important; }", ed(12))
 	}
 	if v, ok := perView["terminal"]; ok && v > 0 && math.Abs(v-1) >= zoomEpsilon {

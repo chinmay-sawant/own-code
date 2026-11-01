@@ -482,6 +482,33 @@ button.ln:focus { outline: 0; }
 
 .ln.cont { color: var(--dim); font-size: 9px; }
 
+/* Blame gutter: one short hash per first visual row. The column paints only
+   while .BlameShow holds, and the code hit areas shift right with it (see
+   the .code-body.blame rule below and the zoom override). Uncommitted lines
+   read "Not committed" with an ellipsis; the full text stays in the title. */
+.blame {
+  width: 72px;
+  flex: 0 0 72px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding-right: 8px;
+  text-align: left;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: var(--row-h);
+}
+
+button.blame { padding: 0 8px 0 0; border: 0; background: transparent; cursor: pointer; }
+button.blame:hover { color: var(--text); }
+button.blame:focus { outline: 0; }
+.blame.uncommitted { font-style: italic; }
+
+/* While the blame column shows, the click-to-edit surfaces start past it:
+   60 px of mark+number gutter plus the 72 px blame column. */
+.code-body.blame .edit-surface, .code-body.blame .edit-line-hit { left: 132px; }
+
 .cline {
   position: relative;
   flex: 1;

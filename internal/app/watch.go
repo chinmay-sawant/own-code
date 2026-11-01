@@ -615,6 +615,7 @@ func (a *App) tickWatch(ctx context.Context) error {
 
 	a.pollTerminal(ctx)
 	a.pollPatches(ctx)
+	a.pollBlame(ctx)
 	a.receiveSearch(ctx)
 	a.receiveHistoryLoad(ctx)
 	a.pollAutoSave(ctx)
@@ -747,6 +748,9 @@ func (a *App) installRescan(next *workspace, delta workspaceDelta) {
 	a.scanLimit = next.Limit
 	// A rescan retires in-flight directory loads; stale replies drop.
 	a.dirLoads = map[string]int{}
+	// Paths can collide across workspaces, so a rescan retires every cached
+	// blame line; the next frame re-requests the visible files.
+	a.invalidateAllBlame()
 
 	a.tabs = keepExistingTabs(a.tabs, next)
 	a.tabs2 = keepExistingTabs(a.tabs2, next)
@@ -863,6 +867,9 @@ func (a *App) applyWatchChanges(ctx context.Context, changes changeSet) {
 		}
 
 		a.docs[path] = a.ws.openDoc(path)
+		// The rescan reopened the file, so its stat key may have moved:
+		// drop the cached blame and let the next frame re-request it.
+		a.invalidateBlame(path)
 	}
 
 	if a.findOpen {
@@ -906,6 +913,9 @@ func (a *App) applyGitRefresh(ctx context.Context, update watchUpdate) {
 	a.historyLabel = history.Branch
 	a.historyScroll.Limit = len(history.Commits)
 	a.historyDone = len(history.Commits) < a.historyLimit || a.historyLimit >= maxHistoryCommits
+	// A new head moves every file's blame, so the cached lines retire and
+	// the next frame re-requests them.
+	a.invalidateAllBlame()
 	if a.diffSource == "branch" {
 		a.refreshBranchChanges(ctx)
 	}
