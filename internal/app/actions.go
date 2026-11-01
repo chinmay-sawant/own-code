@@ -286,7 +286,7 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.refresh()
 
 		if a.fileMenu {
-			return a.page.Form().Focus(ctx, "project-toggle")
+			return a.focusAfterLayout(ctx, "project-toggle")
 		}
 
 		return a.page.Form().Focus(ctx, "")
@@ -310,7 +310,7 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 	case action == "project-open":
 		a.projectOpen = !a.projectOpen
 		a.refresh()
-		return a.page.Form().Focus(ctx, "drawer-path")
+		return a.focusAfterLayout(ctx, "drawer-path")
 	case action == "project-close":
 		a.projectOpen = false
 		a.refresh()
@@ -358,7 +358,7 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.recentOpen = false
 		a.startBrowse()
 		a.refresh()
-		return a.page.Form().Focus(ctx, "browse-filter")
+		return a.focusAfterLayout(ctx, "browse-filter")
 	case action == "browse-close", action == "browse-backdrop":
 		a.browseOpen = false
 		a.refresh()
@@ -764,7 +764,7 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 			return err
 		}
 
-		return a.page.Form().Focus(ctx, "branch-filter")
+		return a.focusAfterLayout(ctx, "branch-filter")
 	case action == "branch-close":
 		a.branchOpen = false
 		a.branchQuery = ""

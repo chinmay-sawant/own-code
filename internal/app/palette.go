@@ -319,7 +319,7 @@ func (a *App) openPalette(ctx context.Context) error {
 		return err
 	}
 
-	return a.page.Form().Focus(ctx, "palette")
+	return a.focusAfterLayout(ctx, "palette")
 }
 
 // closePalette hides the overlay.

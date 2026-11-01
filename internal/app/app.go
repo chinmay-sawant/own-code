@@ -203,6 +203,11 @@ type App struct {
 	menuX      int
 	menuY      int
 	menuItems  []menuViewRow
+	// pendingFocus is a control id the next tick focuses once the panel that
+	// owns it has been laid out. Click handlers run inside the window's
+	// redraw batch, so a panel they open is not in the form state yet when
+	// the handler asks for its input.
+	pendingFocus string
 
 	searchOpen      bool
 	searchQuery     string

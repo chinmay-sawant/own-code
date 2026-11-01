@@ -607,6 +607,10 @@ func (a *App) watchLoop(ctx context.Context, watcher *fsnotify.Watcher, root str
 // tickWatch drains one background update and any finished patch, search,
 // or directory load.
 func (a *App) tickWatch(ctx context.Context) error {
+	if err := a.applyPendingFocus(ctx); err != nil {
+		return err
+	}
+
 	select {
 	case update := <-a.watchUpdates:
 		a.applyWatchUpdate(ctx, update)

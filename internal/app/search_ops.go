@@ -121,7 +121,7 @@ func (a *App) openWorkspaceSearch(ctx context.Context) error {
 		return err
 	}
 
-	if err := a.page.Form().Focus(ctx, "workspace-search"); err != nil {
+	if err := a.focusAfterLayout(ctx, "workspace-search"); err != nil {
 		return err
 	}
 
