@@ -134,6 +134,13 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		return a.page.Redraw(ctx)
 	case strings.HasPrefix(action, "edit-begin-line:"):
 		if line, ok := actionIndex(action, "edit-begin-line:"); ok {
+			// Ctrl+Click jumps to the definition under the caret. Press
+			// already placed the caret from the click point (entering edit
+			// mode first when the file was in token view), so the word
+			// resolves exactly where the user pointed.
+			if a.ctrl {
+				return a.gotoDefinitionAtCaret(ctx)
+			}
 			// Press already placed the caret with its column; a Click that
 			// follows must not reset it to the line start.
 			if a.editing && a.edit != nil {
@@ -509,6 +516,8 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.setAutoSaveDelay(a.autoSaveDelayMs + 250)
 	case action == "palette-open":
 		return a.openPalette(ctx)
+	case action == "goto-definition":
+		return a.gotoDefinitionAtCaret(ctx)
 	case action == "win-min":
 		a.page.Window().Minimize()
 
@@ -2170,6 +2179,13 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 	// events, mirroring the Ctrl+Shift+F/V chords below.
 	if a.ctrl && a.shift && key == "o" {
 		return a.openSymbolPalette(ctx)
+	}
+
+	// Ctrl+D jumps to the definition of the symbol under the caret. F12
+	// stays with the dev dock, so Ctrl+D is the definition chord; it was
+	// verified free (no other branch or catalog default consumes it).
+	if a.ctrl && !a.shift && key == "d" && a.keymapAllows("goto-definition", key) {
+		return a.gotoDefinitionAtCaret(ctx)
 	}
 
 	// Ctrl+M jumps to the matching bracket (Ctrl+Shift+M selects to it).

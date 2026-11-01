@@ -321,6 +321,15 @@ func (a *App) editKey(ctx context.Context, key string) error {
 			// Ctrl+M jumps to the matching bracket; Ctrl+Shift+M selects
 			// to it. Brackets inside strings and comments are skipped.
 			return a.jumpToBracket(ctx, a.shift)
+		case "d":
+			// Ctrl+D jumps to the definition under the caret. The allows
+			// gate kills the chord when the action is rebound; the
+			// dispatcher below fires the replacement.
+			if !a.keymapAllows("goto-definition", key) {
+				return nil
+			}
+
+			return a.gotoDefinitionAtCaret(ctx)
 		case "slash", "/":
 			// Ctrl+/ toggles line comments. Both key names arrive
 			// depending on layout and window mapping.

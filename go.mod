@@ -24,7 +24,7 @@ require (
 	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/benoitkugler/textlayout v0.3.2 // indirect
 	github.com/benoitkugler/textprocessing v0.0.6 // indirect
-	github.com/chinmay-sawant/blinkless v0.0.4-0.20261026120705-9d2ba1c7b728 // indirect
+	github.com/chinmay-sawant/blinkless v0.1.1-0.20261031105747-f50f76a342ef // indirect
 	github.com/ebitengine/gomobile v0.0.0-20260820040257-d11f821a26a6 // indirect
 	github.com/ebitengine/hideconsole v1.0.0 // indirect
 	github.com/ebitengine/oto/v3 v3.5.0 // indirect
