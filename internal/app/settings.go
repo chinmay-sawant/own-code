@@ -87,6 +87,9 @@ type globalSettings struct {
 	ZoomPerView map[string]float64 `json:"zoomPerView,omitempty"`
 	Keymap      map[string]string  `json:"keymap,omitempty"`
 	Excludes    excludeSettings    `json:"excludes,omitempty"`
+	// MaxFPS is the desktop present cap: 0 missing (default uncapped),
+	// -1 explicit uncapped, else 60/120/144/240. Invalid falls back to 0.
+	MaxFPS int `json:"maxFps,omitempty"`
 }
 
 // defaultSettingsPath returns the global file beside the per-workspace
@@ -140,6 +143,8 @@ func loadSettings(path string) (globalSettings, error) {
 			_ = json.Unmarshal(value, &s.Keymap)
 		case "excludes":
 			_ = json.Unmarshal(value, &s.Excludes)
+		case "maxFps":
+			_ = json.Unmarshal(value, &s.MaxFPS)
 		}
 	}
 	s = s.sanitize()
@@ -188,7 +193,7 @@ func saveSettings(path string, s globalSettings) error {
 }
 
 // zeroSettings returns the builtin defaults: midnight, 12px, 100%,
-// no per-view overrides, no keymap diffs, gitignore on.
+// no per-view overrides, no keymap diffs, gitignore on, FPS uncapped.
 func zeroSettings() globalSettings {
 	return globalSettings{
 		Version:  settingsVersion,
@@ -196,6 +201,7 @@ func zeroSettings() globalSettings {
 		FontSize: defaultFontSize,
 		Zoom:     1,
 		Excludes: excludeSettings{UseGitignore: true},
+		MaxFPS:   0,
 	}
 }
 
@@ -260,6 +266,7 @@ func (s globalSettings) sanitize() globalSettings {
 	}
 	s.Excludes.Scan = cleanGlobList(s.Excludes.Scan)
 	s.Excludes.Search = cleanGlobList(s.Excludes.Search)
+	s.MaxFPS = NormalizeFPS(s.MaxFPS)
 	return s
 }
 
@@ -747,6 +754,7 @@ func (a *App) settingsSnapshot() globalSettings {
 		FontSize: a.baseFontSize(),
 		Zoom:     a.uiZoom(),
 		Excludes: excludeSettings{UseGitignore: true},
+		MaxFPS:   NormalizeFPS(a.settings.MaxFPS),
 	}
 	if len(a.zoomPerView) > 0 {
 		s.ZoomPerView = map[string]float64{}

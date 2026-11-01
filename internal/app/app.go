@@ -356,6 +356,10 @@ type App struct {
 	details       bool
 	devOn         bool
 	windowControl bool
+	// fpsCLI/fpsCLISet carry the --fps override: CLI wins over settings,
+	// default is uncapped. -1/0 both mean uncapped.
+	fpsCLI    int
+	fpsCLISet bool
 
 	// zoom is the layout multiplier, 1 for 100 percent. It scales the row
 	// grid, the window controls, and the reader fonts together, and persists per
@@ -466,11 +470,29 @@ type App struct {
 	browseDrag      bool
 	browseDragAt    int
 	browseDragScale float64
-	fileAlert       string
-	paletteOpen     bool
-	recent          []string
-	paletteQuery    string
-	paletteIndex    int
+	// settingsScrollOffset is the pixel offset of the settings tab
+	// content (see settings_scroll.go); the metrics below come from the
+	// last layout and feed the auto edge rail.
+	settingsScrollOffset int
+	settingsWheelAccum   float64
+	settingsViewH        int
+	settingsContentH     int
+	// settingsViewXYWH is the viewport box from the last layout, in page
+	// coords, with the panel origin beside it: the fixed rail is
+	// published panel-relative (see fillSettingsScroll).
+	settingsViewX     int
+	settingsViewY     int
+	settingsViewW     int
+	settingsPanelX    int
+	settingsPanelY    int
+	settingsDrag      bool
+	settingsDragAt    int
+	settingsDragScale float64
+	fileAlert         string
+	paletteOpen       bool
+	recent            []string
+	paletteQuery      string
+	paletteIndex      int
 	// paletteMode is the quick-open overlay mode: files, symbols, recent,
 	// or goto. The input box is shared; symbolQuery mirrors the query while
 	// the overlay is in symbols mode, and symbolScope pins Ctrl+Shift+O to
@@ -1142,6 +1164,9 @@ func (a *App) buildView() View {
 		Themes:        a.themeRows(),
 		AutoSave:      validAutoSave(a.autoSave),
 		AutoSaveDelay: clampAutoSaveDelay(firstNonZero(a.autoSaveDelayMs, autoSaveDefaultDelay)),
+		MaxFPS:        a.EffectiveMaxFPS(),
+		FPSLabel:      FPSLabel(a.EffectiveMaxFPS()),
+		FPSOptions:    fpsRows(a.EffectiveMaxFPS()),
 		SettingsTab:   a.settingsTabName(),
 		FontLabel:     a.fontLabel(),
 		KeymapRows:    a.keymapRows(),
@@ -1203,6 +1228,7 @@ func (a *App) buildView() View {
 	v.ExplorerInputTitle = a.explorerInputTitle()
 	a.fillTreeScroll(&v)
 	a.fillBrowseScroll(&v)
+	a.fillSettingsScroll(&v)
 	v.Tabs, v.TabsPrev, v.TabsNext = a.windowTabRows(0)
 	v.Recent = a.recentRows()
 	v.ActiveTab = a.active

@@ -18,10 +18,10 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          # Pinned master commit from go.mod pseudo-version
-          # v0.0.3-0.20261030185212-dbcfeccf49d1. Keep in sync with
-          # go.mod, install.sh, and install.ps1.
-          $Pin = "dbcfeccf49d15d5a8e596f6ada6d15baedad1b0d"
+          # Pinned ownframe commit from go.mod pseudo-version
+          # v0.0.3-0.20261101195413-022d6d9684c4 (feat/fps-cap-presents, unmerged).
+          # Keep in sync with go.mod, install.sh, and install.ps1.
+          $Pin = "022d6d9684c4a769f435a9faec63fcba71940a54"
           if (Test-Path ..\ownframe) { Remove-Item -Recurse -Force ..\ownframe }
           git clone --depth 1 --branch master --filter=blob:none --sparse https://github.com/chinmay-sawant/ownframe.git ..\ownframe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

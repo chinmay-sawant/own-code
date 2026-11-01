@@ -255,7 +255,10 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.scanDraft, a.scanTouched = "", false
 		a.searchDraft, a.searchTouched = "", false
 		a.cancelKeymapPending()
-		a.refresh()
+		a.resetSettingsScroll()
+		if err := a.redrawSettings(ctx); err != nil {
+			return err
+		}
 		return a.page.Form().Focus(ctx, "")
 	case action == "settings-close":
 		a.settingsOpen = false
@@ -270,7 +273,10 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.paletteOpen = false
 		a.searchOpen = false
 		a.branchOpen = false
-		a.refresh()
+		a.resetSettingsScroll()
+		if err := a.redrawSettings(ctx); err != nil {
+			return err
+		}
 		return a.page.Form().Focus(ctx, "")
 	case action == "file-menu-open":
 		a.fileMenu = !a.fileMenu
@@ -469,7 +475,8 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.refresh()
 	case strings.HasPrefix(action, "settings-tab:"):
 		a.settingsTab = strings.TrimPrefix(action, "settings-tab:")
-		a.refresh()
+		a.resetSettingsScroll()
+		return a.redrawSettings(ctx)
 	case action == "font-inc":
 		return a.setFontSize(ctx, a.baseFontSize()+1)
 	case action == "font-dec":
@@ -532,6 +539,22 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.setAutoSaveDelay(a.autoSaveDelayMs - 250)
 	case action == "autosave-delay-inc":
 		a.setAutoSaveDelay(a.autoSaveDelayMs + 250)
+	case strings.HasPrefix(action, "fps:"):
+		raw := strings.TrimPrefix(action, "fps:")
+		if raw == "-1" || raw == "uncapped" {
+			a.SetMaxFPS(FPSUncapped)
+			return nil
+		}
+		v := 0
+		for _, c := range raw {
+			if c < '0' || c > '9' {
+				v = -99
+				break
+			}
+			v = v*10 + int(c-'0')
+		}
+		a.SetMaxFPS(v)
+		return nil
 	case action == "palette-open":
 		return a.openPalette(ctx)
 	case action == "goto-definition":
@@ -1034,7 +1057,7 @@ func (a *App) onWheel(ctx context.Context, x, y, dx, dy float64) (bool, error) {
 		return true, nil
 	}
 	if a.settingsOpen {
-		return true, nil
+		return true, a.settingsWheelAt(ctx, x, y, dy)
 	}
 	if a.paletteOpen || a.branchOpen {
 		return false, nil
@@ -1605,6 +1628,10 @@ func (a *App) onDragStart(ctx context.Context, box ownframe.Box) (bool, error) {
 		return true, nil
 	}
 
+	if (box.ID == "settings-thumb" || box.ID == "settings-rail") && a.settingsOpen {
+		return a.startSettingsThumbDrag(), nil
+	}
+
 	if box.ID == "drawer-resize" {
 		a.drawerDrag = true
 		a.drawerDragExtra = a.drawerExtra
@@ -1764,6 +1791,17 @@ func (a *App) onDragMove(ctx context.Context, dx, dy float64) error {
 		return a.page.Redraw(ctx)
 	}
 
+	if a.settingsDrag {
+		before := a.settingsScrollOffset
+		a.moveSettingsThumbDrag(dy)
+		if a.settingsScrollOffset == before {
+			return nil
+		}
+		a.refresh()
+
+		return a.page.Redraw(ctx)
+	}
+
 	if a.drawerDrag {
 		a.drawerDx += dx
 		extra := a.drawerDragExtra + int(a.drawerDx+roundHalf)
@@ -1848,6 +1886,8 @@ func (a *App) onDragEnd(ctx context.Context) error {
 	a.historyListScale = 0
 	a.browseDrag = false
 	a.browseDragScale = 0
+	a.settingsDrag = false
+	a.settingsDragScale = 0
 	a.drawerDrag = false
 	a.drawerDx = 0
 	if a.cardDrag {

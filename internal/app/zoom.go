@@ -312,11 +312,11 @@ func zoomFontTable() []zoomFont {
 		// Details panel.
 		{".settings-header", 14},
 		{".settings-title", 14},
-		{".settings-theme-text span", 10},
+		{".settings-theme-text span", 11},
 		{".settings-sub", 12},
 		{".settings-key-text b", 11},
 		{".settings-key-text span", 10},
-		{".settings-key-fixed, .settings-capturing", 10}, {".settings-check", 16},
+		{".settings-key-fixed, .settings-capturing", 10}, {".settings-check", 14},
 		{".det-kicker", 9.5},
 		{".det-x", 14},
 		{".det-file b", 11},

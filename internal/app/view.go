@@ -207,10 +207,30 @@ type View struct {
 	ScanMatch     int
 	SearchSkip    int
 	SettingsNote  string
+	// SettingsScroll drives the settings edge rail (see settings_scroll.go).
+	// The rail shows only on overflow; ScrollTop is the negative pixel
+	// offset of the translated inner, TrackH/ThumbTop/ThumbH the rail
+	// geometry.
+	SettingsScroll    bool
+	SettingsScrollTop int
+	SettingsTrackH    int
+	SettingsThumbTop  int
+	SettingsThumbH    int
+	// SettingsRailLeft/Top pin the window-level fixed rail to the
+	// viewport's right edge. Inside this fixed dialog the engine anchors
+	// fixed coordinates to the settings panel, so both are published
+	// panel-relative (page scroll cancels out of the difference).
+	SettingsRailLeft int
+	SettingsRailTop  int
 	// AutoSave is off, afterDelay, or onFocusChange; AutoSaveDelay is the
 	// afterDelay debounce in ms, clamped to 250-5000.
 	AutoSave      string
 	AutoSaveDelay int
+	// MaxFPS is the effective desktop present cap (0=default 60, -1=uncapped);
+	// FPSLabel is its chip text and FPSOptions are the Settings buttons.
+	MaxFPS     int
+	FPSLabel   string
+	FPSOptions []fpsOptionRow
 }
 
 // keymapRow is one Settings → Keyboard row.

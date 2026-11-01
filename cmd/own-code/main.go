@@ -22,6 +22,7 @@ func main() {
 	dev := flag.Bool("dev", false, "open the developer tools dock at startup")
 	perf := flag.Bool("perf", true, "enable pipeline sampling for the devtools Frame tab")
 	windowControl := flag.Bool("window-control", true, "draw custom minimize, maximize, and close controls in the titlebar")
+	fps := flag.Int("fps", 0, "desktop present cap: 60/120/144/240, -1/0 uncapped (default); Updates run at cap+20, idle still parks")
 	wsl.AddWSLFlags(flag.CommandLine)
 	flag.Parse()
 	if wsl.MaybeReexecInWSL() {
@@ -42,6 +43,14 @@ func main() {
 	defer a.Close()
 
 	a.EnableSession()
+
+	fpsSet := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "fps" {
+			fpsSet = true
+		}
+	})
+	a.SetFPSCLI(*fps, fpsSet)
 
 	devSet := false
 	flag.Visit(func(f *flag.Flag) {
@@ -84,7 +93,7 @@ func main() {
 			log.Printf("own-code: watcher unavailable: %v", err)
 		}
 	}
-	options := ownframe.WindowOptions{CustomChrome: a.WindowControl(), PlacementID: "own-code"}
+	options := ownframe.WindowOptions{CustomChrome: a.WindowControl(), PlacementID: "own-code", MaxFPS: a.WindowMaxFPSValue()}
 	if a.WindowControl() {
 		options.Draggable = a.WindowControlDrag
 	}
