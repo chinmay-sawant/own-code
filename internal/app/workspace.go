@@ -49,11 +49,17 @@ type fileMeta struct {
 
 // fileNode is one directory or file in the tree.
 type fileNode struct {
-	Path     string
-	Name     string
-	Dir      bool
-	Ignored  bool
-	Loaded   bool
+	Path    string
+	Name    string
+	Dir     bool
+	Ignored bool
+	Loaded  bool
+	// Loading marks an in-flight async expand. LoadErr carries the last
+	// async failure for the retry row. More counts children hidden by
+	// dirChildCap. All three are transient render state, not scan state.
+	Loading  bool
+	LoadErr  string
+	More     int
 	Meta     *fileMeta
 	Children []*fileNode
 }
@@ -78,6 +84,11 @@ type workspace struct {
 	ScanMillis int64
 
 	ignored map[string]bool
+	// scanFilter is the compiled custom-excludes snapshot. Hard skips
+	// (skipDir, symlinks, depth, binary) always run first and win; this
+	// adds the user scan layer. loadNode and walkIgnoredDir consult it so
+	// lazy expansion respects excludes; search consults it separately.
+	scanFilter *scanExcludes
 }
 
 // loadSampleWorkspace scans the embedded demo project.
@@ -132,8 +143,34 @@ func loadDiskWorkspace(root string) (*workspace, error) {
 	return loadDiskWorkspaceWithLimit(root, MaxWorkspaceFiles)
 }
 
+// loadDiskWorkspaceWithLimitExcludes scans with a custom-excludes filter.
+// A nil filter scans exactly like loadDiskWorkspaceWithLimit. When the
+// filter disables gitignore integration, git calls are skipped.
+func loadDiskWorkspaceWithLimitExcludes(root string, limit int, filter *scanExcludes) (*workspace, error) {
+	return loadDiskWorkspaceInner(root, limit, filter)
+}
+
+// loadDiskWorkspaceWithLimit scans a real directory and stops before the file
+// after limit. A limit of zero or less means MaxWorkspaceFiles.
+func loadDiskWorkspaceWithLimit(root string, limit int) (*workspace, error) {
+	return loadDiskWorkspaceInner(root, limit, nil)
+}
+
+// loadDiskWorkspaceInner is the filtered walk behind both wrappers above.
+// Custom scan excludes hide files and pruned dirs at walk time; hard skips
+// (skipDir, symlinks, depth, binary) always run first and win.
+// loadDiskWorkspaceLazyExcludes reads root with a custom-excludes filter.
+// A nil filter behaves exactly like loadDiskWorkspaceLazy.
+func loadDiskWorkspaceLazyExcludes(root string, filter *scanExcludes) (*workspace, error) {
+	return loadDiskWorkspaceLazyInner(root, filter)
+}
+
 // loadDiskWorkspaceLazy reads only the immediate entries of root for on-demand expansion.
 func loadDiskWorkspaceLazy(root string) (*workspace, error) {
+	return loadDiskWorkspaceLazyInner(root, nil)
+}
+
+func loadDiskWorkspaceLazyInner(root string, filter *scanExcludes) (*workspace, error) {
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		return nil, fmt.Errorf("workspace path: %w", err)
@@ -149,13 +186,16 @@ func loadDiskWorkspaceLazy(root string) (*workspace, error) {
 	}
 
 	w := &workspace{
-		Root:   abs,
-		Lazy:   true,
-		ByPath: map[string]*fileMeta{},
+		Root:       abs,
+		Lazy:       true,
+		ByPath:     map[string]*fileMeta{},
+		scanFilter: filter,
 	}
 	started := time.Now()
 
-	w.ignored = loadIgnoredPaths(abs)
+	if filter == nil || filter.useGitignore {
+		w.ignored = loadIgnoredPaths(abs)
+	}
 
 	entries, err := os.ReadDir(abs)
 	if err != nil {
@@ -167,6 +207,10 @@ func loadDiskWorkspaceLazy(root string) (*workspace, error) {
 		name := entry.Name()
 		if entry.IsDir() {
 			if skipDir(name) {
+				continue
+			}
+			// Custom scan excludes hide the dir row entirely.
+			if filter != nil && filter.excludedByScan(name, true) {
 				continue
 			}
 			dirs = append(dirs, name)
@@ -183,6 +227,9 @@ func loadDiskWorkspaceLazy(root string) (*workspace, error) {
 				continue
 			}
 			if skipExt(name) {
+				continue
+			}
+			if filter != nil && filter.excludedByScan(name, false) {
 				continue
 			}
 			entryInfo, err := entry.Info()
@@ -206,7 +253,7 @@ func loadDiskWorkspaceLazy(root string) (*workspace, error) {
 		}
 	}
 
-	for path := range loadIgnoredDirs(abs, dirs) {
+	for path := range loadIgnoredDirsFiltered(abs, dirs, filter) {
 		if w.ignored == nil {
 			w.ignored = map[string]bool{}
 		}
@@ -225,9 +272,9 @@ func loadDiskWorkspaceLazy(root string) (*workspace, error) {
 	return w, nil
 }
 
-// loadDiskWorkspaceWithLimit scans a real directory and stops before the file
-// after limit. A limit of zero or less means MaxWorkspaceFiles.
-func loadDiskWorkspaceWithLimit(root string, limit int) (*workspace, error) {
+// loadDiskWorkspaceInner body: see the wrappers above. Custom scan
+// excludes hide files and pruned dirs at walk time; hard skips always win.
+func loadDiskWorkspaceInner(root string, limit int, filter *scanExcludes) (*workspace, error) {
 	if limit <= 0 {
 		limit = MaxWorkspaceFiles
 	}
@@ -246,7 +293,7 @@ func loadDiskWorkspaceWithLimit(root string, limit int) (*workspace, error) {
 		return nil, fmt.Errorf("workspace %s is not a directory", abs)
 	}
 
-	w := &workspace{Root: abs, ByPath: map[string]*fileMeta{}, Limit: limit}
+	w := &workspace{Root: abs, ByPath: map[string]*fileMeta{}, Limit: limit, scanFilter: filter}
 	dirs := make([]string, 0, maxIgnoreCandidates)
 	started := time.Now()
 
@@ -279,6 +326,13 @@ func loadDiskWorkspaceWithLimit(root string, limit int) (*workspace, error) {
 			if skipDir(name) || strings.Count(rel, "/") >= maxTreeDepth {
 				return fs.SkipDir
 			}
+			// Custom scan excludes prune the walk: an excluded dir is
+			// never entered and never reaches Files/Tree except by
+			// explicit open. Invalid patterns never abort the scan;
+			// they were dropped at compile time.
+			if filter != nil && filter.excludedByScan(rel, true) {
+				return fs.SkipDir
+			}
 
 			return nil
 		}
@@ -288,6 +342,10 @@ func loadDiskWorkspaceWithLimit(root string, limit int) (*workspace, error) {
 		}
 
 		if skipExt(name) {
+			return nil
+		}
+
+		if filter != nil && filter.excludedByScan(rel, false) {
 			return nil
 		}
 
@@ -320,13 +378,18 @@ func loadDiskWorkspaceWithLimit(root string, limit int) (*workspace, error) {
 	w.ScanMillis = time.Since(started).Milliseconds()
 	w.finish()
 
-	ignored := loadIgnoredPaths(abs)
-	for path := range loadIgnoredDirs(abs, dirs) {
-		if ignored == nil {
-			ignored = map[string]bool{}
-		}
+	// useGitignore=false skips git entirely (offline/fast); otherwise the
+	// dimmed/expandable gitignored rows are layered under custom excludes.
+	var ignored map[string]bool
+	if filter == nil || filter.useGitignore {
+		ignored = loadIgnoredPaths(abs)
+		for path := range loadIgnoredDirs(abs, dirs) {
+			if ignored == nil {
+				ignored = map[string]bool{}
+			}
 
-		ignored[path] = true
+			ignored[path] = true
+		}
 	}
 
 	if len(ignored) > 0 {
@@ -401,6 +464,12 @@ func (w *workspace) scanIgnoredDirs(root string, ignored map[string]bool) {
 			continue
 		}
 
+		// Custom scan excludes hide entirely: an excluded dir is never
+		// expanded, even when gitignore would keep it dimmed.
+		if w.scanFilter != nil && w.scanFilter.excludedByScan(path, true) {
+			continue
+		}
+
 		w.walkIgnoredDir(root, path)
 		walked = append(walked, path)
 
@@ -446,6 +515,11 @@ func (w *workspace) walkIgnoredDir(root, dir string) {
 			if strings.Count(rel, "/") >= maxTreeDepth {
 				return fs.SkipDir
 			}
+			// Custom scan excludes win over gitignore expansion: an
+			// excluded dir under an ignored parent stays hidden.
+			if w.scanFilter != nil && w.scanFilter.excludedByScan(rel, true) {
+				return fs.SkipDir
+			}
 
 			return nil
 		}
@@ -455,6 +529,10 @@ func (w *workspace) walkIgnoredDir(root, dir string) {
 		}
 
 		if skipExt(name) {
+			return nil
+		}
+
+		if w.scanFilter != nil && w.scanFilter.excludedByScan(rel, false) {
 			return nil
 		}
 
@@ -509,6 +587,65 @@ func loadIgnoredDirs(root string, dirs []string) map[string]bool {
 	}
 
 	return ignored
+}
+
+// loadIgnoredDirsFiltered skips git entirely when the filter disables
+// gitignore integration (offline/fast); otherwise it delegates.
+func loadIgnoredDirsFiltered(root string, dirs []string, filter *scanExcludes) map[string]bool {
+	if filter != nil && !filter.useGitignore {
+		return nil
+	}
+	return loadIgnoredDirs(root, dirs)
+}
+
+// applyScanExcludesToWorkspace attaches the app's compiled excludes to the
+// workspace and post-filters files scanned before the settings loaded.
+// Walk-time pruning covers new scans; this covers the startup scan that
+// ran before EnableSession.
+func (a *App) applyScanExcludesToWorkspace() {
+	if a.ws == nil {
+		return
+	}
+	a.ws.scanFilter = a.scanFilter
+	a.scanHidden = a.countScanHidden(a.settings.Excludes.Scan)
+	a.ws.applyScanFilter()
+}
+
+// setScanExcludes installs one excludes block: it updates the stored
+// settings, recompiles, refilters the workspace in place, and persists.
+func (a *App) setScanExcludes(e excludeSettings) {
+	e.Scan = cleanGlobList(e.Scan)
+	e.Search = cleanGlobList(e.Search)
+	a.settings.Excludes = e
+	a.scanFilter = compileScanExcludes(e)
+	a.applyScanExcludesToWorkspace()
+	a.persistSettings()
+}
+
+// applyScanFilter drops custom-scan-excluded files from Files/ByPath and
+// rebuilds the tree. Invalid patterns were dropped at compile time, so
+// this never aborts: worst case it removes nothing.
+func (w *workspace) applyScanFilter() {
+	filter := w.scanFilter
+	if w == nil || filter == nil || filter.scan == nil {
+		return
+	}
+	kept := w.Files[:0]
+	for _, meta := range w.Files {
+		if meta == nil {
+			continue
+		}
+		if filter.excludedByScan(meta.Path, false) {
+			delete(w.ByPath, meta.Path)
+			continue
+		}
+		kept = append(kept, meta)
+	}
+	w.Files = kept
+	w.finish()
+	if len(w.ignored) > 0 {
+		w.markIgnored(w.ignored)
+	}
 }
 
 // loadIgnoredPaths reads the paths git says are ignored. A directory entry is
@@ -945,6 +1082,10 @@ func childRelPath(parent, name string) string {
 
 // LoadDir loads the immediate entries for directory at path if not already loaded,
 // populating tree node children, w.Files, and w.ByPath.
+//
+// Off-render-path: by-path opens and tests only. WalkTree and onToggleDir
+// must enqueue through requestDirLoad instead of calling this inline, so the
+// page loop never blocks on disk I/O.
 func (w *workspace) LoadDir(path string) error {
 	return w.loadDir(path)
 }
@@ -983,6 +1124,10 @@ func (w *workspace) loadDir(path string) error {
 
 // loadNode reads the immediate entries of node from disk, populating its children
 // and adding new files to w.Files and w.ByPath.
+//
+// Off-render-path: by-path opens and tests only. The render loop uses the
+// async dir loader (requestDirLoad/receiveDirLoads/insertNodeChildren) so an
+// expand never blocks on ReadDir.
 func (w *workspace) loadNode(node *fileNode) error {
 	if !node.Dir || node.Loaded {
 		return nil
@@ -1006,6 +1151,11 @@ func (w *workspace) loadNode(node *fileNode) error {
 			if strings.Count(rel, "/") >= maxTreeDepth {
 				continue
 			}
+			// Custom scan excludes hide the dir row entirely, even on
+			// lazy expansion.
+			if w.scanFilter != nil && w.scanFilter.excludedByScan(rel, true) {
+				continue
+			}
 			child := findChild(node.Children, name)
 			if child == nil {
 				child = &fileNode{
@@ -1022,6 +1172,9 @@ func (w *workspace) loadNode(node *fileNode) error {
 				continue
 			}
 			if skipExt(name) {
+				continue
+			}
+			if w.scanFilter != nil && w.scanFilter.excludedByScan(rel, false) {
 				continue
 			}
 			info, err := entry.Info()
@@ -1062,6 +1215,8 @@ func (w *workspace) loadNode(node *fileNode) error {
 }
 
 // ensureFileLoaded loads ancestor directories if needed so w.ByPath[path] is ready.
+//
+// Off-render-path: by-path opens only. Never call from walkTree/onToggleDir.
 func (w *workspace) ensureFileLoaded(path string) {
 	if w.Sample || w.Root == "" || filepath.IsAbs(filepath.FromSlash(path)) {
 		return
@@ -1223,33 +1378,6 @@ func (w *workspace) readFile(path string) ([]byte, error) {
 // ReadFile returns the bytes of one workspace file, handling sample files automatically.
 func (w *workspace) ReadFile(path string) ([]byte, error) {
 	return w.readFile(path)
-}
-
-// detectIndent reports the indentation the file actually uses.
-func detectIndent(lines []string) string {
-	tabs := false
-	smallest := 0
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, "\t") {
-			tabs = true
-		}
-
-		n := len(line) - len(strings.TrimLeft(line, " "))
-		if n > 0 && (smallest == 0 || n < smallest) {
-			smallest = n
-		}
-	}
-
-	if tabs {
-		return "Tabs"
-	}
-
-	if smallest > 0 {
-		return fmt.Sprintf("Spaces: %d", smallest)
-	}
-
-	return "None"
 }
 
 // isBinary reports whether the first block contains a NUL byte.

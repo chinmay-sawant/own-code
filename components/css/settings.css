@@ -3,7 +3,9 @@
 .settings-body { display: flex; }
 .settings-nav { width: 180px; flex: 0 0 180px; padding: 16px 10px; background-color: var(--panel-2); border-right: 1px solid var(--line); }
 .settings-nav-active { padding: 9px 10px; border-radius: 4px; color: var(--text); background-color: var(--panel-3); }
-.settings-content { flex: 1; min-width: 0; padding: 18px 20px 20px; }
+.settings-nav-item { display: block; width: 100%; padding: 9px 10px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); text-align: left; }
+.settings-nav-item.settings-nav-active { color: var(--text); background-color: var(--panel-3); }
+.settings-content { flex: 1; min-width: 0; padding: 18px 20px 20px; max-height: 420px; overflow-y: auto; }
 .settings-title { color: var(--text); font-size: 14px; font-weight: 700; }
 .settings-caption { color: var(--muted); margin: 5px 0 12px; }
 .settings-theme { width: 100%; height: 48px; padding: 0 10px; display: flex; align-items: center; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 5px; color: var(--text); }
@@ -13,4 +15,34 @@
 .settings-theme:focus { outline: 0; }
 .settings-theme:focus-visible { outline: 2px solid var(--muted); outline-offset: -2px; }
 .settings-check { color: var(--text); font-size: 16px; }
+.settings-swatch { width: 22px; height: 22px; flex: 0 0 22px; border-radius: 5px; margin-right: 10px; border: 1px solid var(--line); background-color: var(--panel-3); }
+.swatch-midnight { background-color: #0e111a; }
+.swatch-dracula { background-color: #282a36; }
+.swatch-light { background-color: #ffffff; }
+.swatch-solarized { background-color: #fdf6e3; }
+.swatch-nord { background-color: #2e3440; }
+.swatch-contrast { background-color: #000000; }
+.settings-sub { color: var(--text); font-size: 12px; font-weight: 700; margin: 12px 0 6px; }
+.settings-count { color: var(--muted); font-weight: 400; }
+.settings-stepper { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.settings-step-value { min-width: 64px; text-align: center; color: var(--text); }
+.settings-btn { height: 24px; padding: 0 10px; border: 1px solid var(--line); border-radius: 4px; background-color: var(--panel-2); color: var(--text); }
+.settings-btn.primary { background-color: var(--accent); border-color: var(--accent); color: #fff; }
+.settings-perview { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--text); margin-bottom: 6px; }
+.settings-key { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 4px; color: var(--text); }
+.settings-key.fixed { opacity: 0.85; }
+.settings-key.capturing, .settings-key.conflict { border-color: var(--amber); }
+.settings-key-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.settings-key-text span { color: var(--muted); font-size: 10px; }
+.settings-key-text b { font-size: 11px; }
+.settings-key-btns, .settings-conflict-btns { display: flex; gap: 6px; align-items: center; }
+.settings-key-fixed, .settings-capturing { color: var(--muted); font-size: 10px; display: flex; gap: 6px; align-items: center; }
+.settings-conflict { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--amber); border-radius: 4px; margin-bottom: 8px; color: var(--text); }
+.settings-area { width: 100%; box-sizing: border-box; background-color: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; font-family: var(--mono); resize: vertical; }
+.settings-invalid { color: var(--red); margin: 4px 0 8px; }
+.settings-note { color: var(--muted); margin-top: 10px; }
+.settings-toggles { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.settings-toggle { display: flex; align-items: center; gap: 8px; background: transparent; border: 0; color: var(--text); text-align: left; }
+.settings-toggle .settings-check { width: 16px; }
+.settings-foot { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 @media (max-width: 760px) { .settings-panel { left: 20px; } .settings-nav { width: 130px; flex-basis: 130px; } }

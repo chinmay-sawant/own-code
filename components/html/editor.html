@@ -1,6 +1,6 @@
 <main class="void" id="void"><div class="scroll-space" style="height:{{.SpaceHeight}}px"></div></main>
 
-<section class="editor{{if .Split}} split{{end}}{{if eq .FocusGroup 0}} focus{{end}}" id="editor-window" style="left:{{.PaneLeft}}px;width:{{.PaneWidth}}px">
+<section class="editor{{if .Split}} split{{end}}{{if eq .FocusedPane 0}} focus{{end}}" id="editor-window" style="left:{{.PaneLeft}}px;width:{{.PaneWidth}}px">
   <div class="tabstrip" id="tabstrip">
     {{if .TabsPrev}}<button class="tab-nav" id="tabs-prev" data-action="tabs-prev" type="button" title="Earlier tabs" aria-label="Earlier tabs"{{if .Modal}} tabindex="-1"{{end}}>
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>
@@ -25,10 +25,11 @@
       </div>
       {{end}}
       {{range $t := .Tabs}}
-      <div class="tab{{if $t.Active}} on{{end}}">
-        <button class="tab-main" id="tab-{{$t.Index}}" data-action="tab:{{$t.Index}}" type="button" title="{{$t.Path}}"{{if $.Modal}} tabindex="-1"{{end}}>
+      <div class="tab{{if $t.Active}} on{{end}}{{if $t.Preview}} preview{{end}}{{if $t.Pinned}} pinned{{end}}">
+        <button class="tab-main" id="tab-{{$t.Index}}" data-action="tab:{{$t.Index}}" type="button" title="{{$t.Path}}{{if $t.Preview}} (preview — Enter or Ctrl+K to pin){{end}}{{if $t.Pinned}} (pinned){{end}}"{{if $.Modal}} tabindex="-1"{{end}}>
+          {{if $t.Pinned}}<span class="tab-pin" aria-hidden="true">•</span>{{end}}
           <span class="ficon sm lang-{{$t.Lang}}">{{$t.Badge}}</span>
-          <span class="tab-name">{{$t.Name}}</span>
+          <span class="tab-name{{if $t.Preview}} preview-name{{end}}">{{$t.Name}}</span>
           {{if $t.Dirty}}<span class="tab-dot" id="tab-dot-{{$t.Index}}"></span>{{end}}
           <span class="tab-status {{$t.StatusClass}}">{{$t.Status}}</span>
         </button>
@@ -99,13 +100,23 @@
       <button class="crumb-btn" id="edit-toggle" data-action="edit-toggle" type="button" title="Back to the source view (Esc)">Done</button>
       <span class="crumb-meta">{{.LineCount}} lines · Ctrl+S saves</span>
       {{else if .FindOpen}}
-      <div class="findbar" id="findbar">
+      <div class="findbar{{if .ReplaceOpen}} with-replace{{end}}" id="findbar">
         <input id="find" class="find-input" type="text" data-bind="FindQuery" placeholder="Find in file" autocomplete="off" spellcheck="false" aria-label="Find in file"{{if .Modal}} tabindex="-1"{{end}}>
         <span class="find-count mono" id="find-count" aria-live="polite" aria-atomic="true">{{.FindCurrent}}/{{.FindTotal}}</span>
-        <button class="find-btn{{if .FindCase}} on{{end}}" id="find-case" data-action="find-case" type="button" title="Match case" aria-label="Match case" aria-pressed="{{if .FindCase}}true{{else}}false{{end}}"{{if .Modal}} tabindex="-1"{{end}}>Aa</button>
+        <button class="find-btn{{if .FindCase}} on{{end}}" id="find-case" data-action="find-case" type="button" title="Match case (Alt+C)" aria-label="Match case" aria-pressed="{{if .FindCase}}true{{else}}false{{end}}"{{if .Modal}} tabindex="-1"{{end}}>Aa</button>
+        <button class="find-btn{{if .ReplaceRegex}} on{{end}}" id="find-regex" data-action="find-regex" type="button" title="Use regular expression (Alt+R)" aria-label="Use regular expression" aria-pressed="{{if .ReplaceRegex}}true{{else}}false{{end}}"{{if .Modal}} tabindex="-1"{{end}}>.*</button>
+        <button class="find-btn{{if .ReplaceWholeWord}} on{{end}}" id="find-word" data-action="find-word" type="button" title="Match whole word (Alt+W)" aria-label="Match whole word" aria-pressed="{{if .ReplaceWholeWord}}true{{else}}false{{end}}"{{if .Modal}} tabindex="-1"{{end}}>W</button>
         <button class="find-btn" id="find-prev" data-action="find-prev" type="button" title="Previous match" aria-label="Previous match"{{if .Modal}} tabindex="-1"{{end}}>↑</button>
         <button class="find-btn" id="find-next" data-action="find-next" type="button" title="Next match" aria-label="Next match"{{if .Modal}} tabindex="-1"{{end}}>↓</button>
         <button class="find-btn" id="find-close" data-action="find-close" type="button" title="Close find" aria-label="Close find"{{if .Modal}} tabindex="-1"{{end}}>×</button>
+        {{if .ReplaceOpen}}
+        <span class="replace-row" id="replace-row">
+          <input id="find-replace" class="find-input replace-input" type="text" data-bind="ReplaceQuery" placeholder="Replace in file" autocomplete="off" spellcheck="false" aria-label="Replace in file"{{if .Modal}} tabindex="-1"{{end}}>
+          <button class="find-btn text" id="replace-one" data-action="replace-one" type="button" title="Replace next (Enter)" aria-label="Replace next"{{if .FindError}} disabled{{end}}{{if .Modal}} tabindex="-1"{{end}}>Replace</button>
+          <button class="find-btn text" id="replace-all" data-action="replace-all" type="button" title="Replace all (Ctrl+Enter)" aria-label="Replace all"{{if .FindError}} disabled{{end}}{{if .Modal}} tabindex="-1"{{end}}>All</button>
+        </span>
+        {{if .FindError}}<span class="find-error" id="find-error" role="alert">{{.FindError}}</span>{{end}}
+        {{end}}
       </div>
       {{else}}
       <span class="tabs-fill"></span>
@@ -244,6 +255,8 @@
             <span class="key-item"><em>Alt ←</em><span>Back</span></span>
             <span class="key-item"><em>Alt →</em><span>Forward</span></span>
             <span class="key-item"><em>R</em><span>Refresh</span></span>
+            <span class="key-item"><em>Ctrl+K</em><span>Pin tab</span></span>
+            <span class="key-item"><em>Ctrl+Shift+T</em><span>Reopen tab</span></span>
             <button class="key-item key-settings" id="welcome-settings" data-action="settings-open" type="button" aria-label="Open settings"{{if .Modal}} tabindex="-1"{{end}}>
               <em><svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8.4 2h3.2l.5 2a6.3 6.3 0 0 1 1.4.6l1.8-1 2.2 2.2-1 1.8c.3.5.5.9.6 1.4l2 .5v3.2l-2 .5a6.3 6.3 0 0 1-.6 1.4l1 1.8-2.2 2.2-1.8-1a6.3 6.3 0 0 1-1.4.6l-.5 2H8.4l-.5-2a6.3 6.3 0 0 1-1.4-.6l-1.8 1-2.2-2.2 1-1.8a6.3 6.3 0 0 1-.6-1.4l-2-.5V8.4l2-.5a6.3 6.3 0 0 1 .6-1.4l-1-1.8 2.2-2.2 1.8 1a6.3 6.3 0 0 1 1.4-.6z"/><circle cx="10" cy="10" r="2.6"/></svg></em><span>Settings</span>
             </button>
@@ -299,17 +312,19 @@
 </section>
 
 {{if .Split}}
-<section class="editor editor-second{{if eq .FocusGroup 1}} focus{{end}}" id="editor-window-2" style="left:{{.Second.Left}}px;width:{{.Second.Width}}px">
+<button class="split-divider" id="split-divider" type="button" title="Drag to resize panes (arrow keys when focused, Home resets)" aria-label="Resize editor panes: drag, or use Left and Right, Home resets" style="left:{{.SplitDivLeft}}px;width:{{.SplitDivW}}px"><span class="split-grip">⋮</span></button>
+<section class="editor editor-second{{if .Second.Focused}} focus{{end}}" id="editor-window-2" style="left:{{.Second.Left}}px;width:{{.Second.Width}}px">
   <div class="tabstrip" id="tabstrip-2">
     {{if .Second.TabsPrev}}<button class="tab-nav" id="tabs2-prev" data-action="tabs2-prev" type="button" title="Earlier tabs" aria-label="Earlier tabs"{{if $.Terminal.Focus}} tabindex="-1"{{end}}>
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>
     </button>{{end}}
     <div class="tabs">
       {{range $t := .Second.Tabs}}
-      <div class="tab{{if $t.Active}} on{{end}}">
-        <button class="tab-main" id="tab2-{{$t.Index}}" data-action="tab2:{{$t.Index}}" type="button" title="{{$t.Path}}"{{if $.Terminal.Focus}} tabindex="-1"{{end}}>
+      <div class="tab{{if $t.Active}} on{{end}}{{if $t.Preview}} preview{{end}}{{if $t.Pinned}} pinned{{end}}">
+        <button class="tab-main" id="tab2-{{$t.Index}}" data-action="tab2:{{$t.Index}}" type="button" title="{{$t.Path}}{{if $t.Preview}} (preview — Ctrl+K to pin){{end}}{{if $t.Pinned}} (pinned){{end}}"{{if $.Terminal.Focus}} tabindex="-1"{{end}}>
+          {{if $t.Pinned}}<span class="tab-pin" aria-hidden="true">•</span>{{end}}
           <span class="ficon sm lang-{{$t.Lang}}">{{$t.Badge}}</span>
-          <span class="tab-name">{{$t.Name}}</span>
+          <span class="tab-name{{if $t.Preview}} preview-name{{end}}">{{$t.Name}}</span>
           {{if $t.Dirty}}<span class="tab-dot" id="tab2-dot-{{$t.Index}}"></span>{{end}}
           <span class="tab-status {{$t.StatusClass}}">{{$t.Status}}</span>
         </button>
@@ -321,7 +336,7 @@
     {{if .Second.TabsNext}}<button class="tab-nav" id="tabs2-next" data-action="tabs2-next" type="button" title="Later tabs" aria-label="Later tabs"{{if $.Terminal.Focus}} tabindex="-1"{{end}}>
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>
     </button>{{end}}
-    <button class="tab-tool" id="pane-left" data-action="focus-group:0" type="button" title="Focus the left editor" aria-label="Focus the left editor"{{if $.Terminal.Focus}} tabindex="-1"{{end}}>L</button>
+    <button class="tab-tool" id="pane-left" data-action="focus-group:0" type="button" title="Focus the left editor (Ctrl+1)" aria-label="Focus the left editor"{{if $.Terminal.Focus}} tabindex="-1"{{end}}>L</button>
     <button class="tab-tool on" id="split-close" data-action="split-toggle" type="button" title="Close the split editor" aria-label="Close the split editor"{{if $.Terminal.Focus}} tabindex="-1"{{end}}>▥</button>
   </div>
 

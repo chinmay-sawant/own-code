@@ -89,19 +89,80 @@ func (a *App) closeSplitSide(side int, mode splitCloseMode)
 
 ## 4. Checklist
 
-- [ ] Audit `app_session.go` persisted split fields; decide tab-scroll persistence (recommend no).
-- [ ] `tabScroll[2]map + scrollXGrp[2]`; init + session load.
-- [ ] `resetGroupScroll(group)`; replace split-path blanket resets.
-- [ ] Save/restore on open/select/close; update preserve-other-pane expectation (restore not zero).
-- [ ] Group-threaded h-scroll + routing + tests.
-- [ ] `onScroll` split guard + regression test.
-- [ ] Click-to-focus + tests; `Ctrl+1/2` + help text.
-- [ ] Active-pane highlight + box test.
-- [ ] Fix `w` → focused group + test.
+- [x] Audit `app_session.go` persisted split fields; decide tab-scroll persistence (recommend no).
+- [x] `tabScroll[2]map + scrollXGrp[2]`; init + session load.
+- [x] `resetGroupScroll(group)`; replace split-path blanket resets.
+- [x] Save/restore on open/select/close; update preserve-other-pane expectation (restore not zero).
+- [x] Group-threaded h-scroll + routing + tests.
+- [x] `onScroll` split guard + regression test.
+- [x] Click-to-focus + tests; `Ctrl+1/2` + help text.
+- [x] Active-pane highlight + box test.
+- [x] Fix `w` → focused group + test.
 - [ ] `closeSplitSide(merge|drop)` + renumber + dirty guard + menu/palette/shortcut + tests.
-- [ ] `split-divider` drag + keyboard + clamp + persist + tests.
-- [ ] Extend `split_scroll_test.go`, `editor_scroll_test.go`, `feature_test.go`.
+- [x] `split-divider` drag + keyboard + clamp + persist + tests.
+- [x] Extend `split_scroll_test.go`, `editor_scroll_test.go`, `feature_test.go`.
 - [ ] Web-mode + zoom QA; docs/help/session note.
+
+## 4b. Evidence (2026-11-01, implementer session)
+
+Validated in an isolated `HEAD` worktree (`/tmp/opencode/split08-base`, with
+`../ownframe` symlinked): `gofmt` clean on touched files, `go vet
+./internal/app/` clean, `go test -p 1 ./internal/app/ -run
+'TestSplit|TestEditorScroll|TestHscroll|TestScroll' -count=1` green, and the
+full `go test -p 1 ./internal/app/ -count=1` green. The same change set is
+ported into the working tree; the working tree itself does not compile right
+now because of another worker's in-flight refactor (missing
+`replaceRegex`/`searchReplace`/confirm-field symbols, duplicate
+`paletteCommandRows`), so working-tree test evidence is pending their
+landing. New tests live in `internal/app/split_improvements_test.go`.
+
+- Audit: `sessionState` carries `Split/FocusGroup/Tabs2/Active2/SplitRatio`
+  (`session.go`), restored in `app_session.go` (`restoreState`) and snapshotted
+  in `sessionState()`; `tabScroll`/`scrollXGrp`/drag state are runtime-only by
+  decision. Session note added to README Limits.
+- `tabScroll [2]map[string]int` + `scrollXGrp [2]int` + `splitDrag` on `App`
+  (`app.go`), initialized in `New`/`resetLayout`/`switchProject`, guarded in
+  `resetScroll`; toggle-open seeds both groups from `scrollX`.
+- `resetGroupScroll(group)` (`split_scroll.go`); split paths in
+  `openFileAt`/`openFileAtMode`(`finishOpenCommon`)`/`selectTabAt`/`closeTabIn`/`closeTabsIn`/menu
+  close use save/restore or per-group reset — no blanket `resetScroll()`.
+  `toggleSplit` keeps its legacy blanket reset.
+- `TestSplitScrollTabSwitchPreservesOtherPane` now asserts restore (round
+  trip), plus `TestSplitScrollPerTabRestore`. Note: a file *open* still ends
+  with the first-change jump, so reopen-restore only survives for changeless
+  files; tab switches restore unconditionally.
+- `scrollHorizontalFor/scrollXFor/setScrollXFor/maxLineWidthFor/hscrollWindowFor`
+  (`hscroll.go`); wheel tests `isOverPane(1)` before 0, arrows route to the
+  focused group (`TestSplitHScrollIndependent`).
+- `onScroll` ignores `offsetY` for scroll state in split; viewport resizes
+  still rebuild (`TestSplitOnScrollInert`). `SpaceHeight` stays group-0/max
+  with a code comment; dual-spacer out of scope.
+- `focusGroupForClick` + `onClick` fallback (`TestSplitFocusClick`);
+  `Ctrl+1/2` before terminal keys (like `Ctrl+\``) + `F6` cycle + keymap
+  catalog entries (`focus-left/focus-right/cycle-pane`) + README Keys rows
+  (`TestSplitFocusKeys`; plain `1/2` asserted untouched).
+- `View.FocusedPane` + `Second.Focused` drive the `focus` classes;
+  `.editor.split:not(.focus) .tabstrip` dims the idle pane
+  (`TestSplitActiveHighlight`, incl. `split-divider` box geometry).
+- `w` closes the focused group's tab (`TestSplitWClosesFocused`).
+- Divider: `split-divider` button + `splitDividerGeometry` + drag
+  start/move/end with `/uiZoom` math, clamp (`clampSplitRatio`: session
+  0.2–0.8 + `paneMinWidth`), scroll-preserve, `persistSession`, keyboard
+  arrows/`Home` (`TestSplitDividerDrag`, `TestSplitDividerKeyboard`).
+- Rail isolation: `TestSplitThumbDragIsolation`. Zoom rescales groups +
+  memory (`setZoom` split-aware tail, `TestSplitZoomRescalesGroups`).
+- Close-side box left unchecked: merge/drop/renumber-to-0/dirty-guard/menu
+  rows/shortcut are implemented and tested (`TestSplitCloseSideMerge`,
+  `TestSplitCloseLeftRenumber`, `TestSplitCloseDirtyBlock`,
+  `TestSplitCloseSideDrop`, `TestSplitCloseMergeCap`,
+  `TestSplitCloseLastLeftAdoptsRight`, `TestSplitPaneMenu`), but **palette
+  commands are missing** — the palette is file-only and its command-row
+  infrastructure is another worker's in-flight change. Wire
+  `code-view:split-close:<side>:<merge|drop>` into the palette once that
+  lands.
+- Web/zoom box left unchecked: zoom rescale is implemented + tested and docs
+  (README Keys/Limits/Features, divider + pane `title`/`aria-label` help)
+  are done; **web-mode QA was not performed** (no web harness available).
 
 ## 5. Acceptance + tests
 

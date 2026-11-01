@@ -91,12 +91,14 @@ your `PATH`, and run `own-code`.
 ## Features
 
 - Explorer tree with filter, language badges, change letters, and sticky folders. Right click gives Copy Path, Copy File, Paste.
-- Up to eight tabs plus a split second editor group. Both groups share one window and one page scroll.
+- Up to eight tabs plus a split second editor group with independent scroll, click or `Ctrl+1`/`Ctrl+2` focus, a draggable divider, and close-one-side that merges tabs into the survivor.
 - Click to edit in place with syntax colors, `Ctrl+S` saves. `Ctrl+A` select all, `Ctrl+C` copy, undo and redo.
 - Gutter marks on changed lines with line cards, plus a bottom bar to step through changed files.
 - Unified and split diffs with word emphasis, hunk stepping (`N`/`P`), and per-block revert.
 - Source Control: working tree plus a history lane graph that loads in pages. Branch picker without changing checkout.
-- Quick open (`Ctrl+P`), in-file find (`Ctrl+F`), workspace content search (`Ctrl+Shift+F`).
+- Quick open (`Ctrl+P`), in-file find (`Ctrl+F`) and replace (`Ctrl+H`), workspace content search (`Ctrl+Shift+F`) and replace (`Ctrl+Shift+H`).
+- Go to line (`Ctrl+G` with `:<line>[:<col>]`), go to symbol in the active file (`Ctrl+Shift+O`), bracket jump and select (`Ctrl+M`, `Ctrl+Shift+M`).
+- Editing helpers: auto-indent on `Enter`, toggle line comment (`Ctrl+/`), indent and outdent (`Tab`, `Shift+Tab`).
 - Markdown preview (`Ctrl+Shift+V`) with tables and Mermaid flowcharts, in fixed rows.
 - Highlighting for Go, Python, JavaScript/TypeScript, Markdown, CSS, JSON, HTML, YAML, and shell.
 - Details drawer with outline, status bar, persisted sessions, soft wrap (`Z`), desktop file watcher.
@@ -139,14 +141,24 @@ Chrome's browser and GPU processes alone, 347 MB PSS, are larger than the entire
 | Key | Action |
 |---|---|
 | **`Ctrl+P`** | Quick open |
+| **`Ctrl+G`** | Go to line (`:<line>[:<col>]`) |
+| **`Ctrl+Shift+O`** | Go to symbol in the active file |
+| **`Ctrl+M`** | Jump to the matching bracket (`Ctrl+Shift+M` selects to it) |
+| **`Ctrl+/`** | Toggle line comment while editing |
+| **`Tab` `Shift+Tab`** | Indent or outdent while editing |
 | **`Ctrl+F`** | Find in the active file |
+| **`Ctrl+H`** | Find and replace in the active file (`Enter` replaces next, `Ctrl+Enter` replaces all) |
 | **`Ctrl+Shift+F`** | Search workspace contents |
+| **`Ctrl+Shift+H`** | Search and replace across the workspace (per-file checkboxes, `Ctrl+Enter` confirms) |
+| **`Alt+C` / `Alt+R` / `Alt+W`** | Match case, regular expression, whole word in the find or search bar |
 | **`Ctrl+E`** | Edit the active file |
 | **`Ctrl+S`** | Save while editing |
 | **`Ctrl+A`** | Select all in the edit buffer |
 | **`Ctrl+C`** | Copy the edit selection |
 | **`Ctrl+V`** | Paste a staged copy or clipboard file into the explorer folder |
 | **`Ctrl+\`** | Split or close the second editor |
+| **`Ctrl+1` `Ctrl+2`** | Focus the left or right editor |
+| **`F6`** | Cycle the focused editor pane while split |
 | **`M` or `Ctrl+Shift+V`** | Markdown preview |
 | **`Z`** | Toggle soft wrap in files and diffs |
 | **`Enter` `Space`** | Activate the focused control |
@@ -158,7 +170,7 @@ Chrome's browser and GPU processes alone, 347 MB PSS, are larger than the entire
 | **`Page Up` `Page Down`** | Scroll a page |
 | **`Home` `End`** | First or last row |
 | **`R`** | Reload the open file, or refresh the diff |
-| **`W`** | Close the active tab, or the Working tree tab in Source Control |
+| **`W`** | Close the focused pane's active tab, or the Working tree tab in Source Control |
 | **`S` `U`** | Split or unified diff |
 | **`N` `P`** | Next or previous hunk |
 | **`Esc`** | Close Details, the toast, search, or the edit buffer |
@@ -167,7 +179,8 @@ Chrome's browser and GPU processes alone, 347 MB PSS, are larger than the entire
 
 ## Limits
 
-- The two editor groups share one window and one page scroll. A split keeps both panes on the same row offset.
+- The two editor groups scroll vertically and horizontally on their own offsets, rails, and per-tab memory; click a pane or press `Ctrl+1`/`Ctrl+2` to focus it. The divider drags (arrow keys + `Home` when focused), and closing one side merges its tabs into the survivor unless dropped. The page spacer follows the taller pane.
+- The split layout (open panes, focused side, divider ratio) persists per workspace in the session file; per-tab scroll offsets do not survive a restart.
 - Files over 512 KB and files with a NUL byte show a notice. A file over 20,000 lines keeps the first 20,000. A line over 32 KB shows a notice instead of opening.
 - A diff over 512 KB, 20,000 lines, or one line over 32 KB renders one notice row. A commit patch that hits its 512 KB read cap shows the same notice.
 - The scan skips `.git`, `node_modules`, `vendor`, build output, and binary extensions.
@@ -176,20 +189,24 @@ Chrome's browser and GPU processes alone, 347 MB PSS, are larger than the entire
 - This app targets desktop. There is no phone layout or mobile path.
 - The fsnotify watcher is desktop only. `-web` keeps the manual Refresh and `R` path.
 - Quick open searches file names. Paste an absolute path to open that file, even outside the workspace. `Ctrl+Shift+F` searches file contents.
+- In-file replace (`Ctrl+H`) and workspace replace (`Ctrl+Shift+H`) share one matcher: literal, `Aa` case, `.*` regex (Go RE2, `$1`/`$name` in the replacement), and whole-word toggles. Invalid patterns show an inline error and disable Replace. In-file replace-all is one undo step; workspace replace-all confirms first (`Replace N in K files?`), skips binary, oversized, ignored, dirty, and unreadable files, preserves CRLF, refuses past 2000 matches, and offers one explicit Undo replace (not `Ctrl+Z`).
 - The Markdown preview uses fixed rows. It is an approximation, not a browser DOM. Mermaid covers basic flowcharts and sequence diagrams, not subgraphs.
 - Gutter marks and line cards cover working tree changes only. A commit patch keeps its unified or split diff view.
-- Editing is a simple buffer. It has no multi cursor, no language server, and no unsaved change prompt when a tab closes.
-- Git ignored paths stay in the explorer as muted gray rows with an `IGNORED` badge. A skipped ignored directory gets one placeholder row.
+- Editing is a simple buffer. It has no multi cursor and no language server. Dirty tabs and explorer rows carry a dot; closing one asks Save / Don't Save / Cancel. Auto-save (Settings: Off, After delay with a 250–5000 ms debounce, On focus change) persists per workspace. It never writes merge results or the sample workspace, and the delay skips large files.
+- Git ignored paths stay in the explorer as muted gray rows with an `IGNORED` badge. A skipped ignored directory gets one placeholder row. Expanding an ignored folder loads real children with a spinner; empty stays a placeholder with no spin loop.
+- Settings (gear icon) roam in `settings.json` beside the per-workspace sessions: theme, base font (8–24px), interface zoom (50–300%), per-view editor/terminal overrides, keymap diffs, and scan/search exclude globs. Precedence is session > settings > builtin: a restored session overrides only the fields it stored, and every gesture writes both files. The status chip (`110% · 12px`) opens Appearance.
+- `-files N` sets the scan budget (default 10000): an explicit N runs a full walk, otherwise startup opens lazily. Lazy never sets a scan budget; per-operation caps apply instead: 2000 children per folder (+ "N more…" row), Quick Open 8 rows / 750 ms disk timeout, content search 200 hits / 8 per file / 512 KB, all cancellable with Busy + Note and stale-drop. Scan excludes (`**/coverage/**`, `*.log`, trailing `/` for folders) hide files from the tree and search at walk time; search excludes plus ignored files (unless toggled) skip content search with an "N files skipped" note. Invalid globs are rejected in red and never abort a scan. Overbroad edits (over half, or all, files hidden) need a confirm.
+- Keyboard shortcuts are rebindable in Settings → Keyboard (diffs only; Reset restores defaults). `F12`/`Ctrl+Shift+I` stay fixed for the developer dock. Terminal-owned chords (`Ctrl+C/V/X/Z/Y`) and single letters need a confirm; conflicts offer Swap/Replace/Cancel.
 
 ### How VS Code handles the same limits
 
-own-code scans the whole tree up front and tokenizes every line, so its caps are explicit. VS Code instead defers the work.
+own-code reads the root directory at startup and tokenizes only opened files (up to 512 KB / 20,000 lines / 32 KB per line), so its caps are explicit. VS Code instead defers the work.
 
 | Area | own-code | VS Code |
 |---|---|---|
-| **Explorer tree** | Crawls the whole tree at startup up to the file budget and keeps all nodes in memory | Lazy reads: folders load only when expanded, no full tree walk at startup |
-| **Quick open and search** | Filters the pre-scanned in-memory slice; workspace search caps at 200 hits, 8 per file | Out-of-process ripgrep streaming from disk, respecting ignores and excludes |
-| **File watching** | In-process fsnotify up to 2,000 directories | Native recursive watchers, skipping `node_modules` and `.git/objects` |
+| **Explorer tree** | Lazy by default: ReadDir(root) only at startup; folders load async on expand with spinner/retry, 2000 per-dir cap + "more…" row | Lazy reads: folders load only when expanded, no full tree walk at startup |
+| **Quick open and search** | Streaming ripgrep from disk (respects ignores, no --no-ignore) covering unexpanded folders; caps 200 hits / 8 per file / 512 KB; loaded-only fallback notes scope | Out-of-process ripgrep streaming from disk, respecting ignores and excludes |
+| **File watching** | Watches root + loaded/expanded dirs + git metadata (well under 2,000); targeted dir reloads, lazy-preserving rescan | Native recursive watchers, skipping `node_modules` and `.git/objects` |
 | **Large files** | Skips files over 512 KB or 20,000 lines with a notice row | Piece Tree buffer; above roughly 20–50 MB it drops tokenization, minimap, and language features and shows plain text |
 
 ## Tests

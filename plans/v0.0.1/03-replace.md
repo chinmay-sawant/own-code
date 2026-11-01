@@ -116,17 +116,28 @@ Preview caps stay; apply uncapped but bounded by `maxFileBytes`/`MaxWorkspaceFil
 
 ## 4. Checklist
 
-- [ ] `matcher` (`searchOpts`, compile, spans, expansion) + unit tests; unify `find.go` + `workspace_search.go`; unify `200` const.
-- [ ] In-file state + template bar (2 inputs + 3 toggles + count + buttons); sticky toggles in session.
-- [ ] Matcher-aware `reindexFind`; `replaceOne`/`replaceAllInFile` single-undo; raw/display col correctness; regex errors.
-- [ ] Keys/focus: `Ctrl+H`, `Enter`/`Ctrl+Enter`, `Alt+C/R/W`, `Esc`, `find-replace` id, guards.
-- [ ] Workspace state + file-group checkboxes + `Replacement` preview + footer counts.
-- [ ] Opts-aware search + total-vs-capped note + invalid-regex handling.
-- [ ] Apply: eligibility recheck, lazy sweep, uncapped rescan + ceiling, raw-line replace, `writeFile` + refresh, skipped reporting.
-- [ ] Confirm modal + `undoWorkspaceReplace` journal with cap.
-- [ ] Dirty/sample guards.
-- [ ] Tests: matcher tables; find replace-one/all (case/regex/word, single undo, tabs); workspace apply on temp dirs (caps, skips, groups, journal undo).
-- [ ] Docs/help + accessibility labels.
+- [x] `matcher` (`searchOpts`, compile, spans, expansion) + unit tests; unify `find.go` + `workspace_search.go`; unify `200` const.
+  Evidence: `internal/app/replace_match.go` + `replace_match_test.go` (TestMatcherLiteral/WholeWord/Regex/Expansion PASS); `reindexFind` and `searchWorkspaceOpts` both delegate; `searchResultLimit` removed, preview uses `workspaceSearchLimit`. `go test -run TestReplace` green, `go vet ./internal/app/` clean.
+- [x] In-file state + template bar (2 inputs + 3 toggles + count + buttons); sticky toggles in session.
+  Evidence: `App.replaceOpen/replaceQuery/replaceRegex/replaceWholeWord/findError`, `components/html/editor.html` findbar (find + find-replace inputs, Aa/.*/W toggles, count, Replace/All), session persists FindCase/FindRegex/FindWholeWord (`session.go`, `app_session.go`). TestReplaceTogglesSticky PASS (toggles survive closeFind, queries clear).
+- [x] Matcher-aware `reindexFind`; `replaceOne`/`replaceAllInFile` single-undo; raw/display col correctness; regex errors.
+  Evidence: `find.go` (`replaceEditRanges` = one `pushUndo` per gesture; `hitBufferRange` maps display→raw via `rawColumnAt`; doc path folds into dirty doc). TestReplaceOneLiteral, TestReplaceAllGroupedUndo (exactly +1 undo, one Ctrl+Z restores), TestReplaceTabMapping (tab-indented line), TestReplaceRegexGroups (`$1`), TestReplaceWholeWord, TestReplaceInvalidRegex (inline error, replace disabled) PASS.
+- [x] Keys/focus: `Ctrl+H`, `Enter`/`Ctrl+Enter`, `Alt+C/R/W`, `Esc`, `find-replace` id, guards.
+  Evidence: `actions.go` (`Ctrl+H`→openReplace, `Ctrl+Shift+H`→openWorkspaceReplace, Enter=`replaceOne`/open-hit, Ctrl+Enter=`replaceAll`/confirm, Alt+C/R/W→toggleMatchKeys, Esc closes both, Space toggles file checkbox); `find-replace`+`workspace-replace` ids in `mergeTextFocus`, `pasteTargetReady`, Ctrl+A guard, click passthrough; keymap catalog entries `replace-in-file`/`workspace-replace` + `runKeymapAction` arms. TestReplaceKeys (Ctrl+H/Esc/Ctrl+F) + TestReplaceAltToggles PASS. `onUndo` overlay guard already covers the search panel; in-file bar keeps prior find behavior.
+- [x] Workspace state + file-group checkboxes + `Replacement` preview + footer counts.
+  Evidence: `searchReplace/searchRegex/searchWholeWord/replaceCheck`, `searchView`/`searchRow` (Replacement/Checked/GroupFirst/GroupCount, ReplaceFiles/ReplaceTotal), `palette.html` group headers with checkboxes + →replacement lines + footer. TestWorkspaceReplaceCheckbox PASS.
+- [x] Opts-aware search + total-vs-capped note + invalid-regex handling.
+  Evidence: `runWorkspaceSearch` compiles first (regex untrimmed, literal trimmed), `Total`/`Capped` counted past preview caps, `workspaceReplaceNote` ("Replace All scans everything"), invalid regex → `searchError` + no scan. TestWorkspaceSearchOpts (in `workspace_search_test.go`) + TestWorkspaceSearchInvalidRegex PASS.
+- [x] Apply: eligibility recheck, lazy sweep, uncapped rescan + ceiling, raw-line replace, `writeFile` + refresh, skipped reporting.
+  Evidence: `workspace_replace.go` (`replaceRescan` uncapped to 2000+1, `applyWorkspaceReplace` rechecks Ignored/size/binary/read per file, `sweepWorkspace` loads lazy dirs bounded by `MaxWorkspaceFiles`, `replaceRawBytes` preserves CR/BOM and matches raw runes, `writeFile` + doc refresh, `replaceSkipped` footer). TestWorkspaceReplaceApplyAndUndo, TestWorkspaceReplaceSkips, TestWorkspaceReplaceLazySweep, TestWorkspaceReplaceCeiling, TestWorkspaceReplaceCRLF, TestWorkspaceReplaceRegex PASS.
+- [x] Confirm modal + `undoWorkspaceReplace` journal with cap.
+  Evidence: `confirmKindReplaceAll` ("Replace N in K files?", first 10 files, Replace label/hint via OkLabel/OkHint), `appliedFile` journal capped at ~5 MB (`replaceJournalCapBytes`, undo disables with note), explicit undo button (not Ctrl+Z), dirty-since-apply files kept + reported. TestWorkspaceReplaceConfirm + TestWorkspaceReplaceJournalCap PASS.
+- [x] Dirty/sample guards.
+  Evidence: checked dirty/live-edit files block the whole gesture with a name list (`replaceBlockedFiles`); sample workspace refuses confirm and apply with toasts; no partial apply. TestWorkspaceReplaceDirtyBlocks + TestWorkspaceReplaceSampleBlocked PASS.
+- [x] Tests: matcher tables; find replace-one/all (case/regex/word, single undo, tabs); workspace apply on temp dirs (caps, skips, groups, journal undo).
+  Evidence: `replace_match_test.go`, `find_replace_test.go` (8 tests), `workspace_replace_test.go` (12 tests), `TestWorkspaceSearchOpts` appended to `workspace_search_test.go`. `go test -p 1 ./internal/app/ -run 'TestFind|TestReplace|TestSearch|TestWorkspace' -count=1` → ok; full `./internal/app/` suite green in the isolated worktree at /tmp/opencode/replace03-val; in the shared tree only unrelated in-flight explorer-menu tests fail (their files, absent at HEAD).
+- [x] Docs/help + accessibility labels.
+  Evidence: README key table (Ctrl+H, Ctrl+Shift+H, Alt+C/R/W) + matcher/undo semantics note; every new control carries title + aria-label (Aa/.*/W toggles, Replace/All, checkboxes, Replace All, Undo replace, inputs), inline errors use role=alert, toggle buttons use aria-pressed. TestAccessibilityLabels + TestAccessibilityPaletteDialog PASS.
 
 ## 5. Acceptance + tests
 

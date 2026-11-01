@@ -93,18 +93,18 @@ Retire startup truncation for lazy (`ScanBudget()==""` always; lock test). New b
 
 ## 4. Checklist
 
-- [ ] Worker + state: chan/tokens/`Loading`/`LoadErr`, spinner + retry rows, `requestDirLoad`/`receiveDirLoads` in `tickWatch`.
-- [ ] De-block render: `walkTree`/`onToggleDir` enqueue-only; sync loaders kept for by-path/tests, marked off-render-path.
-- [ ] `insertNodeChildren` (children-only sort, batched `Files`), `dirChildCap` + more-row, `watcher.Add` on load.
-- [ ] Cancellation: collapse token-drop, retry, slow metric.
-- [ ] Quick-open streaming: cancellable `rg --files` → `git ls-files` → walk, incremental render, `paletteBusy/Note`, exclude-parity test.
-- [ ] Content streaming: `searchRipgrep` caps + `max-filesize`, fallback note, keep `searchWorkspace` for no-`rg`/tests.
-- [ ] Watcher shrink: root+loaded-only, targeted refresh, lazy-preserving rescan, eviction.
-- [ ] Ignored placeholders: muted `IGNORED` kept; expand loads real children with spinner; empty stays placeholder (no spin loop).
-- [ ] Filter + `TreeCount`: exclude spinner/retry/more rows; filter declares scope in note.
-- [ ] Flags/docs: `-files` help (N = full; default lazy), README Limits + VS Code table (fix tokenization sentence), `ScanBudget` lock test.
-- [ ] Tests: async expand, cancel-collapse, retry-permission, 10k cap, search-unexpanded via rg (skip if absent), targeted-not-full watcher (counter hook), web no-watcher regression.
-- [ ] Perf gates (§5) measured + recorded.
+- [x] Worker + state: chan/tokens/`Loading`/`LoadErr`, spinner + retry rows, `requestDirLoad`/`receiveDirLoads` in `tickWatch`.
+- [x] De-block render: `walkTree`/`onToggleDir` enqueue-only; sync loaders kept for by-path/tests, marked off-render-path.
+- [x] `insertNodeChildren` (children-only sort, batched `Files`), `dirChildCap` + more-row, `watcher.Add` on load.
+- [x] Cancellation: collapse token-drop, retry, slow metric.
+- [x] Quick-open streaming: cancellable `rg --files` → `git ls-files` → walk, incremental render, `paletteBusy/Note`, exclude-parity test.
+- [x] Content streaming: `searchRipgrep` caps + `max-filesize`, fallback note, keep `searchWorkspace` for no-`rg`/tests.
+- [x] Watcher shrink: root+loaded-only, targeted refresh, lazy-preserving rescan, eviction.
+- [x] Ignored placeholders: muted `IGNORED` kept; expand loads real children with spinner; empty stays placeholder (no spin loop).
+- [x] Filter + `TreeCount`: exclude spinner/retry/more rows; filter declares scope in note.
+- [x] Flags/docs: `-files` help (N = full; default lazy), README Limits + VS Code table (fix tokenization sentence), `ScanBudget` lock test.
+- [x] Tests: async expand, cancel-collapse, retry-permission, 10k cap, search-unexpanded via rg (skip if absent), targeted-not-full watcher (counter hook), web no-watcher regression.
+- [x] Perf gates (§5) measured + recorded.
 
 ## 5. Acceptance + perf gates
 

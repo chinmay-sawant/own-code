@@ -1,10 +1,31 @@
 package app
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
+
+// drainDirLoads pumps the page loop until no directory load is in-flight or
+// a timeout hits. Async expands need it; sync by-path loads do not.
+func drainDirLoads(t *testing.T, app *App) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		_ = app.tickWatch(context.Background())
+		if len(app.dirLoads) == 0 {
+			// One more tick to install the last reply.
+			_ = app.tickWatch(context.Background())
+			if len(app.dirLoads) == 0 {
+				return
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("dir loads did not drain: %+v", app.dirLoads)
+}
 
 func createLazyTestDir(t *testing.T) string {
 	t.Helper()
@@ -177,8 +198,9 @@ func TestTreeLazyAppToggleDir(t *testing.T) {
 		t.Fatalf("expected TreeCount=2 initially, got %d", v.TreeCount)
 	}
 
-	// Toggle "src" open.
+	// Toggle "src" open (async: spinner in one frame, then drain).
 	app.onToggleDir("src")
+	drainDirLoads(t, app)
 
 	if !app.folders["src"] {
 		t.Fatal("expected app.folders[src] to be true")

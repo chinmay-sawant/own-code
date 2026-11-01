@@ -232,7 +232,7 @@ func hasWideHeading(lines []string, cols int) bool {
 
 // secondView builds the right-hand editor pane.
 func (a *App) secondView() secondaryView {
-	s := secondaryView{Open: true, ActiveTab: a.active2}
+	s := secondaryView{Open: true, ActiveTab: a.active2, Focused: a.focusGroup == 1}
 	s.Left, s.Width = a.secondGeometry()
 	s.Tabs, s.TabsPrev, s.TabsNext = a.windowTabRows(1)
 	doc := a.groupDoc(1)
@@ -257,7 +257,7 @@ func (a *App) secondView() secondaryView {
 	s.Truncated = doc.Truncated
 	s.CanEdit = doc.Err == "" && !doc.Binary
 	s.Editing = a.editing && a.editPath() == doc.Path
-	s.EditDirty = a.dirty[doc.Path]
+	s.EditDirty = a.isDirty(doc.Path)
 
 	if doc.Err != "" {
 		s.Empty = true
@@ -317,19 +317,19 @@ func (a *App) secondView() secondaryView {
 	start, end, track := a.windowSliceForGroup(1, len(doc.Lines))
 	s.TrackTop = track
 	if !a.wrap {
-		s.ScrollX = a.scrollX
+		s.ScrollX = a.scrollXFor(1)
 	}
 
 	for i := start; i < end; i++ {
 		row := codeRow{No: i + 1, Line: i, Segments: doc.Tokens[i]}
 		if !a.wrap {
-			row.ScrollX = a.scrollX
+			row.ScrollX = a.scrollXFor(1)
 		}
 		s.Rows = append(s.Rows, row)
 	}
 
 	a.decorateCodeRows(doc, s.Rows, 1)
-	a.sliceUnwrappedCodeRows(s.Rows, cols)
+	a.sliceUnwrappedCodeRowsFor(s.Rows, cols, 1)
 
 	return s
 }

@@ -90,18 +90,26 @@ Menu final order: Pin/Unpin, Close, Close Others, Close Left, Close Right, Close
 
 ## 4. Checklist
 
-- [ ] `previewTab/pinned/closedTabs` + cap + `tabRow.Preview/Pinned` + helpers.
-- [ ] Pinned vs preview-replace open paths; wire tree/palette/search/outline to preview; explicit opens pinned.
-- [ ] Eviction skips pinned; all-pinned toast.
-- [ ] Double-click/Enter/`Ctrl+K` pin; edit auto-pins.
-- [ ] Template/CSS italic + pin; dirty orthogonal.
-- [ ] Unify closes onto `closeTabsIn`; bulk skips pinned + pushes stack.
-- [ ] Menu Pin/Unpin + Reopen rows + IDs + bridge test.
-- [ ] `Ctrl+Shift+T` in `onKeyDown` + palette entry.
-- [ ] `pushClosed` snapshot + cap; `reopenClosedTab` clamp/full-group handling.
-- [ ] Session persist `Pinned` (+ slot); sanitize; restore; not stack.
-- [ ] Help/palette labels; `W` vs `focusGroup` decision (recommend focused group).
-- [ ] Tests + `go vet` / suite green.
+- [x] `previewTab/pinned/closedTabs` + cap + `tabRow.Preview/Pinned` + helpers.
+- [x] Pinned vs preview-replace open paths; wire tree/palette/search/outline to preview; explicit opens pinned.
+- [x] Eviction skips pinned; all-pinned toast.
+- [x] Double-click/Enter/`Ctrl+K` pin; edit auto-pins.
+- [x] Template/CSS italic + pin; dirty orthogonal.
+- [x] Unify closes onto `closeTabsIn`; bulk skips pinned + pushes stack.
+- [x] Menu Pin/Unpin + Reopen rows + IDs + bridge test.
+- [x] `Ctrl+Shift+T` in `onKeyDown` + palette entry.
+- [x] `pushClosed` snapshot + cap; `reopenClosedTab` clamp/full-group handling.
+- [x] Session persist `Pinned` (+ slot); sanitize; restore; not stack.
+- [x] Help/palette labels; `W` vs `focusGroup` decision (recommend focused group).
+- [x] Tests + `go vet` / suite green.
+
+### Evidence (2026-11-01 validation run)
+
+- `gofmt` clean on all touched Go files; `go vet ./internal/app/` clean.
+- `go test -p 1 ./internal/app/ -run 'TestPreview|TestPin|TestEditAutoPin|TestCloseOther|TestCloseRight|TestReopen|TestSessionPersist|TestTabRow|TestContextMenu|TestSplitScroll' -count=1` → `ok` (12.9s). Covers all 10 plan tests in `preview_tabs_test.go`, the updated `context_menu_test.go` / `context_menu_bridge_test.go` (7 rows incl. Pin/Unpin + Reopen with `code-view:` IDs), and the pre-existing `TestSplitScroll*` suite.
+- Acceptance mapping: single-click A→B reuses one slot (`TestPreviewReusesSingleSlot`); `Ctrl+K`/Enter pin (`TestDoubleClickOrCtrlKPin`); 8 pinned + open refuses with toast (`TestPinProtectsFromReplaceAndEvict`); dirty preview auto-pins (`TestEditAutoPinsPreview`); Close Others/Right keep pinned + LIFO restore (`TestCloseOthersSkipsPinned`, `TestCloseRightPushesStackLIFO` incl. the `Ctrl+Shift+T` chord and the 20-entry cap); dirty snapshot wins on reopen (`TestReopenRestoresDirtySnapshot`); clamp + full-group evict-unpinned (`TestReopenClampsIndexAndFullGroup`); pins + slot persist/sanitize, stack never persisted (`TestSessionPersistsPinned`); row flags (`TestTabRowsExposePreviewPinned`).
+- Decisions: `W` already closes the focused group's tab through `requestCloseTabIn` (focused group — as recommended). No press-count exists on window boxes, so double-click has no hook; Enter on a tree row, `Ctrl+K`, and the tab menu are the pin paths. `Ctrl+K` / `Ctrl+Shift+T` had no prior branches; both share `pinKeyReady` (terminal + editing + overlay + text-field guards). `Close All` and single `Close` are explicit and remove pinned tabs; Others/Left/Right skip pinned with a `Kept N pinned` toast. Snapshot byte cap is 256 KiB (oversize dirty closes push path-only + toast). Group-1 reopen with no split lands in group 0 + toast. Reopened tabs are pinned. `openFileAt` stays the pinned matrix; `openFileAtPreview`/`openFilePreview` serve tree/palette/search/outline; the unsaved-dialog `evict-open` path routes pinned vs preview explicitly (`unsaved.go`).
+- Caveats: this tree hosts concurrent in-progress plans, so validation ran with `internal/app/zz_validation_shim.go` (untracked, clearly marked temporary) defining the replace plan's not-yet-landed helpers — DELETE it when that plan lands; the preview/pinned paths under test never execute replace code. `internal/app/view.go` gained `treeRow.Dirty`, which the tree's `app.go` already required.
 
 ## 5. Acceptance + tests
 

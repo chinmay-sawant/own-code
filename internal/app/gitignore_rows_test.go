@@ -185,6 +185,7 @@ func TestIgnoredDirExpands(t *testing.T) {
 	}
 
 	app.toggleFolder("dist")
+	drainDirLoads(t, app)
 
 	rows = treeRowsByPath(app)
 	child, ok := rows["dist/app.js"]

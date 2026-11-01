@@ -112,19 +112,19 @@
 
 ## 4. Checklist (atomic boxes)
 
-- [ ] Add `isDirty/setDirty/discardDirty/dirtyTabs` helpers; migrate direct `a.dirty` writes.
-- [ ] Delete `a.dirty[path]` on tab close (all arms) — fix leak.
-- [ ] Verify `tab-dot` paints in group-1 strip; fix template ID if missing.
-- [ ] Add explorer dirty dot (view row field + fill + CSS + test).
-- [ ] Add `confirmPending` + `unsaved-close-one/many` kinds; three-button dialog copy.
-- [ ] Gate `closeTabIn` via `requestCloseTabIn`; wire click/Ctrl+W singles.
-- [ ] Implement `savePath(path)` extracted from `saveEdit`/`saveDirtyActive`; use in dialog Save arm.
-- [ ] Wire bulk closes (others/all/left/right) through the many-dialog.
-- [ ] Guard `editorGroup.Open` eviction with the one-dialog.
-- [ ] Guard merge-editor leave paths (`leaveMergeMode`, `editMergeResult`, conflict close) with merge-aware Save arm.
-- [ ] Add `autosave.go` (modes, debounce, focus-change hooks, writable/sample guards).
-- [ ] Add settings UI row (mode select + delay input) + session persist/restore + sanitize.
-- [ ] Update `README.md:181` (remove "no unsaved change prompt" limit; document auto-save modes).
+- [x] Add `isDirty/setDirty/discardDirty/dirtyTabs` helpers; migrate direct `a.dirty` writes.
+- [x] Delete `a.dirty[path]` on tab close (all arms) — fix leak.
+- [x] Verify `tab-dot` paints in group-1 strip; fix template ID if missing.
+- [x] Add explorer dirty dot (view row field + fill + CSS + test).
+- [x] Add `confirmPending` + `unsaved-close-one/many` kinds; three-button dialog copy.
+- [x] Gate `closeTabIn` via `requestCloseTabIn`; wire click/Ctrl+W singles.
+- [x] Implement `savePath(path)` extracted from `saveEdit`/`saveDirtyActive`; use in dialog Save arm.
+- [x] Wire bulk closes (others/all/left/right) through the many-dialog.
+- [x] Guard `editorGroup.Open` eviction with the one-dialog.
+- [x] Guard merge-editor leave paths (`leaveMergeMode`, `editMergeResult`, conflict close) with merge-aware Save arm.
+- [x] Add `autosave.go` (modes, debounce, focus-change hooks, writable/sample guards).
+- [x] Add settings UI row (mode select + delay input) + session persist/restore + sanitize.
+- [x] Update `README.md:181` (remove "no unsaved change prompt" limit; document auto-save modes).
 - [ ] Tests (see §5) green; `go test -p 1 ./...` clean.
 
 ## 5. Acceptance + tests

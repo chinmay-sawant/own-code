@@ -107,6 +107,9 @@ func (a *App) contextMenuForExplorer(id string) ([]contextMenuRow, bool) {
 	switch id {
 	case "tree-pane", "sidebar", "":
 		return []contextMenuRow{
+			{ID: contextMenuNewFileID, Label: "New File", Enabled: true},
+			{ID: contextMenuNewFolderID, Label: "New Folder", Enabled: true},
+			{ID: "", Label: "-", Enabled: false},
 			{ID: contextMenuPasteID, Label: "Paste", Hint: shortcutHint("Ctrl+V"), Enabled: stagedCopy() != nil},
 		}, true
 	}
@@ -122,7 +125,8 @@ func (a *App) contextMenuForExplorer(id string) ([]contextMenuRow, bool) {
 		return nil, true
 	}
 
-	if _, ok := a.lookupTreePath(rel); !ok {
+	isDir, ok := a.lookupTreePath(rel)
+	if !ok {
 		return nil, true
 	}
 
@@ -131,14 +135,28 @@ func (a *App) contextMenuForExplorer(id string) ([]contextMenuRow, bool) {
 		a.explAnchor = rel
 	}
 
+	// New files and folders land in the row's folder: the dir itself, or
+	// the parent when the row is a file. The root carries an empty base.
+	base := rel
+	if !isDir {
+		base = dirName(rel)
+	}
+
 	pasteEnabled := stagedCopy() != nil
 
 	return []contextMenuRow{
+		{ID: contextMenuNewFileID + base, Label: "New File", Enabled: true},
+		{ID: contextMenuNewFolderID + base, Label: "New Folder", Enabled: true},
+		{ID: "", Label: "-", Enabled: false},
 		{ID: contextMenuCutID + rel, Label: "Cut", Hint: shortcutHint("Ctrl+X"), Enabled: true},
 		{ID: contextMenuCopyID + rel, Label: "Copy", Hint: shortcutHint("Ctrl+C"), Enabled: true},
 		{ID: contextMenuCopyPathID + rel, Label: "Copy Path", Enabled: true},
 		{ID: contextMenuCopyAbsID + rel, Label: "Copy Absolute Path", Enabled: true},
 		{ID: contextMenuPasteID + rel, Label: "Paste", Hint: shortcutHint("Ctrl+V"), Enabled: pasteEnabled},
+		{ID: "", Label: "-", Enabled: false},
+		{ID: contextMenuDuplicateID + rel, Label: "Duplicate", Enabled: true},
+		{ID: contextMenuRenameID + rel, Label: "Rename", Hint: "F2", Enabled: true},
+		{ID: contextMenuDeleteID + rel, Label: "Delete", Hint: "Del", Enabled: true},
 	}, true
 }
 
@@ -349,7 +367,7 @@ func (a *App) clearExplorerSel() {
 
 // explorerOrder lists the visible tree paths in display order for
 // Shift+click ranges. Filtered mode lists the visible window; otherwise the
-// full open-folders walk runs, which also warms lazy folders like a render.
+// full open-folders walk runs enqueue-only (no disk I/O on the page loop).
 func (a *App) explorerOrder() []string {
 	if a.ws == nil {
 		return nil
@@ -374,6 +392,9 @@ func (a *App) explorerOrder() []string {
 
 	out := make([]string, 0, len(rows))
 	for _, row := range rows {
+		if row.Loading || row.LoadErr != "" || row.More {
+			continue
+		}
 		out = append(out, row.Path)
 	}
 

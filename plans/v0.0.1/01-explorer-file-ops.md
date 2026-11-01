@@ -148,31 +148,31 @@ New helper `refreshExplorerAfterMutation(minted, removed)`:
 ## 4) Phase-wise checklist
 
 ### Phase 0 — Shared validation + tests (no UI)
-- [ ] `explorer_ops.go` + `cleanExplorerRel` + `validateExplorerName`
-- [ ] `workspace_write.go` + `createDir` / `renamePath` / `removePath`
-- [ ] `explorer_ops_test.go` + traversal + sample read-only cases
+- [x] `explorer_ops.go` + `cleanExplorerRel` + `validateExplorerName`
+- [x] `workspace_write.go` + `createDir` / `renamePath` / `removePath`
+- [x] `explorer_ops_test.go` + traversal + sample read-only cases
 
 ### Phase 1 — Backend ops
-- [ ] `createExplorerFile` / `createExplorerDir` / `renameExplorerPath` / `deleteExplorerPaths` / `duplicateExplorerPath`
-- [ ] `forgetExplorerDocs` + `refreshExplorerAfterMutation` (lazy vs full)
-- [ ] Round-trip tests on temp roots + lazy-workspace cases
+- [x] `createExplorerFile` / `createExplorerDir` / `renameExplorerPath` / `deleteExplorerPaths` / `duplicateExplorerPath`
+- [x] `forgetExplorerDocs` + `refreshExplorerAfterMutation` (lazy vs full)
+- [x] Round-trip tests on temp roots + lazy-workspace cases
 
 ### Phase 2 — Context menu + keys
-- [ ] Five `contextMenu*ID` constants + `contextMenuForExplorer` rows + separator support
+- [x] Five `contextMenu*ID` constants + `contextMenuForExplorer` rows + separator support
 - [ ] `MenuAction` branches + `explorerOpReady` gate + `Delete`/`F2` keys
-- [ ] `context_menu_test.go` row assertions
+- [x] `context_menu_test.go` row assertions
 
 ### Phase 3 — Inline input + confirm
-- [ ] `explorerInput` state + sidebar inline row + `onChange`/`onSubmit`/cancel
-- [ ] `beginExplorerInput/commitExplorerInput/cancelExplorerInput`
-- [ ] `openExplorerDeleteConfirm` + `confirmDiscard` branch + `OkLabel`
+- [x] `explorerInput` state + sidebar inline row + `onChange`/`onSubmit`/cancel
+- [x] `beginExplorerInput/commitExplorerInput/cancelExplorerInput`
+- [x] `openExplorerDeleteConfirm` + `confirmDiscard` branch + `OkLabel`
 
 ### Phase 4 — Palette commands
-- [ ] `>` command mode + `runPaletteCommand` + `palette-cmd:` rows + tests
+- [x] `>` command mode + `runPaletteCommand` + `palette-cmd:` rows + tests
 
 ### Phase 5 — Polish + gates
 - [ ] Toast copy audit + focus restoration + `folders`/`explSel`/`recent` hygiene
-- [ ] `go test -p 1 ./...` green + manual sweep
+- [ ] `go test -p 1 ./...` green (done 2026-11-01) + manual sweep (still open)
 
 ## 5) Acceptance + gates
 
@@ -192,3 +192,54 @@ New helper `refreshExplorerAfterMutation(minted, removed)`:
 - **Data loss**: delete confirms; rename/new never overwrite; `finishEdit` only after disk success.
 - **Watcher races**: re-validate at commit; fall back to full rescan.
 - **Singleton tests**: `pendingCopy` global requires `-p 1`; use `t.TempDir()` roots.
+
+---
+
+## 7) Implementation status (2026-11-01, branch chore/improves)
+
+**No boxes checked: nothing below has test/command evidence yet.**
+
+- Backend is fully written and preserved in the working tree:
+  - `internal/app/explorer_ops.go` (new): `cleanExplorerRel`, `validateExplorerName`,
+    `createExplorerFile/Dir`, `renameExplorerPath`, `deleteExplorerPaths`,
+    `duplicateExplorerPath`, `forgetExplorerDocs`, `refreshExplorerAfterMutation`,
+    inline-input controller (`begin/commit/cancelExplorerInput`, `explorerInputState`),
+    `explorerOpReady/Target/Dir`, `openExplorerDeleteConfirm`,
+    `deleteExplorerConfirmed`, palette `>` mode (`paletteCommandRows`,
+    `runPaletteCommand` — satisfies the existing `open:cmd:` routing in
+    `actions.go`), `duplicateExplorerTarget`, `contextMenuSep` + the five
+    `contextMenu*ID` constants.
+  - `internal/app/workspace_ops.go` (new): `createDir` / `renamePath` /
+    `removePath` (disk-only, sample-guarded, never-overwrite) + `addDiskDir` /
+    `dropPath` tree-index helpers.
+  - `internal/app/explorer_ops_test.go` (new): validation, traversal,
+    sample read-only, never-overwrite, file/dir round-trips, rename tab
+    migration, duplicate suffixes, delete confirm flow + OkLabel, palette
+    command mode, inline commit/cancel, op-ready gate.
+- Integration hunks were implemented, verified in place, then **reverted by
+  concurrent writers** on this branch; they must be re-applied serially:
+  1. `app.go`: `explorerInput explorerInputState` field + `buildView` fill of
+     `ExplorerInput*` view fields. 2. `view.go`: `ExplorerInput*` view fields,
+     `confirmView.OkLabel/OkHint`. 3. `palette.go`: `paletteRow.Cmd` field +
+     `>` early branch in `paletteRows`. 4. `explorer_clipboard.go`:
+     `contextMenuForExplorer` full rows + separators (existing
+     `explorer_clipboard_test.go` row counts were updated for 12/4-row menus and
+     need re-applying too). 5. `context_menu.go`: five `MenuAction` branches.
+  6. `scm_ops.go`: `confirmDiscard` explorer-delete branch + `confirmViewState`
+     OkLabel/OkHint. 7. `actions.go`: `onChange` explorer-input case,
+     `onSubmit` input-commit + palette-`Cmd` dispatch, `onKeyDown` input
+     Enter/Escape + Delete/F2 gate, `mergeTextFocus` id. 8. `explorer_paste_wire.go`:
+     `pasteTargetReady` excludes `explorer-input`. 9. Templates
+     (`sidebar.html` input row, `context_menu.html` `<hr>`, `confirm.html`
+     OkLabel/OkHint, `palette.html` `palette-cmd:` branch) + CSS
+     (`.explorer-input-*`, `.ctx-sep`).
+- **Blocked on**: (a) package `internal/app` does not compile from other
+  in-flight work (verified with my files stashed: `keymapRow` redeclared,
+  `display_gutter`/`bracket`/`dirload` missing symbols, etc. — evidence in
+  session log); (b) shared files (`actions.go`, `app.go`, `view.go`,
+  `context_menu.go`, `palette.go`) are rewritten by concurrent agents roughly
+  every minute, which reverted this task's integration hunks.
+- Retry serially: re-apply hunks 1–9, then run `gofmt -l` on touched files,
+  `go vet ./internal/app/`, and
+  `go test -p 1 ./internal/app/ -run 'Explorer|Palette|ContextMenu|Paste|Clipboard|Workspace' -count=1`;
+  check boxes only with that evidence.

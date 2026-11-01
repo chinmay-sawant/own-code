@@ -105,10 +105,10 @@ func TestWSLHandoffTarget(t *testing.T) {
 
 func TestWSLHandoffGating(t *testing.T) {
 	for _, tc := range []struct {
-		name          string
-		goos          string
+		name           string
+		goos           string
 		avail, enabled bool
-		want          bool
+		want           bool
 	}{
 		{"linux host", "linux", true, true, false},
 		{"no wsl", "windows", false, true, false},

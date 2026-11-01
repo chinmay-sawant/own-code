@@ -34,6 +34,13 @@ type View struct {
 	TreeThumbH   int
 	TreeTrackH   int
 	Filtered     bool
+	FilterNote   string
+	DirLoadNote  string
+
+	// ExplorerInputOpen/Title publish the inline new-file/rename prompt
+	// state for the sidebar template.
+	ExplorerInputOpen  bool
+	ExplorerInputTitle string
 
 	// SideW is the drawer width in page pixels, resizable from 268 px up
 	// to 348 px (about 30% wider) via the drawer-resize handle.
@@ -81,15 +88,24 @@ type View struct {
 	FindCase    bool
 	FindCurrent int
 	FindTotal   int
-	Welcome     bool
-	Preview     bool
-	Previewable bool
-	PreviewRows []previewRow
-	Empty       bool
-	EmptyKind   string
-	EmptyTitle  string
-	EmptyBody   string
-	Recent      []recentRow
+	// ReplaceOpen shows the replace row under the find bar. ReplaceQuery is
+	// the replacement text; ReplaceRegex and ReplaceWholeWord are the shared
+	// file matcher toggles. FindError carries an invalid-regex message and
+	// disables the Replace buttons.
+	ReplaceOpen      bool
+	ReplaceQuery     string
+	ReplaceRegex     bool
+	ReplaceWholeWord bool
+	FindError        string
+	Welcome          bool
+	Preview          bool
+	Previewable      bool
+	PreviewRows      []previewRow
+	Empty            bool
+	EmptyKind        string
+	EmptyTitle       string
+	EmptyBody        string
+	Recent           []recentRow
 
 	Editing   bool
 	EditText  string
@@ -100,22 +116,34 @@ type View struct {
 
 	Split      bool
 	FocusGroup int
-	PaneLeft   int
-	PaneWidth  int
-	Second     secondaryView
+	// FocusedPane mirrors FocusGroup for templates: 0 or 1 in split mode,
+	// 0 otherwise. It exists so pane highlight reads as pane state rather
+	// than a bare group index.
+	FocusedPane int
+	PaneLeft    int
+	PaneWidth   int
+	// SplitDivLeft/SplitDivW place the draggable split divider on the
+	// 1 px gutter between the panes. Only meaningful when Split.
+	SplitDivLeft int
+	SplitDivW    int
+	Second       secondaryView
 
-	Diff           diffView
-	Merge          mergeView
-	History        historyView
-	Terminal       terminalView
-	Outline        []symbolRow
-	Toast          toastView
-	Confirm        confirmView
-	SettingsOpen   bool
-	Themes         []themeRow
-	Palette        paletteView
-	PaletteQuery   string
-	SearchQuery    string
+	Diff         diffView
+	Merge        mergeView
+	History      historyView
+	Terminal     terminalView
+	Outline      []symbolRow
+	Toast        toastView
+	Confirm      confirmView
+	SettingsOpen bool
+	Themes       []themeRow
+	Palette      paletteView
+	PaletteQuery string
+	SearchQuery  string
+	// SearchReplace carries the workspace replace input. It is top-level
+	// because data-bind only addresses top-level view fields; the panel
+	// template reads it as .SearchReplace.
+	SearchReplace  string
 	Search         searchView
 	FileNav        fileNavView
 	ChangeLabel    string
@@ -144,6 +172,45 @@ type View struct {
 	HasWSL         bool
 	Alert          string
 	ZoomLabel      string
+	// Settings panel state. SettingsTab selects appearance/keyboard/files;
+	// FontLabel is the "12px" chip text; EditorZoom/TerminalZoom are the
+	// v1 per-view overrides (0 when following the global zoom);
+	// EditorZoomLabel/TerminalZoomLabel render the override percent or "—".
+	SettingsTab       string
+	FontLabel         string
+	EditorZoom        float64
+	TerminalZoom      float64
+	EditorZoomLabel   string
+	TerminalZoomLabel string
+	KeymapRows        []keymapRow
+	KeymapCapture     string
+	KeymapPending     string
+	ScanText          string
+	SearchText        string
+	// ScanBad/SearchBad are the 1-based line numbers holding invalid globs.
+	ScanBad       []int
+	SearchBad     []int
+	UseGitignore  bool
+	SearchIgnored bool
+	ScanMatch     int
+	SearchSkip    int
+	SettingsNote  string
+	// AutoSave is off, afterDelay, or onFocusChange; AutoSaveDelay is the
+	// afterDelay debounce in ms, clamped to 250-5000.
+	AutoSave      string
+	AutoSaveDelay int
+}
+
+// keymapRow is one Settings → Keyboard row.
+type keymapRow struct {
+	Action    string
+	Label     string
+	Chord     string
+	Default   string
+	Custom    bool
+	Fixed     bool
+	Capturing bool
+	Conflict  bool
 }
 
 // recentRootRow is one recently opened project root.
@@ -224,6 +291,8 @@ type secondaryView struct {
 	EmptyKind   string
 	EmptyTitle  string
 	EmptyBody   string
+	// Focused marks the right pane as the focused one for highlight.
+	Focused bool
 
 	Editing   bool
 	EditText  string
@@ -246,6 +315,26 @@ type searchView struct {
 	ScrollTop    int
 	ScrollHeight int
 	Rows         []searchRow
+	// Replace is the workspace replacement text; Regex and WholeWord are
+	// the shared workspace matcher toggles. Error carries an invalid-regex
+	// message. TotalAll counts every match the last pass saw (past the
+	// preview caps) and Capped reports the count itself hit the ceiling.
+	// CanReplace gates the Replace All button; ReplaceFiles and
+	// ReplaceTotal count the checked files and their preview hits.
+	// Skipped summarizes the apply eligibility report; CanUndoReplace and
+	// UndoNote drive the explicit workspace-undo button.
+	Replace        string
+	Regex          bool
+	WholeWord      bool
+	Error          string
+	TotalAll       int
+	Capped         bool
+	CanReplace     bool
+	ReplaceFiles   int
+	ReplaceTotal   int
+	Skipped        string
+	CanUndoReplace bool
+	UndoNote       string
 }
 
 // searchRow is one content-search match.
@@ -260,6 +349,14 @@ type searchRow struct {
 	Match    string
 	After    string
 	Selected bool
+	// Replacement is the replace-mode preview for this hit. Checked is the
+	// file-level checkbox state shared by every hit in the file. GroupFirst
+	// marks the first visible hit of a file and GroupCount carries that
+	// file's preview hit count for the group header.
+	Replacement string
+	Checked     bool
+	GroupFirst  bool
+	GroupCount  int
 }
 
 // treeRow is one file or folder in the explorer.
@@ -286,6 +383,17 @@ type treeRow struct {
 	// Selected marks a multi-select explorer row. Ctrl+click toggles it and
 	// Shift+click extends the range; Copy and Cut stage every selected row.
 	Selected bool
+	// Dirty mirrors the tab-dot so the explorer shows unsaved edits even
+	// when the file's tab is scrolled out of the strip window.
+	Dirty bool
+	// Loading marks the synthetic spinner child of an expanding folder.
+	// LoadErr marks the synthetic retry row. More marks the trailing
+	// "N more…" cap row. All three are non-focusable placeholders excluded
+	// from TreeCount and the filter scope.
+	Loading   bool
+	LoadErr   string
+	More      bool
+	MoreCount int
 }
 
 // tabRow is one open editor tab. Index is the tab's position in the
@@ -300,6 +408,8 @@ type tabRow struct {
 	StatusClass string
 	Active      bool
 	Dirty       bool
+	Preview     bool
+	Pinned      bool
 }
 
 // codeRow is one visual source row with its prebuilt spans. No is zero on a
@@ -321,6 +431,9 @@ type codeRow struct {
 	SelectionLeft  int
 	SelectionWidth int
 	ScrollX        int
+	// RelNo is the gutter display number (relative or absolute). Zero
+	// blanks the number cell on wrapped continuation rows.
+	RelNo int
 }
 
 // recentRow is one quick-open entry on the welcome panel.
@@ -560,11 +673,17 @@ type toastView struct {
 	Message string
 }
 
-// confirmView is the destructive-action dialog, such as Discard.
+// confirmView is the destructive-action dialog, such as Discard. OkLabel
+// names the confirm button: Discard for discards, Replace for replace-all.
+// Kind names the dialog: discard kinds plus unsaved-close-one/many, whose
+// Save/Don't Save/Cancel arms the template paints instead.
 type confirmView struct {
 	Show    bool
+	Kind    string
 	Title   string
 	Message string
 	Files   []string
 	Count   int
+	OkLabel string
+	OkHint  string
 }

@@ -10,11 +10,11 @@ import (
 // WSL handoff test seams. runtime.GOOS and the wsl package are stubbed in
 // tests so the Windows-only handoff decision stays testable on Linux.
 var (
-	wslHandoffGOOS      = runtime.GOOS                    //nolint:gochecknoglobals // stubbed in tests
-	wslHandoffAvailable = wsl.Available                   //nolint:gochecknoglobals // stubbed in tests
-	wslHandoffEnabled   = wsl.Enabled                     //nolint:gochecknoglobals // stubbed in tests
-	wslHandoffSpawn     = wsl.SpawnHandoff                //nolint:gochecknoglobals // stubbed in tests
-	wslHandoffClose     = false                           //nolint:gochecknoglobals // reserved: close behavior is fixed, kept as a seam for future options
+	wslHandoffGOOS      = runtime.GOOS     //nolint:gochecknoglobals // stubbed in tests
+	wslHandoffAvailable = wsl.Available    //nolint:gochecknoglobals // stubbed in tests
+	wslHandoffEnabled   = wsl.Enabled      //nolint:gochecknoglobals // stubbed in tests
+	wslHandoffSpawn     = wsl.SpawnHandoff //nolint:gochecknoglobals // stubbed in tests
+	wslHandoffClose     = false            //nolint:gochecknoglobals // reserved: close behavior is fixed, kept as a seam for future options
 )
 
 // wslHandoffTarget maps a Windows-side pick to its WSL destination. It

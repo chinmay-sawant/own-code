@@ -49,7 +49,7 @@ func (a *App) openMergeConflict(ctx context.Context, path string) {
 		return
 	}
 
-	if a.dirty[clean] {
+	if a.isDirty(clean) {
 		a.showToast("info", "Unsaved edits", clean+" has unsaved edits. Save or discard them before resolving the conflict.")
 		a.refresh()
 
@@ -646,7 +646,7 @@ func (a *App) editMergeResult() {
 	}
 
 	path := a.mergePath
-	if a.dirty[path] {
+	if a.isDirty(path) {
 		a.showToast("info", "Unsaved edits", path+" already has unsaved edits.")
 		a.refresh()
 
@@ -676,7 +676,7 @@ func (a *App) editMergeResult() {
 	a.editRedo = nil
 	a.preview = false
 	a.findOpen = false
-	a.dirty[path] = buffer.Dirty
+	a.setDirty(path, buffer.Dirty)
 	a.commitEditBuffer()
 	a.resetScroll()
 	a.showToast("info", "Editing merge result", "Ctrl+S saves. Reopening the conflict re-parses the file from disk.")

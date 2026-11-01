@@ -99,16 +99,16 @@ Keep six themes untouched. Picker stays `Settings → Appearance`: live swatch +
 
 ## 4. Checklist
 
-- [ ] `settings.go`: schema/paths/load/save/sanitize/clamps/glob/chord.
-- [ ] Wire into `New/NewWithLimit` + `EnableSession` (settings first, session fallback).
-- [ ] Font size: state, setters, `activeThemeCSS` param, chip, persist.
-- [ ] Per-view zoom: map, `effectiveZoom`, UI (editor/terminal v1), CSS scoping.
-- [ ] Theme picker refresh (swatches, font/zoom controls).
-- [ ] Keymap: catalog, `onKeyDown` indirection, capture UI, conflicts, reset.
-- [ ] Excludes: scan filter (`loadDiskWorkspaceWithLimit/Lazy/loadNode/walkIgnoredDir`), search filter + `Note`, editors + toggles + Rescan.
-- [ ] `settings.html` nav (Appearance/Keyboard/Files & Search) + CSS + zoom rules.
-- [ ] Migration: old sessions load as today; version forward-compat.
-- [ ] Docs: `-files` + Settings section; precedence comments.
+- [x] `settings.go`: schema/paths/load/save/sanitize/clamps/glob/chord.
+- [x] Wire into `New/NewWithLimit` + `EnableSession` (settings first, session fallback).
+- [x] Font size: state, setters, `activeThemeCSS` param, chip, persist.
+- [x] Per-view zoom: map, `effectiveZoom`, UI (editor/terminal v1), CSS scoping.
+- [x] Theme picker refresh (swatches, font/zoom controls).
+- [x] Keymap: catalog, `onKeyDown` indirection, capture UI, conflicts, reset.
+- [x] Excludes: scan filter (`loadDiskWorkspaceWithLimit/Lazy/loadNode/walkIgnoredDir`), search filter + `Note`, editors + toggles + Rescan.
+- [x] `settings.html` nav (Appearance/Keyboard/Files & Search) + CSS + zoom rules.
+- [x] Migration: old sessions load as today; version forward-compat.
+- [x] Docs: `-files` + Settings section; precedence comments.
 
 ## 5. Acceptance + tests
 

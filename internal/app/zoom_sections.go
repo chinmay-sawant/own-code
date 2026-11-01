@@ -278,6 +278,15 @@ func zoomOverlayCSS(b *strings.Builder, px func(int) string) {
 		{".settings-theme", []string{" height:", " !important; padding:0 ", " !important; border-radius:", " !important; margin-bottom:", " !important;"}, []int{48, 10, 4, 5}},
 		{".settings-header", []string{" height:", " !important; padding:0 ", " !important;"}, []int{48, 16}},
 		{".settings-nav", []string{" width:", " !important; flex-basis:", " !important; padding:", " ", " !important;"}, []int{180, 180, 16, 10}},
+		{".settings-nav-item, .settings-nav-active", []string{" padding:", " ", " !important; border-radius:", " !important;"}, []int{9, 10, 4}},
+		{".settings-swatch", []string{" width:", " !important; height:", " !important; flex-basis:", " !important; border-radius:", " !important; margin-right:", " !important;"}, []int{22, 22, 22, 5, 10}},
+		{".settings-sub", []string{" margin:", " 0 ", " !important;"}, []int{12, 6}},
+		{".settings-btn", []string{" height:", " !important; padding:0 ", " !important; border-radius:", " !important;"}, []int{24, 10, 4}},
+		{".settings-step-value", []string{" min-width:", " !important;"}, []int{64}},
+		{".settings-key", []string{" gap:", " !important; padding:", " ", " !important; border-radius:", " !important; margin-bottom:", " !important;"}, []int{10, 6, 8, 4, 4}},
+		{".settings-conflict", []string{" gap:", " !important; padding:", " ", " !important; border-radius:", " !important; margin-bottom:", " !important;"}, []int{10, 8, 10, 4, 8}},
+		{".settings-area", []string{" padding:", " ", " !important; border-radius:", " !important;"}, []int{6, 8, 4}},
+		{".settings-perview", []string{" gap:", " !important; margin-bottom:", " !important;"}, []int{10, 6}},
 		{".settings-content", []string{" padding:", " ", " ", " !important;"}, []int{18, 20, 20}},
 	})
 }

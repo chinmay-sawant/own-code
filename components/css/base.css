@@ -193,6 +193,7 @@ button.ln:focus-visible,
 
 .find-hit { background-color: rgba(240, 183, 90, 0.28); border-radius: 2px; }
 .find-cur { background-color: rgba(240, 183, 90, 0.62); color: #0b0e14; }
+.bracket-flash { background-color: rgba(120, 170, 255, 0.35); border-radius: 2px; }
 
 /* Small shared pieces ------------------------------------------------------ */
 

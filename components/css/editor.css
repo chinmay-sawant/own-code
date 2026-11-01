@@ -16,6 +16,40 @@
 .editor.focus { box-shadow: inset 0 2px 0 rgba(122, 162, 247, 0.35); }
 .editor-second { border-left: 1px solid var(--line); }
 
+/* Split focus: the idle pane dims its tab strip so the focused side reads
+   at a glance. The accent underline on .focus stays the active marker. */
+.editor.split:not(.focus) .tabstrip { opacity: 0.72; }
+
+/* Split divider: a 6 px col-resize hit strip centered on the gutter between
+   the panes. It paints one quiet line and lights the accent on hover or
+   keyboard focus. */
+.split-divider {
+  position: fixed;
+  top: var(--titlebar-h);
+  bottom: var(--status-h);
+  z-index: 11;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+}
+
+.split-divider:focus { outline: 0; }
+
+.split-grip {
+  width: 1px;
+  background-color: var(--line);
+  color: transparent;
+  font-size: 0;
+  user-select: none;
+}
+
+.split-divider:hover .split-grip,
+.split-divider:focus .split-grip { width: 2px; background-color: var(--accent); }
+
 .tabstrip {
   height: var(--tab-h);
   flex: 0 0 var(--tab-h);
@@ -227,6 +261,11 @@
   font-size: 9px;
 }
 .find-btn:hover, .find-btn.on { border-color: rgba(122, 162, 247, 0.5); background-color: var(--accent-soft); color: var(--accent); }
+.find-btn.text { width: auto; padding: 0 8px; font-size: 8.5px; }
+.find-btn.text:disabled { opacity: 0.45; cursor: default; }
+.findbar.with-replace { flex-wrap: wrap; row-gap: 4px; }
+.replace-row { display: flex; align-items: center; gap: 5px; flex-basis: 100%; }
+.find-error { flex-basis: 100%; color: #e8a0a0; font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .editor-scroll-thumb { position: absolute; right: 8px; width: 8px; z-index: 40; background-color: var(--muted); cursor: ns-resize; }
 
@@ -316,6 +355,16 @@
   background-color: var(--text);
 }
 
+/* Preview tabs render italic; pinned tabs carry a pin marker. Dirty stays
+   orthogonal: the dot renders alongside either state. */
+.tab.preview .preview-name { font-style: italic; }
+.tab-pin {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 1;
+}
+
 .track { position: absolute; left: 0; right: 0; top: 0; }
 
 .crow { position: relative; height: var(--row-h); display: flex; align-items: stretch; overflow: hidden; }
@@ -379,6 +428,7 @@
 }
 .ctx-item:hover { background-color: var(--panel-3); color: var(--text); }
 .ctx-item:disabled { color: var(--dim); }
+.ctx-sep { height: 1px; margin: 4px 10px; background-color: var(--line); }
 .ctx-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ctx-hint { flex: 0 0 auto; margin-left: 24px; color: var(--dim); font-size: 10px; }
 @keyframes edit-blink { from { opacity: 1; } to { opacity: 0; } }

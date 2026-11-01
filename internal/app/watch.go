@@ -27,7 +27,8 @@ const (
 // watchUpdate is one debounced background result. Workspace is non-nil after a
 // rescan; Git marks a change that may have moved a ref or the index. Err
 // carries the first background failure since the previous update so the UI
-// can degrade to a status note instead of crashing or deadlocking.
+// can degrade to a status note instead of crashing or deadlocking. Dirs
+// carries changed directories for targeted lazy refresh (no full walk).
 type watchUpdate struct {
 	Changes   changeSet
 	Workspace *workspace
@@ -35,8 +36,14 @@ type watchUpdate struct {
 	Git       bool
 	Branch    string
 	Branches  []branchRow
+	Dirs      []string
 	Err       *AppError
 }
+
+// fullWalkCounter counts full-tree walks after startup for the perf gate.
+var fullWalkCounter int
+
+func noteFullWalk() { fullWalkCounter++ }
 
 // StartWatcher watches the live workspace and wakes the UI when files or git
 // metadata change. It is desktop only; Serve does not start it.
@@ -137,7 +144,10 @@ func (a *App) StopWatcher() {
 	}
 }
 
-// addWatchTree adds every directory under root except skipped and .git ones.
+// addWatchTree adds watched directories. For lazy workspaces it watches
+// root + loaded/expanded dirs + git metadata only, keeping handles at
+// expanded+~8 instead of the 2000-dir cap. Full-tree walks stay for explicit
+// -files scans. Collapsed dirs are evicted first under pressure.
 // The caller must already be draining watcher.Events: on Windows each Add is
 // served by the backend reader goroutine, which blocks when the Events queue
 // is full, so adding without a live reader deadlocks the Add reply.
@@ -148,6 +158,9 @@ func (a *App) StopWatcher() {
 // degraded WatchOpAdd warning. A walk failure or zero watched directories is
 // a *AppError the caller must treat as fatal.
 func (a *App) addWatchTree(watcher *fsnotify.Watcher, root string) (int, *AppError) {
+	if a.ws != nil && a.ws.Lazy {
+		return a.addWatchTreeLazy(watcher, root)
+	}
 	count := 0
 	addFailures := 0
 
@@ -233,6 +246,75 @@ func (a *App) addWatchTree(watcher *fsnotify.Watcher, root string) (int, *AppErr
 	return count, nil
 }
 
+// addWatchTreeLazy watches root plus every Loaded dir in the lazy tree.
+// Newly loaded dirs get handles via watchDirLoaded (off-loop,
+// drain-before-Add). Under maxWatchDirs pressure collapsed dirs are evicted
+// first; handles stay a backstop, not routine truncation.
+func (a *App) addWatchTreeLazy(watcher *fsnotify.Watcher, root string) (int, *AppError) {
+	count := 0
+	var firstAddErr error
+	addOne := func(path string) bool {
+		// Drain-before-Add for the Windows backend.
+		select {
+		case <-watcher.Events:
+		default:
+		}
+		if err := watcher.Add(path); err != nil {
+			if firstAddErr == nil {
+				firstAddErr = err
+			}
+			if errors.Is(err, fsnotify.ErrClosed) {
+				return false
+			}
+			return true
+		}
+		count++
+		return true
+	}
+	if !addOne(root) {
+		return 0, NewWatchError(WatchOpClosed, root, firstAddErr)
+	}
+	if a.ws != nil {
+		var loaded []string
+		var walk func([]*fileNode)
+		walk = func(nodes []*fileNode) {
+			for _, n := range nodes {
+				if n.Dir && n.Loaded && len(n.Children) > 0 {
+					loaded = append(loaded, n.Path)
+				}
+				walk(n.Children)
+			}
+		}
+		walk(a.ws.Tree)
+		// Collapsed-first eviction: expanded (open) dirs win.
+		openFirst := loaded[:0]
+		collapsed := []string{}
+		for _, p := range loaded {
+			if a.folders[p] {
+				openFirst = append(openFirst, p)
+			} else {
+				collapsed = append(collapsed, p)
+			}
+		}
+		ordered := append(openFirst, collapsed...)
+		for _, rel := range ordered {
+			if count >= maxWatchDirs {
+				break
+			}
+			abs := filepath.Join(root, filepath.FromSlash(rel))
+			_ = addOne(abs)
+		}
+	}
+	if count == 0 {
+		cause := firstAddErr
+		if cause == nil {
+			cause = errors.New("no directories could be watched")
+		}
+		return 0, NewWatchError(WatchOpAdd, root, cause)
+	}
+	return count, nil
+}
+
 // skipWatchDir hides Windows system and profile churn from the watcher. The
 // workspace scan keeps its own skipDir list; this is watcher-only so opening a
 // home directory does not install thousands of volatile handles.
@@ -308,6 +390,9 @@ func (a *App) watchLoop(ctx context.Context, watcher *fsnotify.Watcher, root str
 	pending := false
 	rescan := false
 	gitChange := false
+	overflow := false
+	gitignoreChange := false
+	changedDirs := map[string]bool{}
 	last := start
 	lastChanges := startChanges
 
@@ -337,13 +422,32 @@ func (a *App) watchLoop(ctx context.Context, watcher *fsnotify.Watcher, root str
 		update := watchUpdate{Git: gitChange}
 
 		if rescan {
-			next, delta, err := rescanDiskWorkspace(root, last, limit)
-			if err != nil {
-				update.Err = NewAppError(KindWorkspace, WatchOpRescan, root, err)
+			if last != nil && last.Lazy && !overflow {
+				if gitignoreChange {
+					// .gitignore moved: lazy-preserving rescan (no full walk).
+					next, delta, err := rescanDiskWorkspace(root, last, limit)
+					if err != nil {
+						update.Err = NewAppError(KindWorkspace, WatchOpRescan, root, err)
+					} else {
+						update.Workspace = next
+						update.Delta = delta
+						last = next
+					}
+				} else {
+					// Targeted: no full walk, page loop reloads loaded dirs.
+					for d := range changedDirs {
+						update.Dirs = append(update.Dirs, d)
+					}
+				}
 			} else {
-				update.Workspace = next
-				update.Delta = delta
-				last = next
+				next, delta, err := rescanDiskWorkspace(root, last, limit)
+				if err != nil {
+					update.Err = NewAppError(KindWorkspace, WatchOpRescan, root, err)
+				} else {
+					update.Workspace = next
+					update.Delta = delta
+					last = next
+				}
 			}
 		}
 
@@ -371,6 +475,9 @@ func (a *App) watchLoop(ctx context.Context, watcher *fsnotify.Watcher, root str
 
 		rescan = false
 		gitChange = false
+		overflow = false
+		gitignoreChange = false
+		changedDirs = map[string]bool{}
 	}
 
 	for {
@@ -416,6 +523,32 @@ func (a *App) watchLoop(ctx context.Context, watcher *fsnotify.Watcher, root str
 			} else {
 				rescan = true
 				gitChange = true
+				if filepath.Base(event.Name) == ".gitignore" {
+					gitignoreChange = true
+				}
+				// Record the parent dir for targeted lazy reload.
+				if rel, relErr := filepath.Rel(root, event.Name); relErr == nil && rel != "." && rel != ".." {
+					slash := filepath.ToSlash(rel)
+					// If the event names a dir, reload it; else reload its parent.
+					dir := slash
+					if info, statErr := os.Lstat(event.Name); statErr != nil || !info.IsDir() {
+						if i := len(slash) - len(filepath.Base(slash)) - 1; i >= 0 {
+							dir = slash[:i]
+						} else {
+							dir = ""
+						}
+					}
+					if dir == "" {
+						dir = "."
+					}
+					if dir == "." {
+						// Root-level change: parent is root; mark all loaded
+						// as stale via empty dir (page loop re-reads root).
+						changedDirs["."] = true
+					} else {
+						changedDirs[dir] = true
+					}
+				}
 			}
 
 			if !pending {
@@ -432,6 +565,7 @@ func (a *App) watchLoop(ctx context.Context, watcher *fsnotify.Watcher, root str
 			// backend error is recorded and surfaced as a status note.
 			if errors.Is(watchErr, fsnotify.ErrEventOverflow) {
 				rescan = true
+				overflow = true
 				gitChange = true
 				if !pending {
 					pending = true
@@ -470,7 +604,8 @@ func (a *App) watchLoop(ctx context.Context, watcher *fsnotify.Watcher, root str
 	}
 }
 
-// tickWatch drains one background update and any finished patch or search.
+// tickWatch drains one background update and any finished patch, search,
+// or directory load.
 func (a *App) tickWatch(ctx context.Context) error {
 	select {
 	case update := <-a.watchUpdates:
@@ -482,6 +617,9 @@ func (a *App) tickWatch(ctx context.Context) error {
 	a.pollPatches(ctx)
 	a.receiveSearch(ctx)
 	a.receiveHistoryLoad(ctx)
+	a.pollAutoSave(ctx)
+	a.scheduleOpenFoldersLoaded()
+	a.receiveDirLoads(ctx)
 
 	return nil
 }
@@ -526,6 +664,10 @@ func (a *App) applyWatchUpdate(ctx context.Context, update watchUpdate) {
 		}
 	}
 
+	if len(update.Dirs) > 0 {
+		a.applyTargetedDirs(update.Dirs)
+	}
+
 	if update.Changes.Branch != "" || len(update.Changes.Files) > 0 || update.Changes.Note != "" {
 		a.applyWatchChanges(ctx, update.Changes)
 	}
@@ -533,6 +675,65 @@ func (a *App) applyWatchUpdate(ctx context.Context, update watchUpdate) {
 	if update.Git {
 		a.applyGitRefresh(ctx, update)
 	}
+}
+
+// applyTargetedDirs reloads loaded dirs without a full walk. Loaded dirs
+// re-enqueue (requestDirLoad); unloaded dirs mark their parent stale
+// (Loaded=false) with no I/O so the next expand re-reads.
+func (a *App) applyTargetedDirs(dirs []string) {
+	if a.ws == nil || a.ws.Sample {
+		return
+	}
+	a.watchNote = "Workspace rescan: updated"
+	for _, dir := range dirs {
+		if dir == "." || dir == "" {
+			// Root-level change: stale-mark root children? Re-read root
+			// via lazy rescan of root only is cheap; for now mark loaded
+			// root files stale by re-requesting open loaded dirs.
+			for path, open := range a.folders {
+				if !open {
+					continue
+				}
+				if node := findTreeNode(a.ws.Tree, path); node != nil && node.Dir && node.Loaded {
+					node.Loaded = false
+					node.Loading = false
+					node.LoadErr = ""
+					a.requestDirLoad(path)
+				}
+			}
+			continue
+		}
+		node := findTreeNode(a.ws.Tree, dir)
+		if node != nil && node.Dir && node.Loaded {
+			node.Loaded = false
+			node.Loading = false
+			node.LoadErr = ""
+			a.requestDirLoad(dir)
+			continue
+		}
+		if node == nil {
+			// New directory (e.g. pkg/ created after startup): refresh root
+			// to discover it, then load it if it was meant to be open.
+			a.refreshRoot()
+			if fresh := findTreeNode(a.ws.Tree, dir); fresh != nil && fresh.Dir {
+				if a.folders[dir] {
+					a.requestDirLoad(dir)
+				}
+				continue
+			}
+		}
+		// Unloaded dir: mark parent stale, no I/O.
+		if parent := dirName(dir); parent != "" {
+			if pnode := findTreeNode(a.ws.Tree, parent); pnode != nil && pnode.Dir && pnode.Loaded {
+				pnode.Loaded = false
+				pnode.Loading = false
+			}
+		} else {
+			// Top-level unloaded change: refresh root to pick up new files.
+			a.refreshRoot()
+		}
+	}
+	a.refresh()
 }
 
 // installRescan swaps the workspace, preserves open documents that still
@@ -544,6 +745,8 @@ func (a *App) installRescan(next *workspace, delta workspaceDelta) {
 
 	a.ws = next
 	a.scanLimit = next.Limit
+	// A rescan retires in-flight directory loads; stale replies drop.
+	a.dirLoads = map[string]int{}
 
 	a.tabs = keepExistingTabs(a.tabs, next)
 	a.tabs2 = keepExistingTabs(a.tabs2, next)

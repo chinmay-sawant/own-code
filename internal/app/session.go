@@ -28,29 +28,50 @@ const (
 // after a restart. Paths are workspace-relative, the two tab lists belong to
 // the two editor groups, and the ratios are fractions of the editor body.
 type sessionState struct {
-	Root          string               `json:"root"`
-	Mode          string               `json:"mode"`
-	Theme         string               `json:"theme,omitempty"`
-	Recents       []string             `json:"recents"`
-	Tabs          []string             `json:"tabs"`
-	Active        int                  `json:"active"`
-	Tabs2         []string             `json:"tabs2"`
-	Active2       int                  `json:"active2"`
-	FocusGroup    int                  `json:"focusGroup"`
-	Split         bool                 `json:"split"`
-	SplitRatio    float64              `json:"splitRatio"`
-	Details       bool                 `json:"details"`
-	DevTools      bool                 `json:"devTools"`
-	Wrap          bool                 `json:"wrap"`
-	Preview       bool                 `json:"preview"`
-	DiffSplit     bool                 `json:"diffSplit"`
-	HistoryRatio  float64              `json:"historyRatio"`
-	HistoryManual bool                 `json:"historyManual"`
-	DrawerExtra   int                  `json:"drawerExtra,omitempty"`
-	Zoom          float64              `json:"zoom,omitempty"`
+	Root          string   `json:"root"`
+	Mode          string   `json:"mode"`
+	Theme         string   `json:"theme,omitempty"`
+	Recents       []string `json:"recents"`
+	Tabs          []string `json:"tabs"`
+	Active        int      `json:"active"`
+	Tabs2         []string `json:"tabs2"`
+	Active2       int      `json:"active2"`
+	FocusGroup    int      `json:"focusGroup"`
+	Split         bool     `json:"split"`
+	SplitRatio    float64  `json:"splitRatio"`
+	Details       bool     `json:"details"`
+	DevTools      bool     `json:"devTools"`
+	Wrap          bool     `json:"wrap"`
+	Preview       bool     `json:"preview"`
+	DiffSplit     bool     `json:"diffSplit"`
+	HistoryRatio  float64  `json:"historyRatio"`
+	HistoryManual bool     `json:"historyManual"`
+	// Match toggles for the find/replace bar and the workspace search.
+	// Queries are never persisted; only the sticky toggles survive.
+	FindCase        bool    `json:"findCase,omitempty"`
+	FindRegex       bool    `json:"findRegex,omitempty"`
+	FindWholeWord   bool    `json:"findWholeWord,omitempty"`
+	SearchCase      bool    `json:"searchCase,omitempty"`
+	SearchRegex     bool    `json:"searchRegex,omitempty"`
+	SearchWholeWord bool    `json:"searchWholeWord,omitempty"`
+	DrawerExtra     int     `json:"drawerExtra,omitempty"`
+	Zoom            float64 `json:"zoom,omitempty"`
+	// FontSize is the per-workspace base font in px. Zero means missing:
+	// restore falls back to settings, then the 12px builtin. Keeping zero
+	// as the missing marker preserves old sessions (which load as today).
+	FontSize      float64              `json:"fontSize,omitempty"`
 	BranchLogs    map[string]commitLog `json:"branchLogs,omitempty"`
 	Nav           []string             `json:"nav,omitempty"`
 	NavAt         int                  `json:"navAt,omitempty"`
+	AutoSave      string               `json:"autoSave,omitempty"`
+	AutoSaveDelay int                  `json:"autoSaveDelay,omitempty"`
+	// Pinned/Pinned2 persist the per-group pin sets; PreviewTab/PreviewTab2
+	// persist the single-click preview slots. The closed-tab stack (and any
+	// snapshot text) is never persisted.
+	Pinned      []string `json:"pinned,omitempty"`
+	Pinned2     []string `json:"pinned2,omitempty"`
+	PreviewTab  string   `json:"previewTab,omitempty"`
+	PreviewTab2 string   `json:"previewTab2,omitempty"`
 }
 
 // defaultSessionPath returns the session file for root under the user config
@@ -100,6 +121,8 @@ func loadSession(path string) (sessionState, error) {
 	state.Recents = capSessionPaths(state.Recents)
 	state.Tabs = capSessionPaths(state.Tabs)
 	state.Tabs2 = capSessionPaths(state.Tabs2)
+	state.Pinned = capSessionPaths(state.Pinned)
+	state.Pinned2 = capSessionPaths(state.Pinned2)
 	state.Nav = capNavPaths(state.Nav)
 
 	return state, nil
@@ -116,6 +139,8 @@ func saveSession(path string, state sessionState) error {
 	state.Recents = capSessionPaths(state.Recents)
 	state.Tabs = capSessionPaths(state.Tabs)
 	state.Tabs2 = capSessionPaths(state.Tabs2)
+	state.Pinned = capSessionPaths(state.Pinned)
+	state.Pinned2 = capSessionPaths(state.Pinned2)
 	state.Nav = capNavPaths(state.Nav)
 
 	data, err := json.MarshalIndent(state, "", "  ")
@@ -171,7 +196,16 @@ func (s sessionState) sanitize(root string) sessionState {
 	s.Recents = cleanSessionPaths(s.Recents)
 	s.Tabs = cleanSessionPaths(s.Tabs)
 	s.Tabs2 = cleanSessionPaths(s.Tabs2)
+	s.Pinned = cleanSessionPaths(s.Pinned)
+	s.Pinned2 = cleanSessionPaths(s.Pinned2)
 	s.Nav = cleanNavPaths(s.Nav)
+
+	// Pins and preview slots only survive for tabs that survived: drop pins
+	// naming closed tabs and slots pointing outside their group.
+	s.Pinned = keepSessionPins(s.Pinned, s.Tabs)
+	s.Pinned2 = keepSessionPins(s.Pinned2, s.Tabs2)
+	s.PreviewTab = keepSessionSlot(s.PreviewTab, s.Tabs, s.Pinned)
+	s.PreviewTab2 = keepSessionSlot(s.PreviewTab2, s.Tabs2, s.Pinned2)
 
 	s.Active = clampSessionIndex(s.Active, len(s.Tabs))
 	s.Active2 = clampSessionIndex(s.Active2, len(s.Tabs2))
@@ -180,9 +214,74 @@ func (s sessionState) sanitize(root string) sessionState {
 	s.HistoryRatio = clampSessionRatio(s.HistoryRatio, sessionHistoryMin, sessionHistoryMax)
 	s.DrawerExtra = clampDrawerExtra(s.DrawerExtra)
 	s.Zoom = clampSessionZoom(s.Zoom)
+	// FontSize stays zero when missing so restore can fall back to
+	// settings → builtin. Non-zero values clamp to 8..24.
+	if s.FontSize != 0 {
+		s.FontSize = clampFontSize(s.FontSize)
+	}
 	s.NavAt = clampHistoryIndex(s.NavAt, len(s.Nav))
+	// Auto-save keeps the zero value untouched so older sessions compare
+	// equal; restoreState applies the off/1000 ms defaults. Unknown modes
+	// fall back to off and wild delays clamp into range.
+	if s.AutoSave != "" {
+		s.AutoSave = validAutoSave(strings.TrimSpace(s.AutoSave))
+	}
+	if s.AutoSaveDelay != 0 {
+		s.AutoSaveDelay = clampAutoSaveDelay(s.AutoSaveDelay)
+	}
 
 	return s
+}
+
+// keepSessionPins drops pin entries that name tabs no longer open.
+func keepSessionPins(pins, tabs []string) []string {
+	if len(pins) == 0 || len(tabs) == 0 {
+		return nil
+	}
+
+	open := make(map[string]bool, len(tabs))
+	for _, path := range tabs {
+		open[path] = true
+	}
+
+	var out []string
+
+	for _, path := range pins {
+		if open[path] {
+			out = append(out, path)
+		}
+	}
+
+	return out
+}
+
+// keepSessionSlot keeps a preview slot only when it names an open, unpinned
+// tab in its group.
+func keepSessionSlot(slot string, tabs, pins []string) string {
+	if slot == "" || len(tabs) == 0 {
+		return ""
+	}
+
+	open := false
+	for _, path := range tabs {
+		if path == slot {
+			open = true
+
+			break
+		}
+	}
+
+	if !open {
+		return ""
+	}
+
+	for _, path := range pins {
+		if path == slot {
+			return ""
+		}
+	}
+
+	return slot
 }
 
 // cleanSessionPaths trims, normalizes, and de-duplicates paths, drops entries

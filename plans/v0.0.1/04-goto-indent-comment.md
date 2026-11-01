@@ -84,16 +84,26 @@
 
 ## 4. Checklist
 
-- [ ] Recon key names for `Ctrl+G`, `Ctrl+/`, `Tab`/`Shift+Tab`, `Ctrl+M`, `Ctrl+Shift+O` (window key map; Enter path audit).
-- [ ] `goto.go`: `parseGoto` + `gotoLine` + palette-mode plumbing + `Ctrl+G` + `onChange:"goto"` + template.
-- [ ] `outline` extend: comment skip, JSON/YAML/HTML/Shell, drawer-60 vs palette-full split.
-- [ ] Symbol palette: `symbolRows(query)` + ranking + `Ctrl+Shift+O` + `onSubmit` routing.
-- [ ] `bracket.go`: `matchBracket` pure + jump/select + flash + keys.
-- [ ] `insertNewlineWithIndent` + `indentForNewline`; swap `onSubmit` call.
-- [ ] `comment.go` + `Ctrl+/` wiring.
-- [ ] `indent.go` + Tab interception.
-- [ ] Dirty-range correctness (loop `markDirty`); preview guards (no-op/exit with toast).
-- [ ] Docs + accessibility labels for new boxes.
+- [x] Recon key names for `Ctrl+G`, `Ctrl+/`, `Tab`/`Shift+Tab`, `Ctrl+M`, `Ctrl+Shift+O` (window key map; Enter path audit).
+  - Evidence: window sends lowercase key names (`g/m/o/slash/tab`) with ctrl/shift tracked from separate key events — confirmed against existing chords (`Ctrl+P`→`p`, `Ctrl+Shift+V`→`v` in `actions.go`, `input_test.go` Ctrl+P flow). `Ctrl+/` accepts both `slash` and `/`. Enter arrives as Submit → `onSubmit`: editing inserts newline (now indented), goto/symbol modes route before the editing branch. Documented in `text_edit.go` editKey comments + `actions.go` branch comments.
+- [x] `goto.go`: `parseGoto` + `gotoLine` + palette-mode plumbing + `Ctrl+G` + `onChange:"goto"` + template.
+  - Evidence: `internal/app/goto.go` (`parseGoto`, `gotoLine`, `openGotoPalette`, `submitGoto`, `isGotoQuery`, `gotoOverlayCapturesKeys`); `Ctrl+G` in editKey + `onKeyDown`; `:` alias in files-mode `onSubmit`; template labels/hints in `palette.html`. Tests `TestGotoParse/QueryAlias/LineMovesCaret/LineEntersEdit/SubmitClampsWithToast/SubmitBadQueryKeepsPalette/ExitsPreview` pass (shared + scratch runs).
+- [x] `outline` extend: comment skip, JSON/YAML/HTML/Shell, drawer-60 vs palette-full split.
+  - Evidence: `outline.go` — `outlineFull` (uncapped) vs `outline` (60-cap), `outlineJSON/YAML/HTML/Shell` + `yamlKeyName/htmlIDAttr/shellFuncName/jsMethodName` helpers, comment skip in Go/JS/Python/Shell/YAML, tab-aware `indentDepth` for Python. Tests `TestOutlineJSON/YAML/HTML/Shell/SkipsComments/JSArrowsAndMethods/PythonTabDepth/CapSplit` pass. (JS `interface/enum/type` restored as part of this.)
+- [x] Symbol palette: `symbolRows(query)` + ranking + `Ctrl+Shift+O` + `onSubmit` routing.
+  - Evidence: `palette_symbol.go` (`symbolRows` prefix→contains over `outlineFull`, `symbolPaletteRows`, `openSymbolPalette` file-scoped, `submitSymbol` scroll+caret); `Ctrl+Shift+O` in editKey + `onKeyDown`; `onSubmit` routing + `symbol:` fallback; `onChange` symbolQuery mirror; template symbol rows with kind badge + `:No`. Tests `TestPaletteSymbolRows/Submit/Escape` pass. Clicks reuse the sibling `symbol-open:path:No` action (emitted 1-based so `cutSymbolAction` round-trips).
+- [x] `bracket.go`: `matchBracket` pure + jump/select + flash + keys.
+  - Evidence: `matchBracket` (scanLineWithState-backed string/comment skip, same-type depth, no `<>`), `jumpToBracket` (jump/select), `bracketFlash` via App fields + `markBracketRows` + `.bracket-flash` CSS (display columns; cleared on move/edit/press), `Ctrl+M`/`Ctrl+Shift+M` in editKey + `onKeyDown` toast outside edit. Tests `TestBracketMatch/SkipsStrings/SkipsComments/JumpAndFlash/Select/UnmatchedToasts` pass.
+- [x] `insertNewlineWithIndent` + `indentForNewline`; swap `onSubmit` call.
+  - Evidence: `indent.go` (`base + tabSpaces` after `{([:` per lang family, Markdown list repeat incl. ordered increment); `onSubmit` editing branch swapped. Tests `TestIndentForNewline/AutoIndentOnEnter/AfterBrace` pass.
+- [x] `comment.go` + `Ctrl+/` wiring.
+  - Evidence: `comment.go` (`commentStyleFor` Go/JS `//`, Py/Sh/YAML `#`, CSS `/* */`, HTML/Md `<!-- -->`; JSON/plain refuse; pure `toggleCommentLines`, blank-skip, idempotent strip); `toggleLineComment` single-`replaceEditRange` + `markDirty` loop; `Ctrl+/` (`slash`+`/` names) in editKey + `onKeyDown` with style/edit toasts. Tests `TestCommentToggleLines/MixedCommentsAll/BlockStyle/Styles/SingleUndo/JSONToasts` pass.
+- [x] `indent.go` + Tab interception.
+  - Evidence: pure `indentLines` (empty-line preserving) + `indentSelection` (col-0 exclusion, block selection, single undo) + collapsed Tab/Shfit+Tab; Tab intercepted in `editKey` only when editing with editor focus (terminal/overlay/form keep Tab); `onType` expansion stays as fallback. Tests `TestIndentLines/TabIndentOutdent/TabRangeExcludesLastLineAtCol0` pass.
+- [x] Dirty-range correctness (loop `markDirty`); preview guards (no-op/exit with toast).
+  - Evidence: `markDirty` loops in `toggleLineComment`/`indentSelection` beyond the caret line; goto exits Markdown preview with toast (`TestGotoExitsPreview`); bracket/comment outside edit mode toast without mutating; preview never mutated (all mutating ops require a live edit buffer, which excludes preview).
+- [x] Docs + accessibility labels for new boxes.
+  - Evidence: README Features + Keys rows (`Ctrl+G`, `Ctrl+Shift+O`, `Ctrl+M`, `Ctrl+/`, `Tab`/`Shift+Tab`); `palette.html` aria-labels (goto dialog/input/group, symbol row labels) — `TestAccessibilityPaletteDialog` still passes.
 
 ## 5. Acceptance + tests
 

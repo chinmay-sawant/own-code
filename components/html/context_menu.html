@@ -2,7 +2,11 @@
 <button class="ctx-back" id="menu-dismiss" data-action="menu-dismiss" type="button" aria-label="Close menu"></button>
 <div class="ctx-menu" style="left:{{.MenuX}}px;top:{{.MenuY}}px">
   {{range .MenuRows}}
+  {{if eq .Label "-"}}
+  <div class="ctx-sep" id="ctx-{{.Index}}" role="separator"></div>
+  {{else}}
   <button class="ctx-item" id="ctx-{{.Index}}" type="button"{{if .Enabled}} data-action="menu-item:{{.ID}}"{{else}} disabled{{end}}><span class="ctx-label">{{.Label}}</span>{{if .Hint}}<span class="ctx-hint">{{.Hint}}</span>{{end}}</button>
+  {{end}}
   {{end}}
 </div>
 {{end}}

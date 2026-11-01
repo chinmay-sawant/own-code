@@ -31,6 +31,9 @@ const (
 	contextMenuCloseAllID   = contextMenuIDPrefix + "tab-close-all:"
 	contextMenuCloseLeftID  = contextMenuIDPrefix + "tab-close-left:"
 	contextMenuCloseRightID = contextMenuIDPrefix + "tab-close-right:"
+	contextMenuPinID        = contextMenuIDPrefix + "tab-pin:"
+	contextMenuUnpinID      = contextMenuIDPrefix + "tab-unpin:"
+	contextMenuReopenID     = contextMenuIDPrefix + "tab-reopen"
 
 	contextMenuDiscardFileID = contextMenuIDPrefix + "discard-file:"
 	contextMenuStageFileID   = contextMenuIDPrefix + "stage-file:"
@@ -48,6 +51,7 @@ const (
 	contextMenuCutID         = contextMenuIDPrefix + "cut:"
 	contextMenuCopyID        = contextMenuIDPrefix + "copy:"
 	contextMenuPasteID       = contextMenuIDPrefix + "paste:"
+	contextMenuSplitCloseID  = contextMenuIDPrefix + "split-close:"
 
 	// Merge conflict rows in Source Control and merge-editor actions.
 	contextMenuMergeOpenID    = contextMenuIDPrefix + "merge-open:"
@@ -209,6 +213,9 @@ func (a *App) ContextMenuFor(id string) []contextMenuRow {
 	if rows, ok := a.mergeContextMenu(id); ok {
 		return rows
 	}
+	if rows, ok := a.splitContextMenu(id); ok {
+		return rows
+	}
 	if rows, ok := a.contextMenuForExplorer(id); ok {
 		return rows
 	}
@@ -232,17 +239,30 @@ func (a *App) ContextMenuFor(id string) []contextMenuRow {
 		return nil
 	}
 
-	return []contextMenuRow{
-		{ID: contextMenuCloseID + contextMenuTabTarget(group, index), Label: "Close", Enabled: true},
-		{ID: contextMenuCloseOtherID + contextMenuTabTarget(group, index), Label: "Close Others", Enabled: len(tabs) > 1},
-		{ID: contextMenuCloseAllID + strconv.Itoa(group), Label: "Close All", Enabled: len(tabs) > 0},
-		{ID: contextMenuCloseLeftID + contextMenuTabTarget(group, index), Label: "Close All to the Left", Enabled: index > 0},
-		{
+	path := tabs[index]
+	pinned := a.isPinned(group, path)
+
+	rows := make([]contextMenuRow, 0, 7)
+	if pinned {
+		rows = append(rows, contextMenuRow{ID: contextMenuUnpinID + contextMenuTabTarget(group, index), Label: "Unpin Tab", Hint: "Ctrl+K", Enabled: true})
+	} else {
+		rows = append(rows, contextMenuRow{ID: contextMenuPinID + contextMenuTabTarget(group, index), Label: "Pin Tab", Hint: "Ctrl+K", Enabled: true})
+	}
+
+	rows = append(rows,
+		contextMenuRow{ID: contextMenuCloseID + contextMenuTabTarget(group, index), Label: "Close", Enabled: true},
+		contextMenuRow{ID: contextMenuCloseOtherID + contextMenuTabTarget(group, index), Label: "Close Others", Enabled: len(tabs) > 1},
+		contextMenuRow{ID: contextMenuCloseLeftID + contextMenuTabTarget(group, index), Label: "Close All to the Left", Enabled: index > 0},
+		contextMenuRow{
 			ID:      contextMenuCloseRightID + contextMenuTabTarget(group, index),
 			Label:   "Close All to the Right",
 			Enabled: index < len(tabs)-1,
 		},
-	}
+		contextMenuRow{ID: contextMenuCloseAllID + strconv.Itoa(group), Label: "Close All", Enabled: len(tabs) > 0},
+		contextMenuRow{ID: contextMenuReopenID, Label: "Reopen Closed Tab", Hint: "Ctrl+Shift+T", Enabled: len(a.closedTabs) > 0},
+	)
+
+	return rows
 }
 
 // mergeContextMenu returns the actions for one conflict header or action row
@@ -286,6 +306,58 @@ func (a *App) mergeContextMenu(id string) ([]contextMenuRow, bool) {
 		{ID: contextMenuMergeBothID + suffix, Label: "Accept Both", Enabled: true},
 		{ID: contextMenuMergeCompareID, Label: "Compare Base", Enabled: true},
 	}, true
+}
+
+// splitContextMenu returns close-pane rows for the editor tab strips and
+// panes while a split is open. Merge keeps the closing side's tabs in the
+// survivor; drop discards them (blocked by dirty tabs with a toast). Tab ids
+// keep the tab menu untouched, so this only matches pane and strip ids.
+func (a *App) splitContextMenu(id string) ([]contextMenuRow, bool) {
+	if !a.split || a.mode != "explorer" {
+		return nil, false
+	}
+
+	group := -1
+
+	switch id {
+	case "tabstrip", "editor-window", "code-body", "crumbs":
+		group = 0
+	case "tabstrip-2", "editor-window-2", "code-body-2", "crumbs-2":
+		group = 1
+	default:
+		return nil, false
+	}
+
+	other := 1 - group
+
+	return []contextMenuRow{
+		{ID: contextMenuSplitCloseID + strconv.Itoa(group) + ":merge", Label: "Close This Pane", Enabled: true},
+		{ID: contextMenuSplitCloseID + strconv.Itoa(other) + ":merge", Label: "Close Other Pane", Enabled: true},
+		{ID: contextMenuSplitCloseID + strconv.Itoa(group) + ":drop", Label: "Drop This Pane's Tabs", Enabled: true},
+		{ID: contextMenuSplitCloseID + strconv.Itoa(other) + ":drop", Label: "Drop Other Pane's Tabs", Enabled: true},
+	}, true
+}
+
+// parseSplitClose reads "<side>:<merge|drop>" from a split-close row.
+func parseSplitClose(rest string) (int, splitCloseMode, bool) {
+	sideText, modeText, ok := strings.Cut(rest, ":")
+	if !ok {
+		return 0, splitCloseMerge, false
+	}
+
+	side, ok := contextMenuGroup(sideText)
+	if !ok {
+		return 0, splitCloseMerge, false
+	}
+
+	switch modeText {
+	case "merge":
+		return side, splitCloseMerge, true
+	case "drop":
+		return side, splitCloseDrop, true
+	}
+
+	return 0, splitCloseMerge, false
 }
 
 // scmContextMenu returns working-tree rows. Per-file ids offer stage or
@@ -575,6 +647,68 @@ func (a *App) MenuAction(ctx context.Context, id string) error {
 		return a.redrawTreeMenu(ctx)
 	case strings.HasPrefix(id, contextMenuPasteID):
 		return a.pasteTreeCopy(ctx, strings.TrimPrefix(id, contextMenuPasteID))
+	case strings.HasPrefix(id, contextMenuNewFileID):
+		if err := a.beginExplorerInput(ctx, explorerInputNewFile, strings.TrimPrefix(id, contextMenuNewFileID), ""); err != nil {
+			return err
+		}
+
+		return a.redrawTreeMenu(ctx)
+	case strings.HasPrefix(id, contextMenuNewFolderID):
+		if err := a.beginExplorerInput(ctx, explorerInputNewFolder, strings.TrimPrefix(id, contextMenuNewFolderID), ""); err != nil {
+			return err
+		}
+
+		return a.redrawTreeMenu(ctx)
+	case strings.HasPrefix(id, contextMenuDuplicateID):
+		rel := strings.TrimPrefix(id, contextMenuDuplicateID)
+
+		next, err := a.duplicateExplorerPath(rel)
+		if err != nil {
+			a.showToast("error", "Cannot duplicate", err.Error())
+
+			return a.redrawTreeMenu(ctx)
+		}
+
+		a.refreshExplorerAfterMutation([]string{next}, nil, nil)
+		a.showToast("success", "Duplicated", next)
+
+		return a.redrawTreeMenu(ctx)
+	case strings.HasPrefix(id, contextMenuRenameID):
+		if err := a.beginExplorerInput(ctx, explorerInputRename, "", strings.TrimPrefix(id, contextMenuRenameID)); err != nil {
+			return err
+		}
+
+		return a.redrawTreeMenu(ctx)
+	case strings.HasPrefix(id, contextMenuDeleteID):
+		a.openExplorerDeleteConfirm(a.copyTargets(strings.TrimPrefix(id, contextMenuDeleteID)))
+
+		return a.redrawTreeMenu(ctx)
+	case strings.HasPrefix(id, contextMenuSplitCloseID):
+		if side, mode, ok := parseSplitClose(strings.TrimPrefix(id, contextMenuSplitCloseID)); ok {
+			a.closeSplitSide(side, mode)
+			if a.page == nil {
+				return nil
+			}
+
+			return a.page.Redraw(ctx)
+		}
+
+		return nil
+	case id == contextMenuReopenID:
+		a.reopenClosedTab()
+		return a.redrawMenuAction(ctx)
+	case strings.HasPrefix(id, contextMenuPinID):
+		if group, index, ok := contextMenuTarget(strings.TrimPrefix(id, contextMenuPinID)); ok {
+			if tabs := a.groupTabs(group); index >= 0 && index < len(tabs) {
+				a.pinTabByIndex(group, index)
+			}
+		}
+		return a.redrawMenuAction(ctx)
+	case strings.HasPrefix(id, contextMenuUnpinID):
+		if group, index, ok := contextMenuTarget(strings.TrimPrefix(id, contextMenuUnpinID)); ok {
+			a.unpinTabByIndex(group, index)
+		}
+		return a.redrawMenuAction(ctx)
 	case strings.HasPrefix(id, contextMenuCloseLeftID):
 		if group, index, ok := contextMenuTarget(strings.TrimPrefix(id, contextMenuCloseLeftID)); ok {
 			return a.contextMenuCloseSide(ctx, group, index, true)
@@ -610,22 +744,38 @@ func (a *App) redrawMenuAction(ctx context.Context) error {
 }
 
 func (a *App) contextMenuCloseSide(ctx context.Context, group, index int, left bool) error {
-	tabs, active := &a.tabs, &a.active
-	if group == 1 {
-		tabs, active = &a.tabs2, &a.active2
-	}
-	if index < 0 || index >= len(*tabs) {
+	tabs := a.groupTabs(group)
+	if index < 0 || index >= len(tabs) {
 		return nil
 	}
 	a.finishEdit()
-	if left {
-		*tabs = append([]string(nil), (*tabs)[index:]...)
-		*active = max(0, *active-index)
-	} else {
-		*tabs = append([]string(nil), (*tabs)[:index+1]...)
-		*active = min(*active, index)
+	// Bulk closes skip pinned tabs; the gate only prompts for unpinned
+	// dirty tabs, and the shared closeTabsIn pushes every removed tab.
+	var closing []string
+	for i, p := range tabs {
+		if left && i >= index {
+			continue
+		}
+		if !left && i <= index {
+			continue
+		}
+		if a.isPinned(group, p) {
+			continue
+		}
+		closing = append(closing, p)
 	}
-	return a.contextMenuFinish(ctx)
+	proceed := func(ctx context.Context) error {
+		if left {
+			_, _ = a.closeTabsIn(group, func(i int, _ string) bool { return i >= index }, false)
+		} else {
+			_, _ = a.closeTabsIn(group, func(i int, _ string) bool { return i <= index }, false)
+		}
+		return a.contextMenuFinish(ctx)
+	}
+	if a.gateBulkClose(group, closing, proceed) {
+		return a.redrawMenuAction(ctx)
+	}
+	return proceed(ctx)
 }
 
 // contextMenuTabID reads tab-N, tab-close-N, tab2-N, or tab2-close-N. Other
@@ -711,78 +861,102 @@ func contextMenuTabTarget(group, index int) string {
 // contextMenuCloseTab drops one tab and keeps the group's active index on a
 // real tab.
 func (a *App) contextMenuCloseTab(ctx context.Context, group, index int) error {
-	a.finishEdit()
-
-	if group == 1 {
-		if index < 0 || index >= len(a.tabs2) {
-			return nil
-		}
-
-		a.tabs2 = append(append([]string(nil), a.tabs2[:index]...), a.tabs2[index+1:]...)
-		if index < a.active2 {
-			a.active2--
-		}
-
-		a.active2 = contextMenuClampIndex(a.active2, len(a.tabs2))
-		if len(a.tabs2) == 0 {
-			a.split = false
-			a.focusGroup = 0
-		}
-	} else {
-		if index < 0 || index >= len(a.tabs) {
-			return nil
-		}
-
-		a.tabs = append(append([]string(nil), a.tabs[:index]...), a.tabs[index+1:]...)
-		if index < a.active {
-			a.active--
-		}
-
-		a.active = contextMenuClampIndex(a.active, len(a.tabs))
+	tabs := a.groupTabs(group)
+	if index < 0 || index >= len(tabs) {
+		return nil
 	}
+	a.finishEdit()
+	path := tabs[index]
+	// An explicit single close removes its tab even when pinned; the shared
+	// closeTabIn pushes the closed stack.
+	proceed := func(ctx context.Context) error {
+		live := a.groupTabs(group)
+		at := index
+		if at < 0 || at >= len(live) || live[at] != path {
+			at = -1
+			for i, p := range live {
+				if p == path {
+					at = i
 
-	return a.contextMenuFinish(ctx)
+					break
+				}
+			}
+		}
+		if at < 0 {
+			return a.contextMenuFinish(ctx)
+		}
+		a.closeTabIn(group, at)
+
+		return a.contextMenuFinish(ctx)
+	}
+	if a.gateBulkClose(group, []string{path}, proceed) {
+		return a.redrawMenuAction(ctx)
+	}
+	return proceed(ctx)
 }
 
-// contextMenuCloseOtherTabs keeps one tab in the group and drops the rest.
+// contextMenuCloseOtherTabs keeps one tab in the group and drops the rest,
+// skipping pinned tabs and pushing the rest onto the closed stack.
 func (a *App) contextMenuCloseOtherTabs(ctx context.Context, group, index int) error {
-	a.finishEdit()
-
+	var tabs []string
 	if group == 1 {
-		if index < 0 || index >= len(a.tabs2) {
-			return nil
-		}
-
-		a.tabs2 = []string{a.tabs2[index]}
-		a.active2 = 0
+		tabs = a.tabs2
 	} else {
-		if index < 0 || index >= len(a.tabs) {
-			return nil
-		}
-
-		a.tabs = []string{a.tabs[index]}
-		a.active = 0
+		tabs = a.tabs
 	}
+	if index < 0 || index >= len(tabs) {
+		return nil
+	}
+	a.finishEdit()
+	keep := tabs[index]
+	var closing []string
+	for i, p := range tabs {
+		if i != index && !a.isPinned(group, p) {
+			closing = append(closing, p)
+		}
+	}
+	proceed := func(ctx context.Context) error {
+		live := a.groupTabs(group)
+		at := -1
+		for i, p := range live {
+			if p == keep {
+				at = i
 
-	return a.contextMenuFinish(ctx)
+				break
+			}
+		}
+		if at < 0 {
+			return a.contextMenuFinish(ctx)
+		}
+		_, _ = a.closeTabsIn(group, func(i int, _ string) bool { return live[i] == keep }, false)
+
+		return a.contextMenuFinish(ctx)
+	}
+	if a.gateBulkClose(group, closing, proceed) {
+		return a.redrawMenuAction(ctx)
+	}
+	return proceed(ctx)
 }
 
 // contextMenuCloseAllTabs clears one group. An empty second group ends the
-// split.
+// split. Close All is explicit, so it closes pinned tabs too.
 func (a *App) contextMenuCloseAllTabs(ctx context.Context, group int) error {
 	a.finishEdit()
-
+	var closing []string
 	if group == 1 {
-		a.tabs2 = nil
-		a.active2 = 0
-		a.split = false
-		a.focusGroup = 0
+		closing = append([]string(nil), a.tabs2...)
 	} else {
-		a.tabs = nil
-		a.active = 0
+		closing = append([]string(nil), a.tabs...)
 	}
+	proceed := func(ctx context.Context) error {
+		_, _ = a.closeTabsIn(group, func(int, string) bool { return false }, true)
 
-	return a.contextMenuFinish(ctx)
+		return a.contextMenuFinish(ctx)
+	}
+	if a.gateBulkClose(group, closing, proceed) {
+		return a.redrawMenuAction(ctx)
+	}
+	return proceed(ctx)
 }
 
 // contextMenuFinish settles and paints the page after a tab action.
@@ -793,7 +967,12 @@ func (a *App) contextMenuFinish(ctx context.Context) error {
 		return nil
 	}
 
-	a.resetScroll()
+	// The tab helpers already settled per-group scroll; only single-pane
+	// mode resets here so split panes keep their offsets.
+	if !a.split {
+		a.resetScroll()
+	}
+
 	a.ensureTabVisible(0)
 	a.ensureTabVisible(1)
 	a.refresh()

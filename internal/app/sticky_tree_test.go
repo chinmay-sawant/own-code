@@ -30,6 +30,7 @@ func manyStickyDir(t *testing.T) (*App, string) {
 	}
 
 	clickID(t, app, "tree-many")
+	drainDirLoads(t, app)
 
 	return app, dir
 }
@@ -106,6 +107,7 @@ func TestStickyNestedStack(t *testing.T) {
 		if err := app.onClick(ctx, ownframe.Box{Action: "dir:" + path}); err != nil {
 			t.Fatalf("open %s: %v", path, err)
 		}
+		drainDirLoads(t, app)
 	}
 
 	index := 0
@@ -191,6 +193,7 @@ func TestSpaceExpandsAndCollapsesDir(t *testing.T) {
 	if err := app.onKeyDown(ctx, "space"); err != nil {
 		t.Fatal(err)
 	}
+	drainDirLoads(t, app)
 
 	if !app.folders["src"] {
 		t.Fatal("space did not expand src")

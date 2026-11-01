@@ -76,8 +76,9 @@ func (a *App) resetZoom(ctx context.Context) error {
 }
 
 // setZoom clamps the level, rescales the scroll offsets so the same first
-// row stays on screen, persists the session, and repaints with the zoom
-// stylesheet layered over the theme.
+// row stays on screen, persists the session and the global settings
+// (gestures write session + global; the session wins on restore), and
+// repaints with the zoom stylesheet layered over the theme.
 func (a *App) setZoom(ctx context.Context, level float64) error {
 	old := a.uiZoom()
 
@@ -85,13 +86,34 @@ func (a *App) setZoom(ctx context.Context, level float64) error {
 	now := a.uiZoom()
 
 	if old > 0 && now != old {
-		a.scrollY = int(math.Round(float64(a.scrollY) * now / old))
-		a.scrollX = int(math.Round(float64(a.scrollX) * now / old))
+		scale := func(v int) int { return int(math.Round(float64(v) * now / old)) }
+		a.scrollY = scale(a.scrollY)
+		a.scrollX = scale(a.scrollX)
+		for group := 0; group < 2; group++ {
+			a.scrollGroup[group] = scale(a.scrollGroup[group])
+			a.scrollXGrp[group] = scale(a.scrollXGrp[group])
+			for path, offset := range a.tabScroll[group] {
+				a.tabScroll[group][path] = scale(offset)
+			}
+		}
 	}
 
 	a.persistSession()
-	a.setScrollX(a.scrollX)
-	a.scrollTo(a.scrollY)
+	a.persistSettings()
+	if a.split {
+		// Reclamp both groups against their own documents instead of
+		// funneling the shared single-pane offsets into the focused pane.
+		for group := 0; group < 2; group++ {
+			a.scrollGroup[group] = a.clampGroupScroll(group, a.scrollGroup[group])
+			if maxW := a.maxLineWidthFor(group); a.scrollXGrp[group] > maxW {
+				a.scrollXGrp[group] = maxW
+			}
+		}
+		a.scrollTo(a.scrollY)
+	} else {
+		a.setScrollX(a.scrollX)
+		a.scrollTo(a.scrollY)
+	}
 
 	if err := a.page.SetTheme(a.activeThemeCSS()); err != nil {
 		return err
@@ -100,10 +122,79 @@ func (a *App) setZoom(ctx context.Context, level float64) error {
 	return a.page.Redraw(ctx)
 }
 
+// baseFontSize is the global base font in px, defaulting a missing value
+// to 12 and clamping hand edits into 8..24.
+func (a *App) baseFontSize() float64 {
+	if a.fontSize <= 0 {
+		return defaultFontSize
+	}
+	return clampFontSize(a.fontSize)
+}
+
+// fontLabel renders the base size, e.g. "12px".
+func (a *App) fontLabel() string {
+	return fmt.Sprintf("%.0fpx", math.Round(a.baseFontSize()))
+}
+
+// statusZoomLabel renders the status bar chip, e.g. "110% · 12px".
+func (a *App) statusZoomLabel() string {
+	return a.zoomLabel() + " · " + a.fontLabel()
+}
+
+// setFontSize clamps the base font, persists session + global, and repaints.
+func (a *App) setFontSize(ctx context.Context, size float64) error {
+	a.fontSize = clampFontSize(size)
+	a.persistSession()
+	a.persistSettings()
+	if err := a.page.SetTheme(a.activeThemeCSS()); err != nil {
+		return err
+	}
+	return a.page.Redraw(ctx)
+}
+
+// resetFontSize returns the base font to 12px.
+func (a *App) resetFontSize(ctx context.Context) error {
+	return a.setFontSize(ctx, defaultFontSize)
+}
+
+// effectiveZoom returns the layout zoom for one view. V1 knows editor and
+// terminal overrides; every other view follows the global zoom. zx/zf stay
+// global for scroll math and hit testing; per-view zoom is CSS-only v1.
+func (a *App) effectiveZoom(view string) float64 {
+	if a.zoomPerView != nil {
+		if v, ok := a.zoomPerView[view]; ok && v >= zoomMin && v <= zoomMax {
+			return v
+		}
+	}
+	return a.uiZoom()
+}
+
+// setZoomPerView sets or clears one per-view override (0/1 clears), then
+// persists and repaints. V1 supports editor and terminal only.
+func (a *App) setZoomPerView(ctx context.Context, view string, level float64) error {
+	if view != "editor" && view != "terminal" {
+		return nil
+	}
+	if a.zoomPerView == nil {
+		a.zoomPerView = map[string]float64{}
+	}
+	if level <= 0 || math.Abs(level-1) < zoomEpsilon {
+		delete(a.zoomPerView, view)
+	} else {
+		a.zoomPerView[view] = clampSettingsZoom(level)
+	}
+	a.persistSession()
+	a.persistSettings()
+	if err := a.page.SetTheme(a.activeThemeCSS()); err != nil {
+		return err
+	}
+	return a.page.Redraw(ctx)
+}
+
 // activeThemeCSS layers the zoom override after the theme so it wins the
 // cascade without touching the theme catalog.
 func (a *App) activeThemeCSS() string {
-	return themeCSS(a.theme) + zoomOverrideCSS(a.uiZoom())
+	return themeCSS(a.theme) + zoomOverrideCSSWithFont(a.uiZoom(), a.baseFontSize(), a.zoomPerView)
 }
 
 // zoomFont is one fixed font size the zoom override rescales.
@@ -219,7 +310,10 @@ func zoomFontTable() []zoomFont {
 		{".settings-header", 14},
 		{".settings-title", 14},
 		{".settings-theme-text span", 10},
-		{".settings-check", 16},
+		{".settings-sub", 12},
+		{".settings-key-text b", 11},
+		{".settings-key-text span", 10},
+		{".settings-key-fixed, .settings-capturing", 10}, {".settings-check", 16},
 		{".det-kicker", 9.5},
 		{".det-x", 14},
 		{".det-file b", 11},
@@ -267,69 +361,125 @@ func zoomFontTable() []zoomFont {
 
 // zoomOverrideCSS rescales the layout vars, the fixed row heights, and the
 // reader fonts. An empty string at 100 percent keeps the theme byte-stable.
+// It is the font-agnostic wrapper; activeThemeCSS uses the font-aware form
+// below so a non-default base font still paints.
 func zoomOverrideCSS(z float64) string {
+	return zoomOverrideCSSWithFont(z, defaultFontSize, nil)
+}
+
+// zoomOverrideCSSWithFont rescales by the layout zoom times the base-font
+// ratio (fontSize/12). override(1,12) with no per-view overrides is empty,
+// keeping the theme byte-stable at the default.
+func zoomOverrideCSSWithFont(z, fontSize float64, perView map[string]float64) string {
 	if z <= 0 {
 		z = 1
 	}
-
-	if math.Abs(z-1) < zoomEpsilon {
+	if fontSize <= 0 {
+		fontSize = defaultFontSize
+	} else {
+		fontSize = clampFontSize(fontSize)
+	}
+	fontRatio := fontSize / defaultFontSize
+	hasPerView := false
+	for _, view := range []string{"editor", "terminal"} {
+		if v, ok := perView[view]; ok && v > 0 && math.Abs(v-1) >= zoomEpsilon {
+			hasPerView = true
+			break
+		}
+	}
+	if math.Abs(z-1) < zoomEpsilon && math.Abs(fontSize-defaultFontSize) < zoomEpsilon && !hasPerView {
 		return ""
 	}
 
-	px := func(v int) string {
-		return fmt.Sprintf("%dpx", max(1, int(math.Round(float64(v)*z))))
-	}
-
 	var b strings.Builder
-	b.WriteString(":root {")
-	fmt.Fprintf(&b, " --row-h:%s !important;", px(rowH))
-	fmt.Fprintf(&b, " --titlebar-h:%s !important;", px(windowControlTop))
-	fmt.Fprintf(&b, " --tab-h:%s !important;", px(tabStripH))
-	fmt.Fprintf(&b, " --crumb-h:%s !important;", px(crumbH))
-	fmt.Fprintf(&b, " --side-w:%s !important;", px(sideWidth))
-	fmt.Fprintf(&b, " --activity-w:%s !important;", px(activityW))
-	fmt.Fprintf(&b, " --status-h:%s !important;", px(windowControlBottom))
-	b.WriteString(" }")
 
-	// Core rows.
-	fmt.Fprintf(&b, ".trow { height:%s !important; }", px(treeRowH))
+	// Identity globals emit nothing: at 100% with the default font the
+	// theme paints alone, and a lone per-view override scopes only fonts.
+	if math.Abs(z-1) >= zoomEpsilon || math.Abs(fontRatio-1) >= zoomEpsilon {
+		px := func(v int) string {
+			return fmt.Sprintf("%dpx", max(1, int(math.Round(float64(v)*z))))
+		}
 
-	// The terminal grid uses the same rounded row height as the Go geometry,
-	// so windowing and the painted rows stay aligned at every zoom.
-	fmt.Fprintf(&b, ".term-resize { height:%s !important; flex-basis:%s !important; }", px(termResizeH), px(termResizeH))
-	fmt.Fprintf(&b, ".term-head { height:%s !important; flex-basis:%s !important; }", px(termHeadH), px(termHeadH))
-	fmt.Fprintf(&b, ".term-foot { height:%s !important; flex-basis:%s !important; }", px(termFootH), px(termFootH))
-	fmt.Fprintf(&b, ".term-note { height:%s !important; flex-basis:%s !important; line-height:%s !important; }", px(termNoteH), px(termNoteH), px(termNoteH))
-	fmt.Fprintf(&b, ".term-body { padding:%s %s !important; }", px(termBodyPad/2), px(termWidthPad/2))
-	fmt.Fprintf(&b, ".term-row { height:%s !important; min-height:%s !important; max-height:%s !important; flex-basis:%s !important; line-height:%s !important; }",
-		px(termRowH), px(termRowH), px(termRowH), px(termRowH), px(termRowH))
-	fmt.Fprintf(&b, ".term-tab, .term-tab .term-pick { height:%s !important; }", px(termHeadH))
+		b.WriteString(":root {")
+		fmt.Fprintf(&b, " --row-h:%s !important;", px(rowH))
+		fmt.Fprintf(&b, " --titlebar-h:%s !important;", px(windowControlTop))
+		fmt.Fprintf(&b, " --tab-h:%s !important;", px(tabStripH))
+		fmt.Fprintf(&b, " --crumb-h:%s !important;", px(crumbH))
+		fmt.Fprintf(&b, " --side-w:%s !important;", px(sideWidth))
+		fmt.Fprintf(&b, " --activity-w:%s !important;", px(activityW))
+		fmt.Fprintf(&b, " --status-h:%s !important;", px(windowControlBottom))
+		b.WriteString(" }")
 
-	histH := px(histRowH)
-	fmt.Fprintf(&b, ".hist-row { height:%s !important; min-height:%s !important; max-height:%s !important; }", histH, histH, histH)
-	fmt.Fprintf(&b, ".change { min-height:%s !important; }", px(changeRowH))
-	fmt.Fprintf(&b, ".orow { height:%s !important; }", px(treeRowH))
-	fmt.Fprintf(&b, ".edit-selection { height:%s !important; }", px(rowH))
-	fmt.Fprintf(&b, ".hsplit { height:%s !important; flex-basis:%s !important; }", px(histSplitH), px(histSplitH))
+		// Core rows.
+		fmt.Fprintf(&b, ".trow { height:%s !important; }", px(treeRowH))
 
-	for _, f := range zoomFontTable() {
-		// Integral sizes only: the replay shapes text on an integer ppem
-		// grid, so a fractional size would paint wider than the frame the
-		// layout measured and push each run into the next.
-		fmt.Fprintf(&b, "%s { font-size:%dpx !important; }", f.sel, max(1, int(math.Round(f.base*z))))
+		// The terminal grid uses the same rounded row height as the Go geometry,
+		// so windowing and the painted rows stay aligned at every zoom.
+		fmt.Fprintf(&b, ".term-resize { height:%s !important; flex-basis:%s !important; }", px(termResizeH), px(termResizeH))
+		fmt.Fprintf(&b, ".term-head { height:%s !important; flex-basis:%s !important; }", px(termHeadH), px(termHeadH))
+		fmt.Fprintf(&b, ".term-foot { height:%s !important; flex-basis:%s !important; }", px(termFootH), px(termFootH))
+		fmt.Fprintf(&b, ".term-note { height:%s !important; flex-basis:%s !important; line-height:%s !important; }", px(termNoteH), px(termNoteH), px(termNoteH))
+		fmt.Fprintf(&b, ".term-body { padding:%s %s !important; }", px(termBodyPad/2), px(termWidthPad/2))
+		fmt.Fprintf(&b, ".term-row { height:%s !important; min-height:%s !important; max-height:%s !important; flex-basis:%s !important; line-height:%s !important; }",
+			px(termRowH), px(termRowH), px(termRowH), px(termRowH), px(termRowH))
+		fmt.Fprintf(&b, ".term-tab, .term-tab .term-pick { height:%s !important; }", px(termHeadH))
+
+		histH := px(histRowH)
+		fmt.Fprintf(&b, ".hist-row { height:%s !important; min-height:%s !important; max-height:%s !important; }", histH, histH, histH)
+		fmt.Fprintf(&b, ".change { min-height:%s !important; }", px(changeRowH))
+		fmt.Fprintf(&b, ".orow { height:%s !important; }", px(treeRowH))
+		fmt.Fprintf(&b, ".edit-selection { height:%s !important; }", px(rowH))
+		fmt.Fprintf(&b, ".hsplit { height:%s !important; flex-basis:%s !important; }", px(histSplitH), px(histSplitH))
+
+		for _, f := range zoomFontTable() {
+			// Integral sizes only: the replay shapes text on an integer ppem
+			// grid, so a fractional size would paint wider than the frame the
+			// layout measured and push each run into the next.
+			fmt.Fprintf(&b, "%s { font-size:%dpx !important; }", f.sel, max(1, int(math.Round(f.base*z*fontRatio))))
+		}
+
+		zoomWindowControlCSS(&b, px)
+		zoomTreeCSS(&b, px)
+		zoomEditorCSS(&b, px)
+		zoomRailsCSS(&b, px)
+		zoomHistoryCSS(&b, px)
+		zoomDiffCSS(&b, px)
+		zoomFloatsCSS(&b, px)
+		zoomOverlayCSS(&b, px)
+		zoomDetailsCSS(&b, px)
+		zoomPreviewCSS(&b, px)
+		zoomActivityCSS(&b, px)
 	}
 
-	zoomWindowControlCSS(&b, px)
-	zoomTreeCSS(&b, px)
-	zoomEditorCSS(&b, px)
-	zoomRailsCSS(&b, px)
-	zoomHistoryCSS(&b, px)
-	zoomDiffCSS(&b, px)
-	zoomFloatsCSS(&b, px)
-	zoomOverlayCSS(&b, px)
-	zoomDetailsCSS(&b, px)
-	zoomPreviewCSS(&b, px)
-	zoomActivityCSS(&b, px)
+	zoomPerViewCSS(&b, fontSize, perView)
 
 	return b.String()
+}
+
+// zoomPerViewCSS scopes editor/terminal-only font scaling after the global
+// rules so per-view overrides win the cascade. V1 touches font size only
+// and keeps row heights global, so caret and terminal-row geometry (which
+// zx/zf compute globally) cannot desync at extremes.
+func zoomPerViewCSS(b *strings.Builder, fontSize float64, perView map[string]float64) {
+	if perView == nil {
+		return
+	}
+	if v, ok := perView["editor"]; ok && v > 0 && math.Abs(v-1) >= zoomEpsilon {
+		v = clampSettingsZoom(v)
+		ed := func(base float64) string {
+			return fmt.Sprintf("%dpx", max(1, int(math.Round(base*(fontSize/defaultFontSize)*v))))
+		}
+		fmt.Fprintf(b, ".cline { font-size:%s !important; }", ed(12))
+		fmt.Fprintf(b, ".drow { font-size:%s !important; }", ed(12))
+		fmt.Fprintf(b, ".ln { font-size:%s !important; }", ed(10))
+		fmt.Fprintf(b, ".mrow { font-size:%s !important; }", ed(12))
+	}
+	if v, ok := perView["terminal"]; ok && v > 0 && math.Abs(v-1) >= zoomEpsilon {
+		v = clampSettingsZoom(v)
+		tm := func(base float64) string {
+			return fmt.Sprintf("%dpx", max(1, int(math.Round(base*(fontSize/defaultFontSize)*v))))
+		}
+		fmt.Fprintf(b, ".term-body { font-size:%s !important; }", tm(12))
+		fmt.Fprintf(b, ".term-note { font-size:%s !important; }", tm(9))
+	}
 }
