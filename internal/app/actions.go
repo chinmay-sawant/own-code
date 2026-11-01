@@ -67,6 +67,12 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		if err := a.scrollTerminal(ctx, -3); err != nil {
 			return err
 		}
+	case strings.HasPrefix(action, "term-link:"):
+		if r, s, ok := parseTermLinkAction(action); ok {
+			if err := a.openTerminalLink(ctx, r, s); err != nil {
+				return err
+			}
+		}
 	case action == "":
 		if box.ID == "filter" || box.ID == "palette" || box.ID == "find" || box.ID == "find-replace" || box.ID == "branch-filter" ||
 			box.ID == "workspace-search" || box.ID == "workspace-replace" || box.ID == "editor" || box.ID == "edit-surface" || box.ID == "project-path" ||
@@ -2925,6 +2931,27 @@ func actionIndex(action, prefix string) (int, bool) {
 	}
 
 	return n, true
+}
+
+// parseTermLinkAction parses term-link:row:seg click actions.
+func parseTermLinkAction(action string) (int, int, bool) {
+	rest, ok := strings.CutPrefix(action, "term-link:")
+	if !ok {
+		return 0, 0, false
+	}
+	rowText, segText, ok := strings.Cut(rest, ":")
+	if !ok {
+		return 0, 0, false
+	}
+	row, err := strconv.Atoi(rowText)
+	if err != nil || row < 0 {
+		return 0, 0, false
+	}
+	seg, err := strconv.Atoi(segText)
+	if err != nil || seg < 0 {
+		return 0, 0, false
+	}
+	return row, seg, true
 }
 
 // devMessage is the toast copy for the dock toggle.

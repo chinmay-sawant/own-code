@@ -302,6 +302,22 @@
 .term-row .t-italic, .term-row .italic { font-style: italic; }
 .term-row .t-underline, .term-row .underline { text-decoration: underline; }
 
+/* Clickable file:line locations. Buttons reset to inline text so wrapped
+   rows keep their height; the underline comes from the segment class. */
+.term-link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.term-link:hover { color: var(--accent); }
+
 /* Cursor comes last so its inverse block wins over every foreground and
    background token on the same cell. */
 .term-row .t-cursor, .term-row .cursor { background-color: var(--accent); color: var(--bg); opacity: 1; }

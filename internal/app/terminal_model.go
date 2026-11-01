@@ -82,7 +82,7 @@ func terminalViewState(open, focus bool, height int, activeID int, sessions []te
 	for i, row := range rendered.Rows {
 		segments := make([]segment, len(row.Segments))
 		for j, part := range row.Segments {
-			segments[j] = segment{Text: part.Text, Class: part.Class}
+			segments[j] = segment{Text: part.Text, Class: part.Class, LinkPath: part.LinkPath, LinkLine: part.LinkLine, LinkCol: part.LinkCol}
 		}
 		view.Rows[i] = terminalRow{Segments: segments, Empty: row.Empty}
 	}
