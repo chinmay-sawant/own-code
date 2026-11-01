@@ -36,6 +36,7 @@ func buildHTML() string {
 	b.WriteString(file("components/html/settings.html"))
 	b.WriteString(file("components/html/context_menu.html"))
 	b.WriteString(file("components/html/confirm.html"))
+	b.WriteString(file("components/html/commit_dialog.html"))
 	b.WriteString(file("components/html/file_menu.html"))
 	b.WriteString(file("components/html/terminal.html"))
 	b.WriteString(`</div></body></html>`)

@@ -1,0 +1,28 @@
+{{if .CommitDialog.Show}}
+<div class="confirm-layer" id="commit-layer">
+  <button class="confirm-backdrop" id="commit-backdrop" data-action="commit-cancel" type="button" aria-label="Cancel"></button>
+  <div class="confirm-panel" id="commit-panel" role="dialog" aria-modal="true" aria-label="Commit staged changes">
+    <div class="confirm-head">
+      <div class="confirm-title">Commit staged changes</div>
+    </div>
+    <div class="confirm-body">
+      <div class="commit-summary mono">{{.CommitDialog.Shortstat}}</div>
+      {{if .CommitDialog.Files}}
+      <ul class="confirm-files">
+        {{range .CommitDialog.Files}}<li><span class="cstat {{.StatusClass}}">{{.Status}}</span> {{.Path}} <span class="change-num"><b class="add">+{{.Add}}</b><b class="del">−{{.Del}}</b></span></li>{{end}}
+      </ul>
+      {{end}}
+      <textarea class="commit-message" id="commit-message" data-bind="CommitMessage" rows="4" spellcheck="false" placeholder="Commit message — first line is the subject" aria-label="Commit message">{{.CommitMessage}}</textarea>
+      {{if .CommitDialog.Error}}<div class="commit-error" id="commit-error" role="alert">{{.CommitDialog.Error}}</div>{{end}}
+      <span class="confirm-actions">
+        <button class="confirm-btn" id="commit-cancel" data-action="commit-cancel" type="button">Cancel</button>
+        <button class="confirm-btn primary" id="commit-confirm" data-action="commit-confirm" type="button">Commit</button>
+      </span>
+    </div>
+    <div class="confirm-foot">
+      <span class="confirm-hint">Ctrl+Enter commit · Esc cancel</span>
+      {{if gt .CommitDialog.FileCount 0}}<span class="confirm-count">{{.CommitDialog.FileCount}} staged</span>{{end}}
+    </div>
+  </div>
+</div>
+{{end}}
