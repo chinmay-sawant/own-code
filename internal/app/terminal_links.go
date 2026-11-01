@@ -57,9 +57,8 @@ func (a *App) resolveTermLink(raw string) (openPath, absPath string) {
 	return clean, ""
 }
 
-// openTerminalLink opens the file behind visible row/segment. It uses the
-// preview-tab opener with nav history, then jumps to the line via the shared
-// goto path. Missing files toast instead of failing; dirty preview and merge
+// openTerminalLink opens the file behind visible row/segment in a new tab
+// with nav history, then jumps to the line via the shared goto path. Missing files toast instead of failing; dirty preview and merge
 // guards ride along with the normal open path.
 func (a *App) openTerminalLink(ctx context.Context, row, seg int) error {
 	if row < 0 || seg < 0 || row >= len(a.view.Terminal.Rows) {
@@ -105,7 +104,7 @@ func (a *App) openTerminalLink(ctx context.Context, row, seg int) error {
 			return nil
 		}
 	}
-	a.openFileAtPreview(a.activeGroup(), openPath, true)
+	a.openFileAt(a.activeGroup(), openPath, true)
 	if a.ws == nil || a.ws.ByPath[openPath] == nil {
 		return nil
 	}

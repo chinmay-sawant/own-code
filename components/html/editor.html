@@ -101,7 +101,7 @@
       <span class="crumb-meta">{{.LineCount}} lines · Ctrl+S saves</span>
       {{else if .FindOpen}}
       <div class="findbar{{if .ReplaceOpen}} with-replace{{end}}" id="findbar">
-        <input id="find" class="find-input" type="text" data-bind="FindQuery" placeholder="Find in file" autocomplete="off" spellcheck="false" aria-label="Find in file"{{if .Modal}} tabindex="-1"{{end}}>
+        <input id="find" class="find-input" type="text" data-bind="FindQuery" placeholder="Find in file" autocomplete="off" spellcheck="false" aria-label="Find in file"{{if .Modal}} tabindex="-1"{{end}} maxlength="255">
         <span class="find-count mono" id="find-count" aria-live="polite" aria-atomic="true">{{.FindCurrent}}/{{.FindTotal}}</span>
         <button class="find-btn{{if .FindCase}} on{{end}}" id="find-case" data-action="find-case" type="button" title="Match case (Alt+C)" aria-label="Match case" aria-pressed="{{if .FindCase}}true{{else}}false{{end}}"{{if .Modal}} tabindex="-1"{{end}}>Aa</button>
         <button class="find-btn{{if .ReplaceRegex}} on{{end}}" id="find-regex" data-action="find-regex" type="button" title="Use regular expression (Alt+R)" aria-label="Use regular expression" aria-pressed="{{if .ReplaceRegex}}true{{else}}false{{end}}"{{if .Modal}} tabindex="-1"{{end}}>.*</button>
@@ -111,7 +111,7 @@
         <button class="find-btn" id="find-close" data-action="find-close" type="button" title="Close find" aria-label="Close find"{{if .Modal}} tabindex="-1"{{end}}>×</button>
         {{if .ReplaceOpen}}
         <span class="replace-row" id="replace-row">
-          <input id="find-replace" class="find-input replace-input" type="text" data-bind="ReplaceQuery" placeholder="Replace in file" autocomplete="off" spellcheck="false" aria-label="Replace in file"{{if .Modal}} tabindex="-1"{{end}}>
+          <input id="find-replace" class="find-input replace-input" type="text" data-bind="ReplaceQuery" placeholder="Replace in file" autocomplete="off" spellcheck="false" aria-label="Replace in file"{{if .Modal}} tabindex="-1"{{end}} maxlength="255">
           <button class="find-btn text" id="replace-one" data-action="replace-one" type="button" title="Replace next (Enter)" aria-label="Replace next"{{if .FindError}} disabled{{end}}{{if .Modal}} tabindex="-1"{{end}}>Replace</button>
           <button class="find-btn text" id="replace-all" data-action="replace-all" type="button" title="Replace all (Ctrl+Enter)" aria-label="Replace all"{{if .FindError}} disabled{{end}}{{if .Modal}} tabindex="-1"{{end}}>All</button>
         </span>

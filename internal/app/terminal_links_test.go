@@ -336,8 +336,9 @@ func TestTermLinkFocusOwnership(t *testing.T) {
 	}
 }
 
-// TestTermLinkDirtyPreviewPreserved checks the preview-tab dirty guard rides
-// along: a dirty preview auto-pins instead of being replaced by the link.
+// TestTermLinkDirtyPreviewPreserved checks a dirty file is never lost when a
+// terminal link opens: each link opens a new tab, so the dirty file stays
+// open alongside the link target with its dirty flag intact.
 func TestTermLinkDirtyPreviewPreserved(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "README.md", "# R\n")
@@ -366,9 +367,6 @@ func TestTermLinkDirtyPreviewPreserved(t *testing.T) {
 	}
 	if !app.pathOpenInTabs("a.go") {
 		t.Fatal("dirty preview a.go was replaced by the link open")
-	}
-	if !app.isPinned(app.activeGroup(), "a.go") {
-		t.Fatal("dirty preview a.go was not auto-pinned")
 	}
 	if !app.pathOpenInTabs("b.go") {
 		t.Fatal("link target b.go did not open")

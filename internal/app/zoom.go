@@ -119,6 +119,12 @@ func (a *App) setZoom(ctx context.Context, level float64) error {
 		return err
 	}
 
+	// Interface zoom rescales every settings row: remeasure the edge rail
+	// with a second pass while the dialog is open so the first paint after
+	// the step already carries the correct thumb.
+	if a.settingsOpen {
+		return a.redrawSettings(ctx)
+	}
 	return a.page.Redraw(ctx)
 }
 
@@ -142,6 +148,9 @@ func (a *App) statusZoomLabel() string {
 }
 
 // setFontSize clamps the base font, persists session + global, and repaints.
+// While the settings dialog is open the rail is remeasured with a second
+// pass: the font step changes every row height, so a single paint would
+// leave the edge rail and the "12px" chip stale on the first frame.
 func (a *App) setFontSize(ctx context.Context, size float64) error {
 	a.fontSize = clampFontSize(size)
 	a.persistSession()
@@ -149,6 +158,10 @@ func (a *App) setFontSize(ctx context.Context, size float64) error {
 	if err := a.page.SetTheme(a.activeThemeCSS()); err != nil {
 		return err
 	}
+	if a.settingsOpen {
+		return a.redrawSettings(ctx)
+	}
+	a.refresh()
 	return a.page.Redraw(ctx)
 }
 
@@ -170,7 +183,10 @@ func (a *App) effectiveZoom(view string) float64 {
 }
 
 // setZoomPerView sets or clears one per-view override (0/1 clears), then
-// persists and repaints. V1 supports editor and terminal only.
+// persists and repaints. V1 supports editor and terminal only. While the
+// settings dialog is open the rail is remeasured with a second pass (see
+// redrawSettings): the Clear button appearing or disappearing changes the
+// tab content height, so a single paint would leave the edge rail stale.
 func (a *App) setZoomPerView(ctx context.Context, view string, level float64) error {
 	if view != "editor" && view != "terminal" {
 		return nil
@@ -188,6 +204,10 @@ func (a *App) setZoomPerView(ctx context.Context, view string, level float64) er
 	if err := a.page.SetTheme(a.activeThemeCSS()); err != nil {
 		return err
 	}
+	if a.settingsOpen {
+		return a.redrawSettings(ctx)
+	}
+	a.refresh()
 	return a.page.Redraw(ctx)
 }
 

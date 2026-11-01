@@ -221,6 +221,17 @@ button.ln:focus-visible,
 
 [data-ownframe-field] [data-ownframe-selection] { background-color: var(--selection); color: var(--text); }
 
+/* Single-line inputs stay on one line. The engine rewrites <input> as a
+   span with white-space:pre-wrap, so a long value wraps and grows the box
+   past its bar. Forcing pre + hidden keeps the field one line and clips
+   inside its box; maxlength="255" caps the value. Textareas keep wrapping. */
+span[data-ownframe-field="input"] {
+  white-space: pre;
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+
 /* Motion ------------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {

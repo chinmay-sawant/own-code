@@ -21,7 +21,7 @@
       <svg class="filter-icon" width="12" height="12" viewBox="0 0 14 14" fill="none" stroke-width="1.5" stroke-linecap="round">
         <circle cx="6" cy="6" r="4.1"/><path d="m9.2 9.2 3 3"/>
       </svg>
-      <input id="filter" class="filter-input" type="text" data-bind="Filter" placeholder="Filter by name or path" autocomplete="off" spellcheck="false"{{if .Modal}} tabindex="-1"{{end}}>
+      <input id="filter" class="filter-input" type="text" data-bind="Filter" placeholder="Filter by name or path" autocomplete="off" spellcheck="false"{{if .Modal}} tabindex="-1"{{end}} maxlength="255">
       {{if .Filter}}<button class="filter-x" id="filter-clear" data-action="filter-clear" type="button" title="Clear filter" aria-label="Clear filter"{{if .Modal}} tabindex="-1"{{end}}>×</button>{{end}}
     </div>
 
@@ -232,7 +232,7 @@
         {{if .History.BranchOpen}}
         <div class="branch-panel" role="dialog" aria-modal="true" aria-label="Choose a branch">
           <div class="branch-filter">
-            <input id="branch-filter" class="branch-input" type="text" data-bind="BranchQuery" placeholder="Filter branches" autocomplete="off" spellcheck="false" aria-label="Filter branches">
+            <input id="branch-filter" class="branch-input" type="text" data-bind="BranchQuery" placeholder="Filter branches" autocomplete="off" spellcheck="false" aria-label="Filter branches" maxlength="255">
           </div>
           <div class="branch-actions">
             <button class="hist-btn" id="branch-head" data-action="branch-head" type="button">Follow HEAD</button>

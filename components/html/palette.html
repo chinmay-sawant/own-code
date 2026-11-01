@@ -6,7 +6,7 @@
       <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke-width="1.5" stroke-linecap="round">
         <circle cx="6" cy="6" r="4.1"/><path d="m9.2 9.2 3 3"/>
       </svg>
-      <input id="workspace-search" class="palette-input" type="text" data-bind="SearchQuery" placeholder="Search workspace contents" autocomplete="off" spellcheck="false" aria-label="Search workspace contents">
+      <input id="workspace-search" class="palette-input" type="text" data-bind="SearchQuery" placeholder="Search workspace contents" autocomplete="off" spellcheck="false" aria-label="Search workspace contents" maxlength="255">
       <button class="palette-close{{if .Search.Case}} on{{end}}" id="search-case" data-action="search-case" type="button" title="Match case (Alt+C)" aria-label="Match case" aria-pressed="{{if .Search.Case}}true{{else}}false{{end}}">Aa</button>
       <button class="palette-close{{if .Search.Regex}} on{{end}}" id="search-regex" data-action="search-regex" type="button" title="Use regular expression (Alt+R)" aria-label="Use regular expression" aria-pressed="{{if .Search.Regex}}true{{else}}false{{end}}">.*</button>
       <button class="palette-close{{if .Search.WholeWord}} on{{end}}" id="search-word" data-action="search-word" type="button" title="Match whole word (Alt+W)" aria-label="Match whole word" aria-pressed="{{if .Search.WholeWord}}true{{else}}false{{end}}">W</button>
@@ -16,7 +16,7 @@
       <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke-width="1.5" stroke-linecap="round">
         <path d="m2 4h7M8 2l2 2-2 2M12 10H5M6 8l-2 2 2 2"/>
       </svg>
-      <input id="workspace-replace" class="palette-input" type="text" data-bind="SearchReplace" placeholder="Replace in workspace" autocomplete="off" spellcheck="false" aria-label="Replace in workspace">
+      <input id="workspace-replace" class="palette-input" type="text" data-bind="SearchReplace" placeholder="Replace in workspace" autocomplete="off" spellcheck="false" aria-label="Replace in workspace" maxlength="255">
     </div>
     {{if .Search.Error}}<div class="search-error" id="search-error" role="alert">{{.Search.Error}}</div>{{end}}
     <div class="search-meta">
@@ -70,7 +70,7 @@
       <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke-width="1.5" stroke-linecap="round">
         <circle cx="6" cy="6" r="4.1"/><path d="m9.2 9.2 3 3"/>
       </svg>
-      <input id="palette" class="palette-input" type="text" data-bind="PaletteQuery" placeholder="{{if eq .Palette.Mode "symbols"}}Search symbols in this file{{else if eq .Palette.Mode "goto"}}:<line>[:<col>]{{else}}Search files by name{{end}}" autocomplete="off" spellcheck="false" aria-label="{{if eq .Palette.Mode "symbols"}}Search symbols in this file{{else if eq .Palette.Mode "goto"}}Go to line{{else}}Search files{{end}}">
+      <input id="palette" class="palette-input" type="text" data-bind="PaletteQuery" placeholder="{{if eq .Palette.Mode "symbols"}}Search symbols in this file{{else if eq .Palette.Mode "goto"}}:<line>[:<col>]{{else}}Search files by name{{end}}" autocomplete="off" spellcheck="false" aria-label="{{if eq .Palette.Mode "symbols"}}Search symbols in this file{{else if eq .Palette.Mode "goto"}}Go to line{{else}}Search files{{end}}" maxlength="255">
       <button class="palette-close" id="palette-close" data-action="palette-close" type="button" title="Close search" aria-label="Close search">×</button>
     </div>
     <div class="palette-list" role="group" aria-label="{{if eq .Palette.Mode "symbols"}}Symbol results{{else if eq .Palette.Mode "goto"}}Go to line{{else}}Quick open results{{end}}">

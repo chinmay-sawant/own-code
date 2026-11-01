@@ -413,9 +413,31 @@ type cSpec struct {
 	decorators   bool
 }
 
-// cSpecFor returns the keyword sets and comment rules for one C-family
-// language.
+// cSpecCache holds one immutable spec per C-family language. Specs used to
+// be rebuilt (three keyword maps each) on every highlighted line — thousands
+// of map builds per file open and one per diff row — while the maps are only
+// ever read, so a single shared copy per language is safe for concurrent use.
+var cSpecCache = map[string]cSpec{}
+
+func init() {
+	for _, lang := range []string{langGo, langPython, langJS} {
+		cSpecCache[lang] = buildCSpec(lang)
+	}
+}
+
+// cSpecFor returns the shared keyword sets and comment rules for one
+// C-family language. Unknown languages get an empty spec, matching the old
+// fresh-build behavior.
 func cSpecFor(lang string) cSpec {
+	if spec, ok := cSpecCache[lang]; ok {
+		return spec
+	}
+	return cSpec{lang: lang}
+}
+
+// buildCSpec constructs the keyword sets and comment rules for one C-family
+// language.
+func buildCSpec(lang string) cSpec {
 	spec := cSpec{lang: lang}
 
 	switch lang {

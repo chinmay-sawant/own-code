@@ -277,9 +277,8 @@ func gotoGeneratedFile(ws *workspace, path string) bool {
 // gotoDefinitionAtCaret jumps to the definition of the symbol under the edit
 // caret: the current file's outline first, then the workspace index, then a
 // textual fallback that opens workspace search. Same-file jumps move the
-// caret in place; cross-file jumps open the file (recorded nav history,
-// dirty guards, preview-slot behavior all flow through openFile) and land on
-// the definition line.
+// caret in place; cross-file jumps open the file (recorded nav history and
+// dirty guards flow through openFile) and land on the definition line.
 func (a *App) gotoDefinitionAtCaret(ctx context.Context) error {
 	doc := a.activeDoc()
 	if doc == nil || doc.Err != "" || doc.Binary {
@@ -329,7 +328,7 @@ func (a *App) gotoDefinitionAtCaret(ctx context.Context) error {
 		return a.page.Redraw(ctx)
 	}
 
-	a.searchQuery = word
+	a.searchQuery = clampFieldLen(word)
 	if err := a.openWorkspaceSearch(ctx); err != nil {
 		return err
 	}

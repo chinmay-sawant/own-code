@@ -157,7 +157,7 @@ func (a *App) restoreState(state sessionState) {
 	}
 
 	// Old sessions default every restored tab to pinned so the first
-	// single-click preview appends instead of replacing restored work.
+	// single-click appends instead of replacing restored work.
 	// New sessions restore the persisted pin sets and preview slots.
 	if len(state.Pinned)+len(state.Pinned2) == 0 && state.PreviewTab == "" && state.PreviewTab2 == "" {
 		for _, path := range a.tabs {

@@ -112,6 +112,7 @@ func (a *App) openReplace(ctx context.Context) error {
 
 	if strings.TrimSpace(a.findQuery) == "" {
 		if seed, ok := a.replaceSeedQuery(); ok {
+			seed = clampFieldLen(seed)
 			a.findQuery = seed
 			a.page.Form().SetFormValue("find", seed)
 		}

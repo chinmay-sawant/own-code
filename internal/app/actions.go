@@ -503,47 +503,56 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.keymapCapture = strings.TrimPrefix(action, "keymap-rebind:")
 		a.keymapPendingAction, a.keymapPendingChord, a.keymapPendingOthers = "", "", nil
 		a.settingsNote = "Press the new shortcut, or Esc to cancel."
-		a.refresh()
+		return a.redrawSettings(ctx)
 	case action == "keymap-cancel":
 		a.cancelKeymapPending()
-		a.refresh()
+		return a.redrawSettings(ctx)
 	case action == "keymap-swap":
 		a.swapKeymapPending()
-		a.refresh()
+		return a.redrawSettings(ctx)
 	case action == "keymap-replace":
 		a.replaceKeymapPending()
-		a.refresh()
+		return a.redrawSettings(ctx)
 	case strings.HasPrefix(action, "keymap-reset:"):
 		a.resetKeymapAction(strings.TrimPrefix(action, "keymap-reset:"))
-		a.refresh()
+		return a.redrawSettings(ctx)
 	case action == "keymap-reset-all":
 		a.resetKeymapAll()
 		a.showToast("success", "Shortcuts reset", "All shortcuts are back to their defaults.")
-		a.refresh()
+		return a.redrawSettings(ctx)
 	case action == "settings-rescan":
-		return a.applyExcludesRescan(ctx)
+		if err := a.applyExcludesRescan(ctx); err != nil {
+			return err
+		}
+		return a.redrawSettings(ctx)
 	case action == "settings-toggle-gitignore":
 		e := a.settings.Excludes
 		e.UseGitignore = !e.UseGitignore
 		a.setScanExcludes(e)
-		return a.applyExcludesRescan(ctx)
+		if err := a.applyExcludesRescan(ctx); err != nil {
+			return err
+		}
+		return a.redrawSettings(ctx)
 	case action == "settings-toggle-searchignored":
 		e := a.settings.Excludes
 		e.SearchIgnored = !e.SearchIgnored
 		a.setScanExcludes(e)
 		a.settingsNote = ""
-		a.refresh()
+		return a.redrawSettings(ctx)
 	case strings.HasPrefix(action, "autosave:"):
 		a.setAutoSave(strings.TrimPrefix(action, "autosave:"))
+		return a.redrawSettings(ctx)
 	case action == "autosave-delay-dec":
 		a.setAutoSaveDelay(a.autoSaveDelayMs - 250)
+		return a.redrawSettings(ctx)
 	case action == "autosave-delay-inc":
 		a.setAutoSaveDelay(a.autoSaveDelayMs + 250)
+		return a.redrawSettings(ctx)
 	case strings.HasPrefix(action, "fps:"):
 		raw := strings.TrimPrefix(action, "fps:")
 		if raw == "-1" || raw == "uncapped" {
 			a.SetMaxFPS(FPSUncapped)
-			return nil
+			return a.redrawSettings(ctx)
 		}
 		v := 0
 		for _, c := range raw {
@@ -554,7 +563,7 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 			v = v*10 + int(c-'0')
 		}
 		a.SetMaxFPS(v)
-		return nil
+		return a.redrawSettings(ctx)
 	case action == "palette-open":
 		return a.openPalette(ctx)
 	case action == "goto-definition":
@@ -825,8 +834,8 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 			return a.clickTreeSelect(ctx, path)
 		}
 		a.clearExplorerSel()
-		// Single-click tree / palette / welcome opens reuse the preview slot.
-		a.openFilePreview(path)
+		// Single-click tree / palette / welcome opens a new tab per file.
+		a.openFile(path)
 	case strings.HasPrefix(action, "dir:"):
 		path := strings.TrimPrefix(action, "dir:")
 		if (a.ctrl || a.shift) && !a.editing {
@@ -894,11 +903,13 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 }
 
 // onChange keeps the filter and the palette query in app state after the
-// binder writes the fields.
+// binder writes the fields. Single-line inputs clamp to maxFieldLen runes;
+// the templates carry the same maxlength so the engine clamps typing and
+// paste, while this covers restored sessions and programmatic sets.
 func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 	switch box.ID {
 	case "filter":
-		next := a.view.Filter
+		next := clampFieldLen(a.view.Filter)
 		if next == a.filter {
 			return nil
 		}
@@ -907,7 +918,7 @@ func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 		a.treeOffset = 0
 		a.refresh()
 	case "find":
-		next := a.view.FindQuery
+		next := clampFieldLen(a.view.FindQuery)
 		if next == a.findQuery {
 			return nil
 		}
@@ -916,7 +927,7 @@ func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 		a.reindexFind()
 		a.refresh()
 	case "find-replace":
-		next := a.view.ReplaceQuery
+		next := clampFieldLen(a.view.ReplaceQuery)
 		if next == a.replaceQuery {
 			return nil
 		}
@@ -924,7 +935,7 @@ func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 		a.replaceQuery = next
 		a.refresh()
 	case "branch-filter":
-		next := a.view.BranchQuery
+		next := clampFieldLen(a.view.BranchQuery)
 		if next == a.branchQuery {
 			return nil
 		}
@@ -932,7 +943,7 @@ func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 		a.branchQuery = next
 		a.refresh()
 	case "palette":
-		next := a.view.PaletteQuery
+		next := clampFieldLen(a.view.PaletteQuery)
 		if next == a.paletteQuery {
 			return nil
 		}
@@ -949,7 +960,7 @@ func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 	case "editor":
 		a.applyEditText(a.view.EditText)
 	case "workspace-search":
-		next := a.view.SearchQuery
+		next := clampFieldLen(a.view.SearchQuery)
 		if next == a.searchQuery {
 			return nil
 		}
@@ -958,7 +969,7 @@ func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 		a.searchIndex = 0
 		a.runWorkspaceSearch(ctx)
 	case "workspace-replace":
-		next := a.view.SearchReplace
+		next := clampFieldLen(a.view.SearchReplace)
 		if next == a.searchReplace {
 			return nil
 		}
@@ -984,7 +995,7 @@ func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 		a.noteInvalidGlobs()
 		a.refresh()
 	case "project-path", "drawer-path":
-		next := a.view.ProjectQuery
+		next := clampFieldLen(a.view.ProjectQuery)
 		if next == a.projectQuery {
 			return nil
 		}
@@ -992,7 +1003,7 @@ func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 		a.projectQuery = next
 		a.refresh()
 	case "browse-filter":
-		next := a.view.BrowseQuery
+		next := clampFieldLen(a.view.BrowseQuery)
 		if next == a.browseFilter {
 			return nil
 		}
@@ -1352,7 +1363,7 @@ func (a *App) treeKeyDown(ctx context.Context, key string) (bool, error) {
 			return true, a.page.Form().Focus(ctx, focus)
 		}
 
-		a.openFilePreview(path)
+		a.openFile(path)
 		if err := a.page.Redraw(ctx); err != nil {
 			return true, err
 		}
@@ -2065,9 +2076,13 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 
 	// A Rebind capture eats the next key: Esc cancels, anything else becomes
 	// the candidate chord. It sits before the settings escape so cancelling
-	// a capture never closes the panel.
+	// a capture never closes the panel. The capture banner changes the tab
+	// height, so remeasure the rail with a second pass while open.
 	if a.keymapCapture != "" && key == "escape" {
 		a.cancelKeymapPending()
+		if a.settingsOpen {
+			return a.redrawSettings(ctx)
+		}
 		a.refresh()
 
 		return a.page.Redraw(ctx)
@@ -2076,6 +2091,9 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 	if a.keymapCapture != "" {
 		a.processKeymapCapture(chordFromEvent(a.ctrl, a.shift, key))
 
+		if a.settingsOpen {
+			return a.redrawSettings(ctx)
+		}
 		return a.page.Redraw(ctx)
 	}
 
@@ -2950,14 +2968,14 @@ func (a *App) onSubmit(ctx context.Context) error {
 		}
 
 		if path != "" && (a.activeDoc() == nil || a.activeDoc().Path != path) {
-			a.openFileAtPreview(a.activeGroup(), path, true)
+			a.openFileAt(a.activeGroup(), path, true)
 		}
 
 		return a.gotoLine(ctx, line, 1)
 	}
 
-	// Palette Enter opens reuse the preview slot.
-	a.openFileAtPreview(a.activeGroup(), row.Path, true)
+	// Palette Enter opens a new tab per file.
+	a.openFileAt(a.activeGroup(), row.Path, true)
 
 	if err := a.page.Form().Focus(ctx, ""); err != nil {
 		return err

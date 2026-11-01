@@ -47,8 +47,11 @@
 .settings-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .settings-btn.primary { background-color: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
 .settings-btn.primary:hover { border-color: var(--accent); filter: brightness(1.08); }
-.settings-perview { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text); font-size: 12px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 8px; background-color: var(--panel-2); }
-.settings-perview .settings-stepper { margin-bottom: 0; }
+.settings-perview { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text); font-size: 12px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 8px; background-color: var(--panel-2); flex-wrap: wrap; }
+.settings-perview > span:first-child, .settings-perview-label { flex: 0 0 auto; }
+.settings-perview .settings-stepper { margin-bottom: 0; flex: 0 0 auto; flex-wrap: nowrap; justify-content: flex-end; }
+.settings-perview .settings-step-value { flex: 0 0 auto; }
+.settings-perview .settings-btn { flex: 0 0 auto; }
 .settings-key { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; color: var(--text); line-height: 1.4; }
 .settings-key.fixed { opacity: 0.85; }
 .settings-key.capturing, .settings-key.conflict { border-color: var(--amber); background-color: var(--amber-soft); }

@@ -98,6 +98,12 @@ const (
 
 	maxTabs   = 8
 	maxRecent = 4
+	// maxFieldLen caps every single-line search/filter input (palette,
+	// workspace search/replace, find, explorer filter, branch, browse, and
+	// project path). The templates carry the same maxlength="255" so the
+	// engine clamps typing/paste; the Go clamp below covers restored
+	// state and programmatic sets.
+	maxFieldLen = 255
 	// mruMax is the MRU switcher window. The persisted list and the
 	// welcome panel keep maxRecent; only the switcher shows this wider
 	// window.
@@ -226,17 +232,28 @@ type App struct {
 	searchResult    chan searchReply
 	searchCancel    context.CancelFunc
 
-	diffPath      string
-	diffSplit     bool
-	diffRows      []diffRow
-	diffRowsGen   uint64
-	diffWrap      diffWrapCache
-	changesScroll changesScroll
-	changesDrag   bool
-	changesDragAt int
-	changesScale  float64
-	diffSource    string
-	selected      map[string]bool
+	diffPath    string
+	diffSplit   bool
+	diffRows    []diffRow
+	diffRowsGen uint64
+	diffWrap    diffWrapCache
+	// changeStarts caches diffChangeStarts for the current display rows.
+	// fillDiffFile and fileNavChangeRows both scanned every row on every
+	// frame; the rows only change when diffRowsGen moves or the wrap shape
+	// (wrap on/off, column budget) changes, so the starts are cached on
+	// that key instead of rescanned per frame.
+	changeStarts     []int
+	changeStartsGen  uint64
+	changeStartsWrap bool
+	changeStartsCols [2]int
+	changeStartsN    int
+	changeStartsOK   bool
+	changesScroll    changesScroll
+	changesDrag      bool
+	changesDragAt    int
+	changesScale     float64
+	diffSource       string
+	selected         map[string]bool
 
 	// Merge editor state. The result text is the source of truth; parsed
 	// conflicts and the current index are derived from it after every change.
@@ -784,7 +801,7 @@ func (a *App) openInitial() {
 	a.tabs = []string{target}
 	a.active = 0
 	a.ensurePinnedMaps()
-	// The initial tab is pinned so the first single-click preview appends
+	// The initial tab is pinned so the first single-click appends
 	// instead of replacing the only tab.
 	a.pinned[0][target] = true
 	a.previewTab[0] = ""
@@ -1134,7 +1151,7 @@ func (a *App) buildView() View {
 	winW, _ := a.page.Size()
 	v := View{
 		Mode:          a.mode,
-		Filter:        a.filter,
+		Filter:        clampFieldLen(a.filter),
 		Details:       a.details,
 		DevOn:         a.devOn,
 		MenuOpen:      a.menuOpen,
@@ -1145,7 +1162,7 @@ func (a *App) buildView() View {
 		SettingsOpen:  a.settingsOpen,
 		FileMenu:      a.fileMenu,
 		ProjectOpen:   a.projectOpen,
-		ProjectQuery:  a.projectQuery,
+		ProjectQuery:  clampFieldLen(a.projectQuery),
 		RecentOpen:    a.recentOpen,
 		RecentFlyX:    a.recentFlyoutX(),
 		RecentFlyY:    a.recentFlyoutY(),
@@ -1154,7 +1171,7 @@ func (a *App) buildView() View {
 		BrowseOpen:    a.browseOpen,
 		BrowseRoot:    a.browseRoot,
 		BrowseName:    clipBrowsePath(winW, a.browseDisplayName()),
-		BrowseQuery:   a.browseFilter,
+		BrowseQuery:   clampFieldLen(a.browseFilter),
 		BrowseEntries: a.browseWindowedEntries(),
 		BrowseTotal:   len(a.browseFilteredEntries()),
 		IsWSL:         isWSL(),
@@ -1192,18 +1209,18 @@ func (a *App) buildView() View {
 		Toast:         a.toast,
 		Wrap:          a.wrap,
 		ScrollX:       0,
-		FindQuery:     a.findQuery,
+		FindQuery:     clampFieldLen(a.findQuery),
 		FindOpen:      a.findOpen,
 		FindCase:      a.findCase,
 		FindCurrent:   a.findCurrent(),
 		FindTotal:     len(a.findHits),
 
 		ReplaceOpen:      a.replaceOpen,
-		ReplaceQuery:     a.replaceQuery,
+		ReplaceQuery:     clampFieldLen(a.replaceQuery),
 		ReplaceRegex:     a.replaceRegex,
 		ReplaceWholeWord: a.replaceWholeWord,
 		FindError:        a.findError,
-		BranchQuery:      a.branchQuery,
+		BranchQuery:      clampFieldLen(a.branchQuery),
 		Split:            a.split && a.mode == "explorer",
 		FocusGroup:       a.focusGroup,
 		FocusedPane:      0,
@@ -1232,9 +1249,9 @@ func (a *App) buildView() View {
 	v.Tabs, v.TabsPrev, v.TabsNext = a.windowTabRows(0)
 	v.Recent = a.recentRows()
 	v.ActiveTab = a.active
-	v.PaletteQuery = a.paletteQuery
-	v.SearchQuery = a.searchQuery
-	v.SearchReplace = a.searchReplace
+	v.PaletteQuery = clampFieldLen(a.paletteQuery)
+	v.SearchQuery = clampFieldLen(a.searchQuery)
+	v.SearchReplace = clampFieldLen(a.searchReplace)
 	v.Palette = a.paletteView()
 	v.Search = a.searchViewState()
 	v.FileNav = a.fileNavViewState()
@@ -1884,7 +1901,7 @@ func (a *App) fillDiffFile(v *View, d *diffView, file *changedFile) {
 			a.changeNav.mode == a.mode && a.changeNav.scroll == a.scrollY {
 			current = a.changeNav.row
 		}
-		markCurrentDiffChange(rows, visible, start, current)
+		markCurrentDiffChangeWithStarts(rows, visible, start, current, a.cachedChangeStarts(rows))
 		a.sliceUnwrappedDiffRows(visible)
 		d.Rows = visible
 	}
@@ -1949,7 +1966,12 @@ func diffChangeStarts(rows []diffRow) []int {
 }
 
 func markCurrentDiffChange(rows, visible []diffRow, start, current int) {
-	starts := diffChangeStarts(rows)
+	markCurrentDiffChangeWithStarts(rows, visible, start, current, diffChangeStarts(rows))
+}
+
+// markCurrentDiffChangeWithStarts is markCurrentDiffChange with precomputed
+// starts, for the per-frame path that reuses the cached scan.
+func markCurrentDiffChangeWithStarts(rows, visible []diffRow, start, current int, starts []int) {
 	if len(starts) == 0 {
 		return
 	}
@@ -1967,6 +1989,29 @@ func markCurrentDiffChange(rows, visible []diffRow, start, current int) {
 	for i := range visible {
 		visible[i].Current = start+i >= selected && start+i < end
 	}
+}
+
+// cachedChangeStarts returns the change-block starts for the current display
+// rows, rescanning only when the diff generation, wrap shape, or row count
+// changed since the last call.
+func (a *App) cachedChangeStarts(rows []diffRow) []int {
+	unified, split := 0, 0
+	if a.wrap {
+		unified, split = a.diffColumns()
+	}
+	if a.changeStartsOK && a.changeStartsGen == a.diffRowsGen &&
+		a.changeStartsWrap == a.wrap && a.changeStartsCols == [2]int{unified, split} &&
+		a.changeStartsN == len(rows) {
+		return a.changeStarts
+	}
+	starts := diffChangeStarts(rows)
+	a.changeStarts = starts
+	a.changeStartsGen = a.diffRowsGen
+	a.changeStartsWrap = a.wrap
+	a.changeStartsCols = [2]int{unified, split}
+	a.changeStartsN = len(rows)
+	a.changeStartsOK = true
+	return starts
 }
 
 // findCommit returns one commit by full hash.
@@ -2172,7 +2217,7 @@ func (a *App) fillHistory(v *View) {
 		Browsing:    a.historyRef != "",
 		Detached:    strings.HasPrefix(a.headBranch, "HEAD detached"),
 		BranchOpen:  a.branchOpen,
-		BranchQuery: a.branchQuery,
+		BranchQuery: clampFieldLen(a.branchQuery),
 	}
 	if !h.Visible {
 		v.History = h
@@ -4095,7 +4140,7 @@ func (a *App) togglePreview() {
 // mode the outline belongs to the selected diff file, so open it first.
 func (a *App) outlineLine(line int) {
 	if a.mode == "changes" && a.diffPath != "" {
-		a.openFilePreview(a.diffPath)
+		a.openFile(a.diffPath)
 	}
 
 	a.scrollToSourceLine(line)

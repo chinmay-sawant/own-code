@@ -626,6 +626,17 @@ func (a *App) tickWatch(ctx context.Context) error {
 	a.scheduleOpenFoldersLoaded()
 	a.receiveDirLoads(ctx)
 
+	// The settings edge rail is measured from the last layout, so a window
+	// resize or any content change that painted without the double-pass
+	// leaves it stale for a frame. Reconcile here: the next layout already
+	// refreshed the boxes, so one refresh republishes the correct thumb and
+	// offset without waiting for the next wheel or drag.
+	if a.settingsOpen {
+		if a.updateSettingsScrollMetrics() {
+			a.refresh()
+		}
+	}
+
 	return nil
 }
 

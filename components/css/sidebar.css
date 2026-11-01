@@ -62,6 +62,7 @@
   border-radius: 6px;
   background-color: var(--panel-2);
   color: var(--dim);
+  overflow: hidden;
 }
 
 .filter:focus-within { border-color: var(--muted); background-color: var(--panel); }
@@ -78,6 +79,7 @@
 .filter-input {
   flex: 1;
   min-width: 0;
+  max-width: 100%;
   height: 26px;
   line-height: 26px;
   align-self: center;
@@ -88,6 +90,9 @@
   background-color: transparent;
   color: var(--text);
   font-size: 10.5px;
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .filter-input[data-ownframe-field][data-ownframe-focus="1"] { border: 1px solid var(--muted); outline: 0; }
 

@@ -35,7 +35,7 @@
       <svg class="filter-icon" width="12" height="12" viewBox="0 0 14 14" fill="none" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
         <circle cx="6" cy="6" r="4.1"/><path d="m9.2 9.2 3 3"/>
       </svg>
-      <input id="browse-filter" class="browse-filter-input" type="text" data-bind="BrowseQuery" placeholder="Filter folders" autocomplete="off" spellcheck="false" aria-label="Filter folders">
+      <input id="browse-filter" class="browse-filter-input" type="text" data-bind="BrowseQuery" placeholder="Filter folders" autocomplete="off" spellcheck="false" aria-label="Filter folders" maxlength="255">
       {{if .BrowseQuery}}<button class="filter-x" id="browse-filter-clear" data-action="browse-filter-clear" type="button" title="Clear filter" aria-label="Clear filter">×</button>{{end}}
     </div>
     <div class="browse-list-wrap">
@@ -53,7 +53,7 @@
       {{end}}
     </div>
     {{if .BrowseQuery}}<div class="browse-meta"><span>{{.BrowseTotal}} matching</span></div>{{else if .BrowseScroll}}<div class="browse-meta"><span>{{.BrowseTotal}} folders</span></div>{{end}}
-    <input id="project-path" class="project-input" type="text" data-bind="ProjectQuery" placeholder="Absolute path to project" autocomplete="off" spellcheck="false" aria-label="Project path">
+    <input id="project-path" class="project-input" type="text" data-bind="ProjectQuery" placeholder="Absolute path to project" autocomplete="off" spellcheck="false" aria-label="Project path" maxlength="255">
     <div class="browse-actions">
       <button class="file-item file-open" id="browse-select" data-action="browse-select" type="button">Open this folder</button>
       <button class="file-item file-open" id="browse-submit" data-action="project-submit" type="button">Open typed path</button>
