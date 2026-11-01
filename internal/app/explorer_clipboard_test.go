@@ -217,6 +217,28 @@ func TestExplorerCopyPathClipboard(t *testing.T) {
 	}
 }
 
+func TestExplorerCopyPathClipboardMultiSelect(t *testing.T) {
+	ownframe.UseMemory(true)
+	defer ownframe.UseMemory(false)
+	clearStagedCopy()
+	defer clearStagedCopy()
+
+	app := newTestApp(t)
+	app.explSel = map[string]bool{
+		"backend/probe.go": true,
+		"backend/store.go": true,
+	}
+
+	if err := app.MenuAction(context.Background(), "code-view:copy-path:backend/probe.go"); err != nil {
+		t.Fatalf("MenuAction: %v", err)
+	}
+
+	got, err := ownframe.Read()
+	if err != nil || got != "backend/probe.go\nbackend/store.go" {
+		t.Fatalf("clipboard = %q (%v), want both selected paths", got, err)
+	}
+}
+
 func TestExplorerCopyAbsPathClipboard(t *testing.T) {
 	ownframe.UseMemory(true)
 	defer ownframe.UseMemory(false)
@@ -240,6 +262,39 @@ func TestExplorerCopyAbsPathClipboard(t *testing.T) {
 
 	if !strings.HasSuffix(filepath.ToSlash(got), "backend/probe.go") {
 		t.Fatalf("clipboard = %q, want it to end in backend/probe.go", got)
+	}
+}
+
+func TestExplorerCopyAbsPathClipboardMultiSelect(t *testing.T) {
+	ownframe.UseMemory(true)
+	defer ownframe.UseMemory(false)
+	clearStagedCopy()
+	defer clearStagedCopy()
+
+	app := newTestApp(t)
+	app.explSel = map[string]bool{
+		"backend/probe.go": true,
+		"backend/store.go": true,
+	}
+
+	if err := app.MenuAction(context.Background(), "code-view:copy-abs:backend/probe.go"); err != nil {
+		t.Fatalf("MenuAction: %v", err)
+	}
+
+	got, err := ownframe.Read()
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+
+	lines := strings.Split(got, "\n")
+	if len(lines) != 2 {
+		t.Fatalf("clipboard = %q, want two absolute paths", got)
+	}
+
+	for i, want := range []string{"backend/probe.go", "backend/store.go"} {
+		if !filepath.IsAbs(lines[i]) || !strings.HasSuffix(filepath.ToSlash(lines[i]), want) {
+			t.Fatalf("line %d = %q, want an absolute path ending in %q", i, lines[i], want)
+		}
 	}
 }
 
