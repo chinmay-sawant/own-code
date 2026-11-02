@@ -14,7 +14,7 @@ func (a *App) toggleEdit() {
 	}
 
 	doc := a.groupDoc(0)
-	if doc == nil || doc.Err != "" || doc.Binary {
+	if doc == nil || doc.Err != "" || doc.Binary || doc.Image != nil {
 		a.showToast("info", "Edit", "Open a text file in the left pane before editing.")
 		a.refresh()
 

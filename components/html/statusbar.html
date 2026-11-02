@@ -14,13 +14,13 @@
   <span class="sb-item sb-extra">{{if .Merge.Total}}Conflict {{.Merge.Index}} of {{.Merge.Total}}{{else}}Resolved{{end}}</span>
   {{if .Merge.Dirty}}<span class="sb-item sb-dirty">unsaved merge result</span>{{end}}
   {{else if .Active}}
-  <span class="sb-item sb-extra">{{.LineCount}} lines</span>
+  {{if .Image.On}}<span class="sb-item sb-extra">{{.Image.NaturalW}} × {{.Image.NaturalH}}</span>{{else}}<span class="sb-item sb-extra">{{.LineCount}} lines</span>{{end}}
   <span class="sb-item sb-extra">{{.LangLabel}}</span>
   {{end}}
-  {{if .Active}}
+  {{if .Active}}{{if not .Image.On}}
   <span class="sb-item sb-extra">{{.Encoding}}</span>
   <span class="sb-item sb-extra">{{.Indent}}</span>
-  {{end}}
+  {{end}}{{end}}
   <button class="sb-item sb-dev{{if .DevOn}} on{{end}}" id="sb-devtools" data-action="devtools" type="button" title="Toggle developer tools" aria-pressed="{{if .DevOn}}true{{else}}false{{end}}"{{if .Modal}} tabindex="-1"{{end}}>
     <span class="sb-dot"></span>DevTools {{if .DevOn}}on{{else}}off{{end}}
   </button>

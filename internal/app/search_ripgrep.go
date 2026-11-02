@@ -100,7 +100,7 @@ func searchRipgrepJSON(ctx context.Context, rgPath, root, query string, caseSens
 		sawMatch = true
 		rel := filepath.ToSlash(msg.Data.Path.Text)
 		rel = strings.TrimPrefix(rel, "./")
-		if skipExt(rel) {
+		if isImagePath(rel) || skipExt(rel) {
 			continue
 		}
 		base := rel
@@ -232,7 +232,7 @@ func searchRipgrepVimgrep(ctx context.Context, rgPath, root, query string, caseS
 		}
 		sawLine = true
 		rel := filepath.ToSlash(strings.TrimPrefix(parts[0], "./"))
-		if skipExt(rel) {
+		if isImagePath(rel) || skipExt(rel) {
 			continue
 		}
 		var lineNo, colNo int

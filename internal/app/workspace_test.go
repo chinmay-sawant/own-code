@@ -22,8 +22,8 @@ func TestSampleWorkspace(t *testing.T) {
 		t.Fatal("workspace is not marked as the sample")
 	}
 
-	if len(ws.Files) != 17 {
-		t.Fatalf("files = %d, want 17", len(ws.Files))
+	if len(ws.Files) != 18 {
+		t.Fatalf("files = %d, want 18", len(ws.Files))
 	}
 
 	for _, path := range []string{"README.md", "backend/probe.go", "web/theme.css", "config/services.yaml"} {

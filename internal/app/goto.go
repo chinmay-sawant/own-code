@@ -114,7 +114,7 @@ func atoiGoto(s string) int {
 // scroll reset: only the caret's row is revealed.
 func (a *App) gotoLine(ctx context.Context, line, col int) error {
 	doc := a.activeDoc()
-	if doc == nil || doc.Err != "" || doc.Binary {
+	if doc == nil || doc.Err != "" || doc.Binary || doc.Image != nil {
 		a.showToast("info", "Go to line", "Open a text file before jumping to a line.")
 		a.refresh()
 

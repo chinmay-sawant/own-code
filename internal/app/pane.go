@@ -1,6 +1,7 @@
 package app
 
 import (
+	"math"
 	"strings"
 )
 
@@ -31,6 +32,45 @@ const (
 	// starts after the row padding, the line numbers, and the slack.
 	previewHeadingCellW = 8.5
 )
+
+// imageViewPad is the .image-view padding on each side, at 1x zoom.
+const imageViewPad = 24
+
+// imageViewFor fits one pane's image document into the editor body. The
+// padded viewer box is measured in page pixels, so the padding is scaled
+// through zx and the fit never escapes the pane. A zero view means the pane
+// has no image to draw.
+func (a *App) imageViewFor(doc *fileDoc, group int) imageView {
+	if doc == nil || doc.Image == nil {
+		return imageView{}
+	}
+
+	img := doc.Image
+	if img.Width <= 0 || img.Height <= 0 {
+		return imageView{}
+	}
+
+	pad := a.zx(imageViewPad)
+	availW := a.groupEditorWidth(group) - 2*pad
+	availH := a.editorClearHeight() - 2*pad
+	w, h := fitImageSize(img.Width, img.Height, availW, availH)
+
+	scale := 0
+	if w > 0 {
+		scale = int(math.Round(float64(w) / float64(img.Width) * zoomPercent))
+	}
+
+	return imageView{
+		On:       true,
+		Src:      img.Src,
+		W:        w,
+		H:        h,
+		NaturalW: img.Width,
+		NaturalH: img.Height,
+		Format:   img.Format,
+		Scale:    scale,
+	}
+}
 
 // activeGroup returns the group that receives file opens and shortcuts.
 func (a *App) activeGroup() int {
@@ -268,7 +308,7 @@ func (a *App) secondView() secondaryView {
 	s.Status = a.statuses[doc.Path]
 	s.StatusClass = "st-" + strings.ToLower(s.Status)
 	s.Truncated = doc.Truncated
-	s.CanEdit = doc.Err == "" && !doc.Binary
+	s.CanEdit = doc.Err == "" && !doc.Binary && doc.Image == nil
 	s.Editing = a.editing && a.editPath() == doc.Path
 	s.EditDirty = a.isDirty(doc.Path)
 
@@ -286,6 +326,13 @@ func (a *App) secondView() secondaryView {
 		s.EmptyKind = "binary"
 		s.EmptyTitle = "Binary file"
 		s.EmptyBody = "The viewer reads text files only. Pick a source file in the explorer."
+
+		return s
+	}
+
+	if doc.Image != nil {
+		s.BlameNote, s.BlameShow = "", false
+		s.Image = a.imageViewFor(doc, 1)
 
 		return s
 	}
@@ -370,7 +417,7 @@ func cloneCodeRows(rows []codeRow) []codeRow {
 
 // paneRowCount is the visual row count for one document in one pane.
 func (a *App) paneRowCount(group int, doc *fileDoc) int {
-	if doc == nil || doc.Err != "" || doc.Binary {
+	if doc == nil || doc.Err != "" || doc.Binary || doc.Image != nil {
 		return 0
 	}
 

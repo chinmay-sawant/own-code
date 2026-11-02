@@ -67,7 +67,12 @@ func (a *App) openFind(ctx context.Context) error {
 		return nil
 	}
 
-	if a.activeDoc() == nil {
+	if doc := a.activeDoc(); doc == nil || doc.Image != nil {
+		if doc != nil {
+			a.showToast("info", "Find", "Find searches text files. Open a source file first.")
+			a.refresh()
+		}
+
 		return nil
 	}
 
@@ -101,7 +106,12 @@ func (a *App) openReplace(ctx context.Context) error {
 		return nil
 	}
 
-	if a.activeDoc() == nil {
+	if doc := a.activeDoc(); doc == nil || doc.Image != nil {
+		if doc != nil {
+			a.showToast("info", "Replace", "Replace edits text files. Open a source file first.")
+			a.refresh()
+		}
+
 		return nil
 	}
 

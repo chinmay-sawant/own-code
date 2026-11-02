@@ -152,6 +152,7 @@ func (a *App) contextMenuForExplorer(id string) ([]contextMenuRow, bool) {
 		{ID: contextMenuCopyID + rel, Label: "Copy", Hint: shortcutHint("Ctrl+C"), Enabled: true},
 		{ID: contextMenuCopyPathID + rel, Label: "Copy Path", Enabled: true},
 		{ID: contextMenuCopyAbsID + rel, Label: "Copy Absolute Path", Enabled: true},
+		{ID: contextMenuRevealID + rel, Label: revealMenuLabel(), Enabled: true},
 		{ID: contextMenuPasteID + rel, Label: "Paste", Hint: shortcutHint("Ctrl+V"), Enabled: pasteEnabled},
 		{ID: "", Label: "-", Enabled: false},
 		{ID: contextMenuDuplicateID + rel, Label: "Duplicate", Enabled: true},

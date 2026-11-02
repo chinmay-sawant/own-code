@@ -18,6 +18,7 @@ const (
 	tabWidth            = 4
 	tabSpaces           = "    "
 	maxFileBytes        = 512 << 10
+	maxImageBytes       = 32 << 20
 	maxFileLines        = 20000
 	maxLineKB           = 32
 	maxLineBytes        = maxLineKB * byteKB
@@ -1265,14 +1266,15 @@ func skipDir(name string) bool {
 	return strings.HasPrefix(name, ".") && name != ".github"
 }
 
-// skipExt reports whether a file is binary or an archive.
+// skipExt reports whether a file is binary or an archive. Supported images
+// (PNG, JPEG, GIF, SVG) are deliberately absent: they are scanned and opened
+// as image documents instead of being rejected as binary files.
 func skipExt(name string) bool {
 	switch strings.ToLower(filepath.Ext(name)) {
 	case ".7z", ".a", ".apk", ".avi", ".bmp", ".bz2", ".class", ".db", ".dll",
-		".dylib", ".exe", ".gif", ".gz", ".ico", ".jar", ".jpeg", ".jpg",
-		".m4a", ".mkv", ".mov", ".mp3", ".mp4", ".o", ".ogg", ".otf", ".pdf",
-		".png", ".so", ".sqlite", ".tar", ".tgz", ".ttf", ".wav", ".webm",
-		".webp", ".woff", ".woff2", ".xz", ".zip":
+		".dylib", ".exe", ".gz", ".ico", ".jar", ".m4a", ".mkv", ".mov", ".mp3",
+		".mp4", ".o", ".ogg", ".otf", ".pdf", ".so", ".sqlite", ".tar", ".tgz",
+		".ttf", ".wav", ".webm", ".webp", ".woff", ".woff2", ".xz", ".zip":
 		return true
 	}
 
@@ -1397,7 +1399,8 @@ func isBinary(raw []byte) bool {
 	return false
 }
 
-// fileDoc is one opened file: its lines, tokens, and outline.
+// fileDoc is one opened file: its lines, tokens, and outline. Image files
+// carry Image instead of text lines.
 type fileDoc struct {
 	Path        string
 	Lang        string
@@ -1414,6 +1417,7 @@ type fileDoc struct {
 	Indent      string
 	Wrap        *wrapPlan
 	Syntax      *syntaxCache
+	Image       *imageDoc
 }
 
 // tokenizeLines highlights lines using the document's incremental token cache.
@@ -1445,6 +1449,12 @@ func (w *workspace) openDoc(path string) *fileDoc {
 	}
 
 	doc := &fileDoc{Path: path, Lang: meta.Lang, ByteSize: meta.Size}
+
+	// Images bypass readLines: the text size cap and binary probe would
+	// reject every valid encoded image.
+	if isImagePath(path) {
+		return w.openImageDoc(doc, path)
+	}
 
 	lines, truncated, err := w.readLines(path)
 	if err != nil {

@@ -96,7 +96,8 @@ func TestPaletteAbsolutePathUnderRootStaysRelative(t *testing.T) {
 }
 
 // TestPaletteAbsolutePathRejectsNonEditable verifies that directories, missing
-// paths, and binary extensions do not resolve to a palette row.
+// paths, and binary extensions the viewer still skips do not resolve to a
+// palette row. Images are viewer targets now, so they resolve instead.
 func TestPaletteAbsolutePathRejectsNonEditable(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "README.md", "# Workspace\n")
@@ -108,11 +109,18 @@ func TestPaletteAbsolutePathRejectsNonEditable(t *testing.T) {
 
 	external := t.TempDir()
 	png := filepath.Join(external, "image.png")
-	if err := os.WriteFile(png, []byte("not really a png"), 0o600); err != nil {
+	writeImagePNG(t, png, 2, 2)
+
+	if row, ok := app.absolutePaletteRow(png); !ok || row.Lang != langImage {
+		t.Fatalf("image.png resolved to %+v, %v; want Lang %q", row, ok, langImage)
+	}
+
+	zip := filepath.Join(external, "archive.zip")
+	if err := os.WriteFile(zip, []byte("PK"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	for _, path := range []string{external, png, filepath.Join(external, "missing.txt")} {
+	for _, path := range []string{external, zip, filepath.Join(external, "missing.txt")} {
 		if row, ok := app.absolutePaletteRow(path); ok {
 			t.Fatalf("%s resolved to %+v", path, row)
 		}

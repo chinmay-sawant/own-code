@@ -12,10 +12,10 @@
 
   <div class="det-grid">
     <span>Language</span><b>{{.LangLabel}}</b>
-    <span>Lines</span><b class="mono">{{.LineCount}}</b>
+    {{if .Image.On}}<span>Dimensions</span><b class="mono">{{.Image.NaturalW}} × {{.Image.NaturalH}}</b>{{else}}<span>Lines</span><b class="mono">{{.LineCount}}</b>{{end}}
     <span>Size</span><b class="mono">{{.ByteSize}}</b>
-    <span>Encoding</span><b class="mono">{{.Encoding}}</b>
-    <span>Indentation</span><b class="mono">{{.Indent}}</b>
+    {{if not .Image.On}}<span>Encoding</span><b class="mono">{{.Encoding}}</b>
+    <span>Indentation</span><b class="mono">{{.Indent}}</b>{{end}}
     <span>Status</span><b>{{if .Status}}{{.Status}}{{else}}clean{{end}}</b>
   </div>
 
