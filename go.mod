@@ -3,12 +3,12 @@ module github.com/chinmay-sawant/own-code
 go 1.26.10
 
 // Standalone copy of ownframe/examples/code-view. This pins ownframe at the
-// feat/backdrop-filter merge d69b7ee05409 (pseudo-version v0.0.3-0.20261102090747-d69b7ee05409).
+// fix/replay-fixed-chunk-scroll merge abb99008f1dc (pseudo-version v0.0.3-0.20261102133043-abb99008f1dc).
 // The local replace below points at the sibling checkout because the
 // upstream module zip at that commit is too large to download; keep an
 // ownframe checkout next to this repo.
 require (
-	github.com/chinmay-sawant/ownframe v0.0.3-0.20261102090747-d69b7ee05409
+	github.com/chinmay-sawant/ownframe v0.0.3-0.20261102133043-abb99008f1dc
 	github.com/creack/pty v1.1.24
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/hajimehoshi/ebiten/v2 v2.10.4

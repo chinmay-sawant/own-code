@@ -19,9 +19,9 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           # Pinned ownframe commit from go.mod pseudo-version
-          # v0.0.3-0.20261101195413-022d6d9684c4 (feat/fps-cap-presents, unmerged).
-          # Keep in sync with go.mod, install.sh, and install.ps1.
-          $Pin = "022d6d9684c4a769f435a9faec63fcba71940a54"
+          # v0.0.3-0.20261102133043-abb99008f1dc (fix/replay-fixed-chunk-scroll, merged).
+          # Keep in sync with go.mod.
+          $Pin = "abb99008f1dc882ad26c3a57f8ba094512632f6b"
           if (Test-Path ..\ownframe) { Remove-Item -Recurse -Force ..\ownframe }
           git clone --depth 1 --branch master --filter=blob:none --sparse https://github.com/chinmay-sawant/ownframe.git ..\ownframe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
