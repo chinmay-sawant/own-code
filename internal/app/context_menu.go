@@ -372,6 +372,12 @@ func (a *App) scmContextMenu(id string) ([]contextMenuRow, bool) {
 		return nil, false
 	}
 
+	// Commit and branch diffs are read-only snapshots; working-tree actions
+	// must not be offered for them.
+	if a.diffSource != "working" {
+		return nil, false
+	}
+
 	for _, prefix := range []string{"merge-conflict-", "merge-open-", "merge-stage-"} {
 		if !strings.HasPrefix(id, prefix) {
 			continue

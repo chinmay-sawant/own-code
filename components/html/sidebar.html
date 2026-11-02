@@ -92,7 +92,7 @@
       <span class="changes-count mono">{{.Diff.Count}}</span>
       {{if .Diff.Sample}}<span class="side-tag">sample</span>{{end}}
       <span class="sc-stats"><b class="add">+{{.Diff.TotalAdd}}</b><b class="del">−{{.Diff.TotalDel}}</b></span>
-      {{if .Diff.HasChanges}}
+      {{if and .Diff.HasChanges (eq .Diff.Source "working")}}
       <span class="changes-tools-head">
         <button class="commit-btn" id="changes-commit" data-action="commit-dialog" type="button" title="Commit staged changes" aria-label="Commit staged changes"{{if .Modal}} tabindex="-1"{{end}}>Commit</button>
         <button class="side-btn" id="changes-stage-all" data-action="stage-all" type="button" title="Stage all changes" aria-label="Stage all changes"{{if .Modal}} tabindex="-1"{{end}}>+</button>
@@ -102,7 +102,7 @@
       {{end}}
     </div>
 
-    {{if gt .Diff.SelectedCount 1}}
+    {{if and (eq .Diff.Source "working") (gt .Diff.SelectedCount 1)}}
     <div class="changes-selection" id="changes-selection">
       <span class="changes-selection-label">{{.Diff.SelectedCount}} selected</span>
       <button class="side-btn" id="changes-stage-selected" data-action="stage-selected" type="button" title="Stage selected files" aria-label="Stage selected files"{{if .Modal}} tabindex="-1"{{end}}>+</button>
@@ -200,10 +200,12 @@
           </span>
         </button>
         <span class="change-num"><b class="add">+{{.Add}}</b><b class="del">−{{.Del}}</b></span>
+        {{if eq $.Diff.Source "working"}}
         <span class="change-tools">
           <button class="change-tool" id="stage-{{.Path}}" data-action="stage-file:{{.Path}}" type="button" title="Stage {{.Path}}" aria-label="Stage {{.Path}}"{{if $.Modal}} tabindex="-1"{{end}}>+</button>
           <button class="change-tool danger" id="discard-{{.Path}}" data-action="discard-file:{{.Path}}" type="button" title="Discard changes to {{.Path}}" aria-label="Discard changes to {{.Path}}"{{if $.Modal}} tabindex="-1"{{end}}>↩</button>
         </span>
+        {{end}}
         <span class="cstat {{.StatusClass}}">{{.Status}}</span>
       </div>
       {{end}}

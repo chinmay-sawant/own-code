@@ -133,9 +133,13 @@
 }
 .branch-more { padding: 4px 12px 6px 28px; color: var(--dim); font-size: 8.5px; }
 
+/* The selected commit reads as a highlighted row. A left border here looks
+   like a stray vertical line against the rail, so selection uses the row
+   background instead. */
 .hist-commit { border-left: 2px solid transparent; }
-.hist-commit.open { border-left-color: rgba(122, 162, 247, 0.5); background-color: var(--panel-2); }
-.hist-commit.on { border-left-color: var(--accent); }
+.hist-commit.open, .hist-commit.on { background-color: var(--panel-3); }
+.hist-commit.open .hist-row, .hist-commit.on .hist-row { color: var(--text); }
+.hist-commit.open .hist-row:hover, .hist-commit.on .hist-row:hover { background-color: transparent; }
 
 .hist-row {
   width: 100%;
@@ -359,7 +363,6 @@
   overflow: hidden;
   padding: 6px 10px;
   border: 1px solid var(--line);
-  border-left: 2px solid var(--accent);
   border-radius: 7px;
   background-color: var(--panel);
   box-shadow: 0 10px 26px rgba(1, 4, 9, 0.55);
