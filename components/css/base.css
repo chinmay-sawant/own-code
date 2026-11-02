@@ -101,8 +101,13 @@ input:focus-visible {
 
 /* Every button uses the settings-button treatment: no blue outline on
    click, a subtle wash for keyboard focus. Selected (.on) controls keep
-   their accent wash; transparent hit areas stay transparent. */
-button:focus, button:focus-visible { outline: 0; }
+   their accent wash; transparent hit areas stay transparent.
+   NOTE: the engine aliases :focus-visible to :focus (mouse click also
+   matches :focus-visible), so any button :focus-visible outline shows on
+   click. Keep button outlines at zero here with !important so later
+   sheets cannot reintroduce a blue ring; keyboard position is carried
+   by the background washes below, never by outline/box-shadow. */
+button:focus, button:focus-visible { outline: 0 !important; box-shadow: none !important; }
 button:focus-visible:not(.on) { background-color: var(--panel-3); }
 .act.on:focus-visible { background-color: var(--accent-soft); }
 .tab.on .tab-main:focus-visible, .tab.on .tab-x:focus-visible { background-color: var(--bg); }

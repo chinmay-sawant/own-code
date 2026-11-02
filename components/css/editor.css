@@ -47,8 +47,13 @@
   user-select: none;
 }
 
-.split-divider:hover .split-grip,
-.split-divider:focus .split-grip { width: 2px; background-color: var(--accent); }
+.split-divider:hover .split-grip { width: 2px; background-color: var(--accent); }
+/* No :focus grip highlight: the engine matches :focus-visible on mouse
+   click too, so a focus highlight would paint a blue line on every click.
+   Hover already gives the affordance; keyboard users keep the pane focus
+   wash via .editor.focus. */
+.split-divider:focus .split-grip { width: 1px; background-color: var(--line); }
+.split-divider:focus-visible .split-grip { width: 1px; background-color: var(--line); }
 
 .tabstrip {
   height: var(--tab-h);

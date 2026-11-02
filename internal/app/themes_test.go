@@ -27,6 +27,11 @@ func TestSettingsThemesAndSelection(t *testing.T) {
 		if err := a.page.Redraw(ctx); err != nil {
 			t.Fatal(err)
 		}
+		currentPanel, ok := boxByID(a.page.Boxes(), "settings-panel")
+		if !ok || currentPanel.X != panel.X || currentPanel.Y != panel.Y ||
+			currentPanel.W != panel.W || currentPanel.H != panel.H {
+			t.Fatalf("theme %s changed settings geometry from %+v to %+v", theme.ID, panel, currentPanel)
+		}
 		if a.theme != theme.ID || !a.View().SettingsOpen {
 			t.Fatalf("theme %s did not apply", theme.ID)
 		}
@@ -107,6 +112,75 @@ func TestTermPaletteCoversCatalog(t *testing.T) {
 			if !strings.Contains(css, want) {
 				t.Fatalf("theme %s css misses %s", theme.ID, want)
 			}
+		}
+	}
+}
+
+func TestGlassThemeUsesTranslucentBlurredSurfaces(t *testing.T) {
+	for _, id := range []string{"glass", "glass-light"} {
+		css := glassCSS(id)
+		for selector, filter := range map[string]string{
+			".sidebar, .tabstrip {":   "backdrop-filter:blur(16px)",
+			".titlebar, .statusbar {": "backdrop-filter:blur(12px)",
+		} {
+			start := strings.Index(css, selector)
+			if start < 0 {
+				t.Fatalf("theme %s is missing structural surface %s", id, selector)
+			}
+			end := strings.Index(css[start:], "}")
+			rule := css[start:]
+			if end >= 0 {
+				rule = rule[:end]
+			}
+			if !strings.Contains(rule, filter) || !strings.Contains(rule, "refract(") {
+				t.Fatalf("theme %s must blur structural surface %s", id, selector)
+			}
+		}
+		for _, selector := range []string{
+			".settings-header {",
+			".settings-nav {",
+			".settings-content {",
+			".settings-key, .settings-perview, .settings-area {",
+			".settings-btn:not(.primary) {",
+		} {
+			start := strings.Index(css, selector)
+			if start < 0 {
+				t.Fatalf("theme %s is missing glass treatment for %s", id, selector)
+			}
+			end := strings.Index(css[start:], "}")
+			if end < 0 || !strings.Contains(css[start:start+end], "background-image:") {
+				t.Fatalf("theme %s needs a light-gradient surface for %s", id, selector)
+			}
+		}
+		if !strings.Contains(css, "#settings-layer .palette-back {") {
+			t.Fatalf("theme %s must preserve a visible backdrop behind Settings glass", id)
+		}
+		if !strings.Contains(css, ".settings-panel") || !strings.Contains(css, "backdrop-filter:blur(34px) saturate(") ||
+			!strings.Contains(css, "refract(8px)") {
+			t.Fatalf("theme %s lost the refractive glass filter on floating panels", id)
+		}
+		if id == "glass" && !strings.Contains(css, "rgba(18,27,42,0.15)") {
+			t.Fatal("dark glass panels became too opaque")
+		}
+		if id == "glass-light" && !strings.Contains(css, "rgba(245,248,252,0.17)") {
+			t.Fatal("light glass panels became too opaque")
+		}
+		if !strings.Contains(css, "* { box-shadow:none !important; }") {
+			t.Fatalf("theme %s must keep shadows disabled", id)
+		}
+
+	}
+}
+
+func TestSettingsGlassOnlyAppliesToGlassThemes(t *testing.T) {
+	for _, theme := range themeCatalog() {
+		css := themeCSS(theme.ID)
+		glass := theme.ID == "glass" || theme.ID == "glass-light"
+		if strings.Contains(css, "backdrop-filter:") != glass {
+			t.Fatalf("theme %s has incorrect glass filter scope", theme.ID)
+		}
+		if glass && !strings.Contains(css, "backdrop-filter:blur(6px) saturate(1)") {
+			t.Fatalf("theme %s is missing the Settings backdrop blur", theme.ID)
 		}
 	}
 }
