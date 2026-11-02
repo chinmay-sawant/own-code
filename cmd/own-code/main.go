@@ -7,7 +7,9 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
+	"os"
 
 	"github.com/chinmay-sawant/own-code/internal/app"
 	"github.com/chinmay-sawant/own-code/internal/wsl"
@@ -16,6 +18,8 @@ import (
 
 func main() {
 	webMode := flag.Bool("web", false, "serve the picture in a browser on -addr")
+	detach := flag.Bool("d", false, "run detached from this terminal and return immediately")
+	flag.BoolVar(detach, "detach", false, "same as -d")
 	addr := flag.String("addr", "127.0.0.1:8145", "listen address for -web")
 	root := flag.String("root", ".", "directory to browse; when omitted the last opened project reopens")
 	files := flag.Int("files", app.MaxWorkspaceFiles, "explicit N runs a full scan up to N files; default is lazy (ReadDir root only, folders load on expand)")
@@ -26,6 +30,19 @@ func main() {
 	wsl.AddWSLFlags(flag.CommandLine)
 	flag.Parse()
 	if wsl.MaybeReexecInWSL() {
+		return
+	}
+	if *detach && os.Getenv(detachEnv) == "" {
+		logPath, err := detachLogPath()
+		if err != nil {
+			log.Fatalf("own-code: cannot prepare detach log: %v", err)
+		}
+		rotateDetachLog(logPath)
+		pid, err := startDetached(logPath)
+		if err != nil {
+			log.Fatalf("own-code: detach failed: %v", err)
+		}
+		fmt.Printf("own-code: running detached (pid %d), logs at %s\n", pid, logPath)
 		return
 	}
 

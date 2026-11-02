@@ -8,9 +8,10 @@ A quick tour: explorer, editor, Source Control diff, and history.
 
 ## Run
 
-The entry point is `cmd/own-code/main.go`. App code lives in `internal/app/` (app core), `internal/edit/` (text buffer + selection model), and `internal/wsl/` (WSL path/handoff helpers). The embedded `components/`, `fixtures/`, and `testdata/` trees live at the repo root and are served via the root `owncode` package (`assets.go`). `go.mod`, `docs/`, `install.sh`, and this file stay at the root. Builds resolve `ownframe` through the `../ownframe` sibling checkout in `go.mod`; `vendor/` is local-only and never committed.
+The entry point is `cmd/own-code/main.go`. App code lives in `internal/app/` (app core), `internal/edit/` (text buffer + selection model), and `internal/wsl/` (WSL path/handoff helpers). The embedded `components/`, `fixtures/`, and `testdata/` trees live at the repo root and are served via the root `owncode` package (`assets.go`). `go.mod`, `docs/`, `install.sh`, `install-local.sh`, and this file stay at the root. Builds resolve `ownframe` through the `../ownframe` sibling checkout in `go.mod`; `vendor/` is local-only and never committed.
 
-You need Go 1.26 and a sibling `ownframe` checkout for the local `replace`.
+You need Go 1.26 plus sibling `ownframe` and `blinkless` checkouts for the
+local `replace` and workspace.
 
 ```sh
 cd /home/chinmay/ChinmayPersonalProjects/own-code
@@ -35,6 +36,18 @@ go run ./cmd/own-code -perf=false
 go run ./cmd/own-code -window-control=false
 ```
 
+Launch the desktop window without holding the terminal:
+
+```sh
+own-code -d
+```
+
+`-d` (or `-detach`) re-execs the GUI in its own session, so closing the
+terminal leaves it running. Its warnings and fatal errors append to
+`own-code.log` in the OS cache directory (`~/.cache/own-code/own-code.log`
+on Linux). At 1 MiB the next detached launch moves it to `own-code.log.1`
+and starts a fresh log; only that one previous file is kept.
+
 The viewer reopens the last opened project when `-root` is omitted and reads the working tree diff at startup. Pass `-root` explicitly to open somewhere else. The default window is 1500x900 with a minimum of 840x700. `F12` opens the developer dock. The scan stops at 10,000 files unless `-files` raises the budget, and the status bar reports when the limit hits. `testdata/sample` (embedded via root `owncode.SampleFiles`) is the deterministic fixture the tests use. `-web` serves the same tick, key, wheel, click, and live frame loop in a browser. It does not start the file watcher.
 
 On Windows, a workspace under a WSL network path (`\\wsl$\...`) hands off into WSL through `wsl.exe` with a translated path, so scanning, git, and watching run on Linux. The folder browser detects WSL too: with WSL installed it offers Browse WSL files (distro list, then `\\wsl$\<distro>\...`) alongside This PC, and picking a WSL folder there, or typing a `\\wsl$\...` path, relaunches the companion inside WSL2 and closes the Windows window. `-wsl=false` forces the native Windows build. The WSL detect, path, and re-exec helpers live in `internal/wsl/` and are wired from `cmd/own-code/main.go` (startup) and the folder browser actions (runtime).
@@ -58,19 +71,42 @@ PREFIX=/usr/local curl -fsSL https://raw.githubusercontent.com/chinmay-sawant/ow
 
 Prefer `wget`? `wget -qO- <url> | sh` works the same.
 
+### From this checkout
+
+If you already have the repo, build the working tree (including uncommitted
+changes) and install it without downloading a release:
+
+```sh
+./install-local.sh                      # -> ~/.local/bin/own-code
+PREFIX=/usr/local ./install-local.sh    # -> /usr/local/bin/own-code
+make install                            # same as the first command
+```
+
+It needs Go 1.26+ and the sibling `ownframe` and `blinkless` checkouts. To
+install an already-built binary instead of compiling:
+
+```sh
+./install-local.sh --binary linux-release/own-code-linux-amd64
+```
+
 Manual alternative: grab your OS/arch file from the release folders above,
 save it as `own-code` somewhere on your `PATH`, and `chmod +x` it.
 
-Build from source instead (run it next to an `ownframe` checkout, since
-`go.mod` points at `../ownframe`; only its Go sources are needed, so a
-sparse checkout keeps it small):
+Build from source instead (run it next to `ownframe` and `blinkless`
+checkouts, since `go.work` and `go.mod` point at `../ownframe` and
+`../blinkless`; only their Go sources are needed, so sparse checkouts keep
+them small):
 
 ```sh
 git clone https://github.com/chinmay-sawant/own-code.git
-git clone --depth 1 --branch master --filter=blob:none --sparse https://github.com/chinmay-sawant/ownframe.git
-git -C ownframe sparse-checkout set --no-cone '/*.go' '/go.mod' '/internal/'
+for repo in ownframe blinkless; do
+  git clone --depth 1 --branch master --filter=blob:none --sparse \
+    "https://github.com/chinmay-sawant/$repo.git"
+  git -C "$repo" sparse-checkout set --no-cone \
+    '/*.go' '/go.mod' '/internal/' '/css/' '/html/' '/layout/' '/markup/'
+done
 cd own-code
-go build -o own-code ./cmd/own-code
+./install-local.sh
 ```
 
 ### Windows

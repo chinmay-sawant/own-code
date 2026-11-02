@@ -1,7 +1,7 @@
 # Shell scripts must keep LF endings on every platform so the curl
 # installer runs as-is. Do not cover these with .gitignore rules.
-# linguist-vendored keeps the one installer script out of the repo's
-# language stats (it would otherwise show as Shell 0.1%).
+# linguist-vendored keeps the installer scripts out of the repo's
+# language stats (they would otherwise show as Shell 0.1%).
 *.sh text eol=lf linguist-vendored
 *.bat text eol=crlf linguist-vendored
 *.ps1 text eol=crlf linguist-vendored

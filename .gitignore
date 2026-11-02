@@ -1,6 +1,6 @@
 # Binaries and build output
-own-code
-own-code.exe
+/own-code
+/own-code.exe
 *.exe
 *.test
 *.out
