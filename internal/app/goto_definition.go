@@ -230,7 +230,7 @@ func gotoSkipCandidate(ws *workspace, path string) bool {
 		}
 	}
 
-	if skipExt(baseName(path)) {
+	if isImagePath(path) || skipExt(baseName(path)) {
 		return true
 	}
 

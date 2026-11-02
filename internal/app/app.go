@@ -157,6 +157,10 @@ type App struct {
 	tabs   []string
 	active int
 	docs   map[string]*fileDoc
+	// publishedImages remembers which image documents the page already holds.
+	// Page.SetImage clones the bytes, so a frame must not re-register an
+	// unchanged image on every refresh.
+	publishedImages map[string]*imageDoc
 
 	// tabStart is the first visible tab per editor group. The strip shows
 	// full-width tabs with scroll arrows instead of squeezing them.
@@ -761,15 +765,26 @@ func NewWithLimit(root string, limit int) (*App, error) {
 	return a, nil
 }
 
-// publishPreviewImages registers the diagram strips the current documents hold.
+// publishPreviewImages registers the image files and diagram strips the
+// current documents hold.
 func (a *App) publishPreviewImages() {
 	if a.page == nil {
 		return
 	}
 
+	if a.publishedImages == nil {
+		a.publishedImages = map[string]*imageDoc{}
+	}
+
+	current := make(map[string]*imageDoc, len(a.docs))
+
 	for _, doc := range a.docs {
 		if doc == nil {
 			continue
+		}
+
+		if doc.Image != nil {
+			current[doc.Image.Src] = doc.Image
 		}
 
 		for _, row := range doc.Preview {
@@ -779,6 +794,25 @@ func (a *App) publishPreviewImages() {
 
 			a.page.SetImage(row.Image, row.png)
 		}
+	}
+
+	for src, img := range current {
+		if a.publishedImages[src] == img {
+			continue
+		}
+
+		a.page.SetImage(src, img.Bytes)
+		a.publishedImages[src] = img
+	}
+
+	// Drop bytes for images whose document was closed or reloaded.
+	for src := range a.publishedImages {
+		if _, ok := current[src]; ok {
+			continue
+		}
+
+		a.page.SetImage(src, nil)
+		delete(a.publishedImages, src)
 	}
 }
 
@@ -1298,7 +1332,7 @@ func (a *App) buildView() View {
 		v.Status = a.statuses[doc.Path]
 		v.StatusClass = "st-" + strings.ToLower(v.Status)
 		v.Outline = doc.Outline
-		v.CanEdit = doc.Err == "" && !doc.Binary
+		v.CanEdit = doc.Err == "" && !doc.Binary && doc.Image == nil
 		v.Editing = a.editing && a.editPath() == doc.Path
 		v.EditDirty = a.dirty[doc.Path]
 
@@ -1404,6 +1438,13 @@ func (a *App) fillCode(v *View) {
 		v.EmptyKind = "binary"
 		v.EmptyTitle = "Binary file"
 		v.EmptyBody = "The viewer reads text files only. Pick a source file in the explorer."
+
+		return
+	}
+
+	if doc.Image != nil {
+		v.BlameNote, v.BlameShow = "", false
+		v.Image = a.imageViewFor(doc, 0)
 
 		return
 	}

@@ -59,6 +59,7 @@ const (
 	langYAML     = "yaml"
 	langShell    = "shell"
 	langPlain    = "plain"
+	langImage    = "image"
 )
 
 // langInfo is the label and the two-letter badge for one language.
@@ -77,6 +78,8 @@ func languageOf(path string) string {
 	}
 
 	switch {
+	case isImagePath(name):
+		return langImage
 	case strings.HasSuffix(name, ".go") || strings.HasSuffix(name, ".mod") || strings.HasSuffix(name, ".sum"):
 		if strings.HasSuffix(name, ".mod") || strings.HasSuffix(name, ".sum") {
 			return langPlain
@@ -127,6 +130,8 @@ func languageInfo(lang string) langInfo {
 		return langInfo{Label: "YAML", Badge: "Ya"}
 	case langShell:
 		return langInfo{Label: "Shell", Badge: "Sh"}
+	case langImage:
+		return langInfo{Label: "Image", Badge: "Img"}
 	default:
 		return langInfo{Label: "Plain text", Badge: "Tx"}
 	}

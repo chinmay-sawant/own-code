@@ -53,6 +53,7 @@ const (
 const (
 	contextMenuNewFileID   = contextMenuIDPrefix + "new-file:"
 	contextMenuNewFolderID = contextMenuIDPrefix + "new-folder:"
+	contextMenuRevealID    = contextMenuIDPrefix + "reveal:"
 	contextMenuRenameID    = contextMenuIDPrefix + "rename:"
 	contextMenuDeleteID    = contextMenuIDPrefix + "delete:"
 	contextMenuDuplicateID = contextMenuIDPrefix + "duplicate:"

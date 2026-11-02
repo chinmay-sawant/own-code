@@ -126,7 +126,7 @@ your `PATH`, and run `own-code`.
 
 ## Features
 
-- Explorer tree with filter, language badges, change letters, and sticky folders. Right click gives Copy Path, Copy File, Paste.
+- Explorer tree with filter, language badges, change letters, and sticky folders. Right click gives Copy Path, Copy File, Paste, and Reveal in Finder, Explorer, or the Linux file manager.
 - Unlimited tabs plus a split second editor group with independent scroll, click or `Ctrl+1`/`Ctrl+2` focus, a draggable divider, and close-one-side that merges tabs into the survivor. Single-click previews at the back of the strip (italic); double-click, `Enter`, `Ctrl+K`, or editing pins the tab.
 - Click to edit in place with syntax colors, `Ctrl+S` saves. `Ctrl+A` select all, `Ctrl+C` copy, undo and redo.
 - Gutter marks on changed lines with line cards, plus a bottom bar to step through changed files.
@@ -136,6 +136,7 @@ your `PATH`, and run `own-code`.
 - Go to line (`Ctrl+G` with `:<line>[:<col>]`), go to symbol in the active file (`Ctrl+Shift+O`), bracket jump and select (`Ctrl+M`, `Ctrl+Shift+M`).
 - Editing helpers: auto-indent on `Enter`, toggle line comment (`Ctrl+/`), indent and outdent (`Tab`, `Shift+Tab`).
 - Markdown preview (`Ctrl+Shift+V`) with tables and Mermaid flowcharts, in fixed rows.
+- Image viewer for PNG, JPEG, GIF, and SVG files, scaled to fit the editor pane in both split groups.
 - Highlighting for Go, Python, JavaScript/TypeScript, Markdown, CSS, JSON, HTML, YAML, and shell.
 - Details drawer with outline, status bar, persisted sessions, soft wrap (`Z`), desktop file watcher.
 - Embedded terminal panel with tabs, a resizable split, and shell selection through `OWN_CODE_SHELL`. See [docs/terminal.md](docs/terminal.md).
@@ -217,9 +218,9 @@ Chrome's browser and GPU processes alone, 347 MB PSS, are larger than the entire
 
 - The two editor groups scroll vertically and horizontally on their own offsets, rails, and per-tab memory; click a pane or press `Ctrl+1`/`Ctrl+2` to focus it. The divider drags (arrow keys + `Home` when focused), and closing one side merges its tabs into the survivor unless dropped. The page spacer follows the taller pane.
 - The split layout (open panes, focused side, divider ratio) persists per workspace in the session file; per-tab scroll offsets do not survive a restart.
-- Files over 512 KB and files with a NUL byte show a notice. A file over 20,000 lines keeps the first 20,000. A line over 32 KB shows a notice instead of opening.
+- Text files over 512 KB and files with a NUL byte show a notice. A text file over 20,000 lines keeps the first 20,000. A line over 32 KB shows a notice instead of opening. Images preview up to 32 MB and 16 megapixels.
 - A diff over 512 KB, 20,000 lines, or one line over 32 KB renders one notice row. A commit patch that hits its 512 KB read cap shows the same notice.
-- The scan skips `.git`, `node_modules`, `vendor`, build output, and binary extensions.
+- The scan skips `.git`, `node_modules`, `vendor`, build output, and unsupported binary extensions. PNG, JPEG, GIF, and SVG files are scanned and open in the image viewer.
 - There is no horizontal scroll. Files and diff cells soft wrap. `Z` turns wrap off and the diff clips with an ellipsis.
 - The History pane loads 20 commits, then grows the page as the rail crosses half the loaded rows, up to 500. Patches load on a background worker.
 - This app targets desktop. There is no phone layout or mobile path.

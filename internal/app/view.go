@@ -115,11 +115,14 @@ type View struct {
 	Preview          bool
 	Previewable      bool
 	PreviewRows      []previewRow
-	Empty            bool
-	EmptyKind        string
-	EmptyTitle       string
-	EmptyBody        string
-	Recent           []recentRow
+	// Image carries the fitted viewer state while an image document is the
+	// active tab. On is false for every text file.
+	Image      imageView
+	Empty      bool
+	EmptyKind  string
+	EmptyTitle string
+	EmptyBody  string
+	Recent     []recentRow
 
 	Editing   bool
 	EditText  string
@@ -339,10 +342,13 @@ type secondaryView struct {
 	Preview     bool
 	Previewable bool
 	PreviewRows []previewRow
-	Empty       bool
-	EmptyKind   string
-	EmptyTitle  string
-	EmptyBody   string
+	// Image is the right pane's fitted image when its active tab is a
+	// picture. On is false for text files.
+	Image      imageView
+	Empty      bool
+	EmptyKind  string
+	EmptyTitle string
+	EmptyBody  string
 	// Focused marks the right pane as the focused one for highlight.
 	Focused bool
 
@@ -350,6 +356,19 @@ type secondaryView struct {
 	EditText  string
 	EditDirty bool
 	CanEdit   bool
+}
+
+// imageView is one pane's fitted image document: On selects the viewer
+// branch, W/H are the display box, NaturalW/H the intrinsic size, Src the
+// page image key, Format the chip label, and Scale the display percentage.
+type imageView struct {
+	On       bool
+	Src      string
+	W, H     int
+	NaturalW int
+	NaturalH int
+	Format   string
+	Scale    int
 }
 
 // searchView is the workspace content search panel.

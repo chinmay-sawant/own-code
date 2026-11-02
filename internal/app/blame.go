@@ -500,6 +500,10 @@ func (a *App) blameSkipNote(doc *fileDoc) string {
 		return ""
 	}
 
+	if doc.Image != nil {
+		return "Blame is unavailable for images."
+	}
+
 	if a.ws != nil && a.ws.Sample {
 		return "Blame is unavailable in the sample workspace."
 	}

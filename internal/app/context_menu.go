@@ -695,6 +695,10 @@ func (a *App) MenuAction(ctx context.Context, id string) error {
 		}
 
 		return a.page.Redraw(ctx)
+	case strings.HasPrefix(id, contextMenuRevealID):
+		a.revealExplorerPath(strings.TrimPrefix(id, contextMenuRevealID))
+
+		return a.redrawTreeMenu(ctx)
 	case strings.HasPrefix(id, contextMenuCopyPathID):
 		a.copyTreePath(strings.TrimPrefix(id, contextMenuCopyPathID))
 

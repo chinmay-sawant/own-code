@@ -352,6 +352,11 @@ func (a *App) applyWorkspaceReplace(ctx context.Context) error {
 			continue
 		}
 
+		if isImagePath(path) {
+			skipped.Binary++
+			continue
+		}
+
 		if !searchEligibleFile(meta) {
 			skipped.Large++
 			continue

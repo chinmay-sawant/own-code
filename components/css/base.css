@@ -163,6 +163,7 @@ button.ln:focus-visible,
 .lang-html { background: #2a1410; color: #f07178; }
 .lang-yaml { background: #12251f; color: #5eead4; }
 .lang-shell { background: #16210f; color: #a6e22e; }
+.lang-image { background: #2a1622; color: #f78fb3; }
 .lang-plain { background: #191d26; color: #8a93a6; }
 
 /* Source tokens ------------------------------------------------------------ */

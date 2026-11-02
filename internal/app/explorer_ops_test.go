@@ -359,7 +359,7 @@ func TestExplorerMenuFileOpRows(t *testing.T) {
 
 	app := newTestApp(t)
 
-	labels := []string{"New File", "New Folder", "-", "Cut", "Copy", "Copy Path", "Copy Absolute Path", "Paste", "-", "Duplicate", "Rename", "Delete"}
+	labels := []string{"New File", "New Folder", "-", "Cut", "Copy", "Copy Path", "Copy Absolute Path", revealMenuLabel(), "Paste", "-", "Duplicate", "Rename", "Delete"}
 	rows := wantExplorerRows(t, app, "tree-backend/probe.go", labels)
 
 	for i, row := range rows {
@@ -376,16 +376,16 @@ func TestExplorerMenuFileOpRows(t *testing.T) {
 		}
 	}
 
-	if rows[9].ID != "code-view:duplicate:backend/probe.go" {
-		t.Fatalf("duplicate id = %q", rows[9].ID)
+	if rows[10].ID != "code-view:duplicate:backend/probe.go" {
+		t.Fatalf("duplicate id = %q", rows[10].ID)
 	}
 
-	if rows[10].ID != "code-view:rename:backend/probe.go" || rows[10].Hint != "F2" {
-		t.Fatalf("rename row = %+v, want the rename id with the F2 hint", rows[10])
+	if rows[11].ID != "code-view:rename:backend/probe.go" || rows[11].Hint != "F2" {
+		t.Fatalf("rename row = %+v, want the rename id with the F2 hint", rows[11])
 	}
 
-	if rows[11].ID != "code-view:delete:backend/probe.go" || rows[11].Hint != "Del" {
-		t.Fatalf("delete row = %+v, want the delete id with the Del hint", rows[11])
+	if rows[12].ID != "code-view:delete:backend/probe.go" || rows[12].Hint != "Del" {
+		t.Fatalf("delete row = %+v, want the delete id with the Del hint", rows[12])
 	}
 }
 

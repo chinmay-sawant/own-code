@@ -156,6 +156,11 @@ search:
 			continue
 		}
 
+		if isImagePath(meta.Path) {
+			result.Skipped.Binary++
+			continue
+		}
+
 		if !searchEligibleFile(meta) {
 			result.Skipped.Large++
 			continue
