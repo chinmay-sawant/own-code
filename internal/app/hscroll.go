@@ -11,15 +11,52 @@ const (
 )
 
 // scrollHorizontal shifts horizontal scroll offset by dx pixels, clamped between
-// 0 and the maximum line width in the active document.
+// 0 and the maximum line width in the active document. In split mode it
+// routes to the focused group; use scrollHorizontalFor to target a group.
 func (a *App) scrollHorizontal(dx int) {
+	a.scrollHorizontalFor(a.focusedScrollGroup(), dx)
+}
+
+// focusedScrollGroup is the group keyboard scrolling applies to: the focused
+// group in split mode, group 0 otherwise.
+func (a *App) focusedScrollGroup() int {
+	if a.split && a.mode == "explorer" && a.focusGroup == 1 {
+		return 1
+	}
+
+	return 0
+}
+
+// scrollHorizontalFor shifts one group's horizontal offset by dx pixels.
+func (a *App) scrollHorizontalFor(group, dx int) {
+	if group != 1 {
+		group = 0
+	}
+
 	if a.wrap {
-		a.scrollX = 0
+		if a.split {
+			a.scrollXGrp[group] = 0
+		} else {
+			a.scrollX = 0
+		}
 
 		return
 	}
 
-	a.setScrollX(a.scrollX + dx)
+	a.setScrollXFor(group, a.scrollXFor(group)+dx)
+}
+
+// scrollXFor returns the horizontal offset one group paints with.
+func (a *App) scrollXFor(group int) int {
+	if a.split && a.mode == "explorer" && (group == 0 || group == 1) {
+		return a.scrollXGrp[group]
+	}
+
+	if a.wrap {
+		return 0
+	}
+
+	return a.scrollX
 }
 
 // ScrollHorizontal is the exported form of scrollHorizontal.
@@ -33,36 +70,61 @@ func (a *App) ScrollX() int {
 		return 0
 	}
 
-	return a.scrollX
+	return a.scrollXFor(a.focusedScrollGroup())
 }
 
 // SetScrollX sets the horizontal scroll offset in pixels, clamped to [0, maxLineWidth].
 func (a *App) SetScrollX(x int) {
-	a.setScrollX(x)
+	a.setScrollXFor(a.focusedScrollGroup(), x)
 }
 
 // setScrollX sets the horizontal scroll offset in pixels, clamped to [0, maxLineWidth].
 func (a *App) setScrollX(x int) {
+	a.setScrollXFor(a.focusedScrollGroup(), x)
+}
+
+// setScrollXFor sets one group's horizontal offset, clamped to its own
+// document width. Single-pane mode keeps the legacy shared scrollX.
+func (a *App) setScrollXFor(group, x int) {
+	if group != 1 {
+		group = 0
+	}
+
 	if a.wrap {
-		a.scrollX = 0
+		if a.split {
+			a.scrollXGrp[group] = 0
+		} else {
+			a.scrollX = 0
+		}
 
 		return
 	}
 
-	maxW := a.maxLineWidth()
+	maxW := a.maxLineWidthFor(group)
 	if x < 0 {
 		x = 0
 	} else if x > maxW {
 		x = maxW
 	}
 
-	a.scrollX = x
+	if a.split && a.mode == "explorer" {
+		a.scrollXGrp[group] = x
+	} else {
+		a.scrollX = x
+	}
+
 	a.refresh()
 }
 
 // maxLineWidth returns the maximum line width in pixels of the active document
 // or diff rows.
 func (a *App) maxLineWidth() int {
+	return a.maxLineWidthFor(a.activeGroup())
+}
+
+// maxLineWidthFor returns the maximum line width in pixels of one group's
+// document, or diff rows in changes mode.
+func (a *App) maxLineWidthFor(group int) int {
 	if a.mode == "changes" {
 		rows := a.currentDiffRows()
 		maxRunes := 0
@@ -96,7 +158,7 @@ func (a *App) maxLineWidth() int {
 		return int(math.Ceil(float64(maxRunes) * a.zf(diffCellW)))
 	}
 
-	doc := a.activeDoc()
+	doc := a.groupDoc(group)
 	if doc == nil {
 		return 0
 	}
@@ -146,12 +208,18 @@ func (a *App) isOverEditor(x, y float64) bool {
 // Click and caret math keeps using the full scrollX and stays unchanged:
 // col*cellW+rem always equals scrollX.
 func (a *App) hscrollWindow(cellW float64, cols int) (col, rem int) {
+	return a.hscrollWindowFor(a.focusedScrollGroup(), cellW, cols)
+}
+
+// hscrollWindowFor is hscrollWindow for one editor group.
+func (a *App) hscrollWindowFor(group int, cellW float64, cols int) (col, rem int) {
 	if a.wrap || cellW <= 0 || cols <= 0 {
 		return 0, 0
 	}
 
-	col = int(float64(a.scrollX) / cellW)
-	rem = a.scrollX - int(float64(col)*cellW)
+	x := a.scrollXFor(group)
+	col = int(float64(x) / cellW)
+	rem = x - int(float64(col)*cellW)
 
 	return col, rem
 }

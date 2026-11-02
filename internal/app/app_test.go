@@ -228,8 +228,11 @@ func TestScrollWindow(t *testing.T) {
 	}
 
 	view := app.View()
-	if view.TrackTop != 0 || view.Rows[0].No <= 1 || view.Rows[0].No > 200 {
-		t.Fatalf("track = %d first = %d", view.TrackTop, view.Rows[0].No)
+	// The sticky header block takes headroom above the windowed rows: the
+	// track shifts down by one row per pinned header.
+	wantTop := len(view.Sticky) * app.zx(rowH)
+	if view.TrackTop != wantTop || view.Rows[0].No <= 1 || view.Rows[0].No > 200 {
+		t.Fatalf("track = %d (want %d) first = %d", view.TrackTop, wantTop, view.Rows[0].No)
 	}
 
 	before := view.Rows[0].No

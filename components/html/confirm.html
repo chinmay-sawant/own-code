@@ -13,12 +13,22 @@
       </ul>
       {{end}}
       <span class="confirm-actions">
+        {{if or (eq .Confirm.Kind "unsaved-close-one") (eq .Confirm.Kind "unsaved-close-many")}}
         <button class="confirm-btn" id="confirm-cancel" data-action="confirm-cancel" type="button">Cancel</button>
-        <button class="confirm-btn danger" id="confirm-ok" data-action="confirm-ok" type="button">Discard</button>
+        <button class="confirm-btn danger" id="confirm-dont-save" data-action="confirm-dont-save" type="button">Don't Save</button>
+        <button class="confirm-btn primary" id="confirm-save" data-action="confirm-save" type="button">Save</button>
+        {{else}}
+        <button class="confirm-btn" id="confirm-cancel" data-action="confirm-cancel" type="button">Cancel</button>
+        <button class="confirm-btn danger" id="confirm-ok" data-action="confirm-ok" type="button">{{if .Confirm.OkLabel}}{{.Confirm.OkLabel}}{{else}}Discard{{end}}</button>
+        {{end}}
       </span>
     </div>
     <div class="confirm-foot">
-      <span class="confirm-hint">Enter discard · Esc cancel</span>
+      {{if or (eq .Confirm.Kind "unsaved-close-one") (eq .Confirm.Kind "unsaved-close-many")}}
+      <span class="confirm-hint">Enter save · D don't save · Esc cancel</span>
+      {{else}}
+      <span class="confirm-hint">{{if .Confirm.OkHint}}{{.Confirm.OkHint}}{{else}}Enter discard · Esc cancel{{end}}</span>
+      {{end}}
       {{if gt .Confirm.Count 0}}<span class="confirm-count">{{.Confirm.Count}} files</span>{{end}}
     </div>
   </div>

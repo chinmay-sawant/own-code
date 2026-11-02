@@ -413,3 +413,67 @@ func (c *countdownContext) Err() error {
 
 	return nil
 }
+
+// TestWorkspaceSearchOpts covers the shared matcher paths of the scan core:
+// regex queries, whole-word filtering, invalid patterns, and the total
+// counter that keeps running past the preview caps.
+func TestWorkspaceSearchOpts(t *testing.T) {
+	t.Parallel()
+
+	ws := searchWorkspaceDir(t, map[string]string{
+		"a.txt": "foo bar foobar\nsecond foo\n",
+		"b.txt": "FOO\n",
+	})
+	ctx := context.Background()
+
+	regex := searchWorkspaceOpts(ctx, ws, `f(o+)`, searchOpts{Regex: true}, 0, 0)
+	if len(regex.Hits) == 0 {
+		t.Fatal("regex found no hits")
+	}
+
+	for _, hit := range regex.Hits {
+		if !strings.Contains(hit.Match, "foo") && !strings.Contains(hit.Match, "FOO") {
+			t.Errorf("regex match = %q", hit.Match)
+		}
+	}
+
+	word := searchWorkspaceOpts(ctx, ws, "foo", searchOpts{WholeWord: true}, 0, 0)
+	for _, hit := range word.Hits {
+		if hit.Match != "foo" && hit.Match != "FOO" {
+			t.Errorf("whole-word match = %q", hit.Match)
+		}
+		if hit.Path == "a.txt" && hit.Line == 1 && hit.Col == 9 {
+			t.Errorf("whole-word hit inside foobar at col %d", hit.Col)
+		}
+	}
+
+	if len(word.Hits) == 0 {
+		t.Fatal("whole-word found no hits")
+	}
+
+	bad := searchWorkspaceOpts(ctx, ws, "(unclosed", searchOpts{Regex: true}, 0, 0)
+	if len(bad.Hits) != 0 || bad.Total != 0 {
+		t.Fatalf("invalid pattern searched: %+v", bad)
+	}
+
+	// The total counter runs past the stored preview caps.
+	many := map[string]string{}
+	for i := 0; i < 4; i++ {
+		many[fmt.Sprintf("f%02d.txt", i)] = strings.Repeat("needle\n", 30)
+	}
+
+	big := searchWorkspaceDir(t, many)
+	capped := searchWorkspaceOpts(ctx, big, "needle", searchOpts{}, 10, 5)
+
+	if len(capped.Hits) != 10 {
+		t.Fatalf("stored hits = %d, want 10", len(capped.Hits))
+	}
+
+	if capped.Total != 120 {
+		t.Fatalf("total = %d, want 120", capped.Total)
+	}
+
+	if !capped.Truncated || capped.Capped {
+		t.Fatalf("flags: truncated=%v capped=%v", capped.Truncated, capped.Capped)
+	}
+}

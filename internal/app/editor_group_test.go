@@ -10,16 +10,16 @@ func TestEditorGroupOpenDedupes(t *testing.T) {
 
 	var group editorGroup
 
-	index, evicted := group.Open("README.md", maxTabs)
+	index, evicted := group.Open("README.md", 8)
 	if index != 0 || evicted != "" || group.Len() != 1 || group.Path != "README.md" {
 		t.Fatalf("first open: index=%d evicted=%q len=%d path=%q", index, evicted, group.Len(), group.Path)
 	}
 
-	if index, evicted = group.Open("backend/probe.go", maxTabs); index != 1 || evicted != "" {
+	if index, evicted = group.Open("backend/probe.go", 8); index != 1 || evicted != "" {
 		t.Fatalf("second open: index=%d evicted=%q", index, evicted)
 	}
 
-	if index, evicted = group.Open("README.md", maxTabs); index != 0 || evicted != "" {
+	if index, evicted = group.Open("README.md", 8); index != 0 || evicted != "" {
 		t.Fatalf("reopen: index=%d evicted=%q", index, evicted)
 	}
 
@@ -31,7 +31,7 @@ func TestEditorGroupOpenDedupes(t *testing.T) {
 		t.Fatalf("reopen active = %d %q, want 0 README.md", group.Active, group.ActivePath())
 	}
 
-	if index, evicted = group.Open("", maxTabs); index != -1 || evicted != "" || group.Len() != 2 {
+	if index, evicted = group.Open("", 8); index != -1 || evicted != "" || group.Len() != 2 {
 		t.Fatalf("blank open: index=%d evicted=%q len=%d", index, evicted, group.Len())
 	}
 }
@@ -39,47 +39,49 @@ func TestEditorGroupOpenDedupes(t *testing.T) {
 func TestEditorGroupEvictsOldest(t *testing.T) {
 	t.Parallel()
 
+	// Tabs are unlimited: opens never evict, regardless of the max hint.
 	var group editorGroup
 
-	for i := 0; i < maxTabs; i++ {
-		index, evicted := group.Open(fmt.Sprintf("file%d.go", i), maxTabs)
+	const n = 12
+	for i := 0; i < n; i++ {
+		index, evicted := group.Open(fmt.Sprintf("file%d.go", i), 8)
 		if index != i || evicted != "" {
 			t.Fatalf("open %d: index=%d evicted=%q", i, index, evicted)
 		}
 	}
 
-	index, evicted := group.Open("newest.go", maxTabs)
-	if index != maxTabs-1 || evicted != "file0.go" {
-		t.Fatalf("overflow: index=%d evicted=%q, want %d file0.go", index, evicted, maxTabs-1)
+	index, evicted := group.Open("newest.go", 8)
+	if index != n || evicted != "" {
+		t.Fatalf("overflow: index=%d evicted=%q, want %d no eviction", index, evicted, n)
 	}
 
-	if group.Len() != maxTabs || group.Path != "newest.go" {
+	if group.Len() != n+1 || group.Path != "newest.go" {
 		t.Fatalf("overflow: len=%d path=%q", group.Len(), group.Path)
 	}
 
 	paths := group.Paths()
-	if paths[0] != "file1.go" || paths[maxTabs-1] != "newest.go" {
+	if paths[0] != "file0.go" || paths[n] != "newest.go" {
 		t.Fatalf("overflow paths = %v", paths)
 	}
 
-	// Reopening a tab that is already open must not evict when full.
-	if index, evicted = group.Open("file1.go", maxTabs); index != 0 || evicted != "" || group.Len() != maxTabs {
+	// Reopening a tab that is already open only focuses.
+	if index, evicted = group.Open("file1.go", 8); index != 1 || evicted != "" || group.Len() != n+1 {
 		t.Fatalf("full reopen: index=%d evicted=%q len=%d", index, evicted, group.Len())
 	}
 
-	// A max below 1 falls back to maxTabs.
+	// A max below 1 is accepted for compatibility and never evicts.
 	var fallback editorGroup
 
-	for i := 0; i <= maxTabs; i++ {
+	for i := 0; i <= n; i++ {
 		fallback.Open(fmt.Sprintf("f%d.go", i), 0)
 	}
 
-	if fallback.Len() != maxTabs {
-		t.Fatalf("fallback len = %d, want %d", fallback.Len(), maxTabs)
+	if fallback.Len() != n+1 {
+		t.Fatalf("fallback len = %d, want %d", fallback.Len(), n+1)
 	}
 
-	if fallback.Paths()[0] != "f1.go" {
-		t.Fatalf("fallback first = %q, want f1.go", fallback.Paths()[0])
+	if fallback.Paths()[0] != "f0.go" {
+		t.Fatalf("fallback first = %q, want f0.go", fallback.Paths()[0])
 	}
 }
 
@@ -89,7 +91,7 @@ func TestEditorGroupCloseKeepsActiveValid(t *testing.T) {
 	var group editorGroup
 
 	for _, path := range []string{"a.go", "b.go", "c.go", "d.go"} {
-		group.Open(path, maxTabs)
+		group.Open(path, 8)
 	}
 
 	if !group.Select(2) {
@@ -134,8 +136,8 @@ func TestEditorGroupSelectAndReset(t *testing.T) {
 		t.Fatal("select on empty group reported true")
 	}
 
-	group.Open("a.go", maxTabs)
-	group.Open("b.go", maxTabs)
+	group.Open("a.go", 8)
+	group.Open("b.go", 8)
 
 	if group.Select(2) || !group.Select(0) || group.Path != "a.go" {
 		t.Fatalf("select: active=%d path=%q", group.Active, group.Path)
@@ -176,16 +178,16 @@ func TestEditorGroupSelectAndReset(t *testing.T) {
 		t.Fatalf("reset clamp: active=%d path=%q paths=%v", group.Active, group.Path, group.Paths())
 	}
 
-	many := make([]string, 0, maxTabs+2)
+	many := make([]string, 0, 10)
 
-	for i := 0; i < maxTabs+2; i++ {
+	for i := 0; i < 10; i++ {
 		many = append(many, fmt.Sprintf("m%d.go", i))
 	}
 
 	group.Reset(many, 0)
 
-	if group.Len() != maxTabs {
-		t.Fatalf("reset cap len = %d, want %d", group.Len(), maxTabs)
+	if group.Len() != 10 {
+		t.Fatalf("reset len = %d, want %d", group.Len(), 10)
 	}
 
 	group.Reset(nil, 0)
@@ -201,7 +203,7 @@ func TestEditorGroupClosePath(t *testing.T) {
 	var group editorGroup
 
 	for _, path := range []string{"a.go", "b.go", "c.go"} {
-		group.Open(path, maxTabs)
+		group.Open(path, 8)
 	}
 
 	if !group.SelectPath("c.go") {
@@ -250,7 +252,7 @@ func TestEditorGroupEmpty(t *testing.T) {
 		t.Fatalf("close on empty group = %q %v", closed, ok)
 	}
 
-	group.Open("a.go", maxTabs)
+	group.Open("a.go", 8)
 
 	paths := group.Paths()
 	paths[0] = "changed.go"

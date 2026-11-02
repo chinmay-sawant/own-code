@@ -99,6 +99,44 @@ func IsWSLSep(c byte) bool {
 	return c == '\\' || c == '/'
 }
 
+// WSLDistrosRoot is the virtual folder that lists WSL distros on a Windows
+// host. It is the network share \\wsl$; the sibling host wsl.localhost is
+// accepted everywhere a WSL path is parsed.
+const WSLDistrosRoot = `\\wsl$`
+
+// WSLDistrosRootAlt is the alternate host name for the same virtual folder.
+const WSLDistrosRootAlt = `\\wsl.localhost`
+
+// IsWSLDistrosRoot reports the virtual level that lists distros. Both host
+// spellings match, with either separator and optional trailing separators,
+// case-insensitively. Longer paths (\\wsl$\<distro>...) are not the list
+// level and report false.
+func IsWSLDistrosRoot(path string) bool {
+	trimmed := strings.TrimRight(strings.TrimSpace(path), `/\`)
+	if len(trimmed) < 2 || !IsWSLSep(trimmed[0]) || !IsWSLSep(trimmed[1]) {
+		return false
+	}
+	rest := trimmed[2:]
+	if indexWSLSep(rest) >= 0 {
+		return false
+	}
+	host := strings.ToLower(rest)
+	return host == `wsl$` || host == "wsl.localhost"
+}
+
+// IsWSLPath reports whether path is a WSL network path per ParseWSLRoot.
+func IsWSLPath(path string) bool {
+	_, _, ok := ParseWSLRoot(strings.TrimSpace(path))
+	return ok
+}
+
+// IsWSLDistroRoot reports a bare distro root such as \\wsl$\Ubuntu, which
+// maps to "/" inside that distro.
+func IsWSLDistroRoot(path string) bool {
+	_, sub, ok := ParseWSLRoot(strings.TrimSpace(path))
+	return ok && sub == "/"
+}
+
 // WSLMntToWindows maps a /mnt/<drive>/... path seen from Windows back to a
 // drive-letter path such as C:\.... Anything else reports false.
 func WSLMntToWindows(p string) (string, bool) {

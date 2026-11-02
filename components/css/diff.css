@@ -103,7 +103,7 @@ keeps the 20px row grid intact. */
 }
 
 .line-revert:focus { outline: 0; }
-.line-revert:focus-visible { outline: 1px solid #f07178; }
+.line-revert:focus-visible { outline: 0; background: rgba(240, 113, 120, 0.15); border-color: rgba(240, 113, 120, 0.4); }
 
 .drow.add .line-revert,
 .drow.del .line-revert { left: 2px; }

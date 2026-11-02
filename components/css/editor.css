@@ -16,6 +16,48 @@
 .editor.focus { box-shadow: inset 0 2px 0 rgba(122, 162, 247, 0.35); }
 .editor-second { border-left: 1px solid var(--line); }
 
+/* Split focus: the idle pane dims its tab strip so the focused side reads
+   at a glance. The accent underline on .focus stays the active marker. */
+.editor.split:not(.focus) .tabstrip { opacity: 0.72; }
+
+/* Split divider: a 6 px col-resize hit strip centered on the gutter between
+   the panes. It paints one quiet line and lights the accent on hover or
+   keyboard focus. */
+.split-divider {
+  position: fixed;
+  top: var(--titlebar-h);
+  bottom: var(--status-h);
+  z-index: 11;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+  transition: background-color 120ms ease;
+}
+
+.split-divider:hover { background-color: rgba(122, 162, 247, 0.32); }
+
+.split-divider:focus { outline: 0; }
+
+.split-grip {
+  width: 1px;
+  background-color: var(--line);
+  color: transparent;
+  font-size: 0;
+  user-select: none;
+}
+
+.split-divider:hover .split-grip { width: 2px; background-color: var(--accent); }
+/* No :focus grip highlight: the engine matches :focus-visible on mouse
+   click too, so a focus highlight would paint a blue line on every click.
+   Hover already gives the affordance; keyboard users keep the pane focus
+   wash via .editor.focus. */
+.split-divider:focus .split-grip { width: 1px; background-color: var(--line); }
+.split-divider:focus-visible .split-grip { width: 1px; background-color: var(--line); }
+
 .tabstrip {
   height: var(--tab-h);
   flex: 0 0 var(--tab-h);
@@ -198,10 +240,55 @@
 .crumb-btn.off { color: #3a4252; }
 .crumb-btn.off:hover { background-color: transparent; border-color: var(--line); color: #3a4252; }
 
-.findbar { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; }
+/* Split panes are half width: a fixed single row cannot hold the status
+   mark, language pill, path, and the Wrap/Blame/Copy buttons, so the
+   buttons push past the pane edge (see the 720 px split overflow where
+   copy-path/copy-file painted beyond the pane). Scoped to split only, the
+   crumbs bar wraps its controls onto a second line inside the pane instead
+   of overflowing right. Single-pane keeps the fixed 30 px single line, so
+   TestFileCrumbPathStaysOnOneLine and editorBodyTop math are untouched;
+   only split panes grow, capped at two rows, and the code body (flex: 1)
+   absorbs the height. */
+.editor.split .crumbs,
+#crumbs-2 {
+  flex: 0 1 auto;
+  height: auto;
+  min-height: var(--crumb-h);
+  max-height: calc(var(--crumb-h) * 2);
+  flex-wrap: wrap;
+  row-gap: 2px;
+  align-content: center;
+  overflow: hidden;
+}
+.editor.split .crumbs .file-path,
+#crumbs-2 .file-path {
+  /* Basis 0 (not content): the path never forces a wrap by itself. It
+     stays on the first line and shrinks with its ellipsis while only the
+     buttons drop to the second line. A content-sized basis would push the
+     path onto line 2 in narrow panes, stacking three lines under the
+     two-row max-height cap and clipping the buttons. */
+  flex: 1 1 0;
+  min-width: 0;
+}
+.editor.split .crumbs .crumb-btn,
+.editor.split .crumbs .crumb-meta,
+#crumbs-2 .crumb-btn,
+#crumbs-2 .crumb-meta {
+  flex: 0 1 auto;
+}
+/* The spring would hold the buttons on the first line until they push past
+   the pane edge; collapsing it lets them wrap to the second line instead.
+   Scoped to crumbs so the tabstrip spring is untouched. */
+.editor.split .crumbs .tabs-fill,
+#crumbs-2 .tabs-fill {
+  flex: 0 0 4px;
+}
+
+.findbar { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; overflow: hidden; }
 .find-input {
   width: 190px;
   min-width: 80px;
+  max-width: 100%;
   height: 21px;
   line-height: 21px;
   text-align: left;
@@ -212,6 +299,9 @@
   background-color: var(--panel-2);
   color: var(--text);
   font-size: 9.5px;
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .find-input:focus { border-color: rgba(122, 162, 247, 0.55); }
 .find-count { display: inline-flex; align-items: center; justify-content: flex-start; text-align: left; height: 21px; color: var(--dim); font-size: 8.5px; white-space: nowrap; }
@@ -227,6 +317,23 @@
   font-size: 9px;
 }
 .find-btn:hover, .find-btn.on { border-color: rgba(122, 162, 247, 0.5); background-color: var(--accent-soft); color: var(--accent); }
+.find-btn.text { width: auto; padding: 0 8px; font-size: 8.5px; }
+.find-btn.text:disabled { opacity: 0.45; cursor: default; }
+/* The crumbs bar is a fixed 30 px header: Go's scroll math bakes that height
+   into editorBodyTop, row windowing, and hit testing, so the find bar must
+   never grow a second row, even with the replace row or a validation error
+   open. Everything shares one wrapped-never row; the two text fields shrink
+   while buttons keep their size, and any tail clips inside the bar instead
+   of painting over the code. The !important widths beat the zoom override's
+   fixed 190 px so the fields stay flexible at every zoom. */
+.findbar.with-replace { flex-wrap: nowrap; row-gap: 0; }
+.findbar.with-replace .find-input {
+  flex: 1 1 0 !important;
+  width: auto !important;
+  min-width: 0 !important;
+}
+.replace-row { display: flex; align-items: center; gap: 5px; flex: 1 1 auto; min-width: 0; flex-basis: auto; overflow: hidden; }
+.find-error { flex: 0 1 auto; min-width: 0; flex-basis: auto; color: #e8a0a0; font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .editor-scroll-thumb { position: absolute; right: 8px; width: 8px; z-index: 40; background-color: var(--muted); cursor: ns-resize; }
 
@@ -316,7 +423,77 @@
   background-color: var(--text);
 }
 
+/* Preview tabs render italic; pinned tabs carry a pin marker. Dirty stays
+   orthogonal: the dot renders alongside either state. */
+.tab.preview-tab .preview-name { font-style: italic; }
+.tab-pin {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 1;
+}
+
 .track { position: absolute; left: 0; right: 0; top: 0; }
+
+/* Sticky scroll ------------------------------------------------------------
+   Pinned enclosing-symbol headers above the code. The block is absolutely
+   positioned at the top of the code body (Go shifts the .track down by its
+   height), so the headers stay put while the rows window underneath them.
+   Heights ride var(--row-h) and the gutter spans reuse .gutter-mark/.ln,
+   so zoom scaling and the gutter layout apply without extra rules. */
+
+.code-sticky {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* No z-index: the engine flattens an explicit z-index into a global band
+     instead of nesting it, so z-index 5 painted this block below the band-10
+     editor fills and the code-body background covered it. Unset, it inherits
+     band 10 with the rows, and DOM order (sticky after .track) paints it on
+     top. See .gutter-mark/.ln for the same trap. */
+  background-color: var(--bg);
+  border-bottom: 1px solid var(--line-soft);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
+}
+
+.srow {
+  width: 100%;
+  height: var(--row-h);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 22px 0 0;
+  border: 0;
+  background-color: var(--panel-2);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: var(--row-h);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.srow:hover { background-color: var(--panel-3); color: var(--text); }
+
+.sticky-kind {
+  flex: 0 0 auto;
+  min-width: 36px;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.sticky-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+  font-family: var(--mono);
+}
 
 .crow { position: relative; height: var(--row-h); display: flex; align-items: stretch; overflow: hidden; }
 .edit-line-hit {
@@ -375,12 +552,13 @@
   color: var(--text);
   text-align: left;
   font-size: 11px;
-  line-height: 26px;
+  line-height: normal;
 }
 .ctx-item:hover { background-color: var(--panel-3); color: var(--text); }
 .ctx-item:disabled { color: var(--dim); }
-.ctx-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ctx-hint { flex: 0 0 auto; margin-left: 24px; color: var(--dim); font-size: 10px; }
+.ctx-sep { height: 1px; margin: 4px 10px; background-color: var(--line); }
+.ctx-label { flex: 1; align-self: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: normal; }
+.ctx-hint { flex: 0 0 auto; align-self: center; margin-left: 24px; color: var(--dim); font-size: 10px; line-height: normal; }
 @keyframes edit-blink { from { opacity: 1; } to { opacity: 0; } }
 .crow.line-add, .crow.line-mod { background-color: var(--green-bg); }
 .crow.line-del { background-color: var(--red-bg); }
@@ -431,6 +609,33 @@ button.ln:hover { color: var(--text); }
 button.ln:focus { outline: 0; }
 
 .ln.cont { color: var(--dim); font-size: 9px; }
+
+/* Blame gutter: one short hash per first visual row. The column paints only
+   while .BlameShow holds, and the code hit areas shift right with it (see
+   the .code-body.blame rule below and the zoom override). Uncommitted lines
+   read "Not committed" with an ellipsis; the full text stays in the title. */
+.blame {
+  width: 72px;
+  flex: 0 0 72px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding-right: 8px;
+  text-align: left;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: var(--row-h);
+}
+
+button.blame { padding: 0 8px 0 0; border: 0; background: transparent; cursor: pointer; }
+button.blame:hover { color: var(--text); }
+button.blame:focus { outline: 0; }
+.blame.uncommitted { font-style: italic; }
+
+/* While the blame column shows, the click-to-edit surfaces start past it:
+   60 px of mark+number gutter plus the 72 px blame column. */
+.code-body.blame .edit-surface, .code-body.blame .edit-line-hit { left: 132px; }
 
 .cline {
   position: relative;

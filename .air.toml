@@ -1,0 +1,17 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/own-code ./cmd/own-code"
+  bin = "./tmp/own-code"
+  include_ext = ["go", "html", "css"]
+  exclude_dir = ["vendor", "tmp", ".git", "docs", "plans", "fixtures"]
+  exclude_regex = ["_test\\.go"]
+  delay = 1000
+  # The TUI owns the terminal, so send Ctrl+C rather than killing outright.
+  send_interrupt = true
+  kill_delay = "1s"
+  clean_on_exit = true
+
+[log]
+  time = true

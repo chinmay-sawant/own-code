@@ -72,6 +72,9 @@ type Session struct {
 	ioMu      sync.Mutex
 	ioClosed  bool
 	closeErr  error
+
+	notifyMu sync.Mutex
+	notify   func()
 }
 
 // Manager owns shell sessions. Open makes the new session active. Exited
@@ -81,6 +84,20 @@ type Manager struct {
 	nextID   int
 	sessions map[int]*Session
 	active   int
+	notify   func()
+}
+
+// SetNotify registers a callback the manager invokes from its reader
+// goroutine after shell output reaches a screen. The app uses it to ask
+// the window for a frame, so typed echo and command output paint without
+// waiting for the next incidental frame.
+func (m *Manager) SetNotify(fn func()) {
+	m.mu.Lock()
+	m.notify = fn
+	for _, session := range m.sessions {
+		session.setNotify(fn)
+	}
+	m.mu.Unlock()
 }
 
 // DefaultShell returns the platform shell used when Config.Shell is empty.
@@ -130,7 +147,10 @@ func (m *Manager) Open(cfg Config) (int, error) {
 	}
 	m.sessions[id] = session
 	m.active = id
+	notify := m.notify
 	m.mu.Unlock()
+
+	session.setNotify(notify)
 
 	go session.readLoop()
 	return id, nil
@@ -290,7 +310,15 @@ func (s *Session) ID() int {
 // Snapshot returns a copy of the terminal screen with session state filled in.
 func (s *Session) Snapshot() Snapshot {
 	snapshot := s.screen.Snapshot()
+	return s.snapshotState(snapshot)
+}
 
+// SnapshotViewport returns a bounded copy of a session's output.
+func (s *Session) SnapshotViewport(rows, scroll int) Snapshot {
+	return s.snapshotState(s.screen.SnapshotViewport(rows, scroll))
+}
+
+func (s *Session) snapshotState(snapshot Snapshot) Snapshot {
 	s.mu.Lock()
 	snapshot.Title = s.title
 	snapshot.Running = s.running
@@ -359,6 +387,7 @@ func (s *Session) readLoop() {
 		n, err := s.term.Read(buf)
 		if n > 0 {
 			s.screen.Feed(buf[:n])
+			s.emitOutput()
 		}
 		if err != nil {
 			break
@@ -373,6 +402,7 @@ func (s *Session) readLoop() {
 	s.exitCode = exitCode
 	s.mu.Unlock()
 
+	s.emitOutput()
 	close(s.done)
 }
 
@@ -416,6 +446,24 @@ func (s *Session) closeIO() {
 		_ = s.term.Close()
 		s.ioMu.Unlock()
 	})
+}
+
+// setNotify replaces the output callback. A nil callback disables it.
+func (s *Session) setNotify(fn func()) {
+	s.notifyMu.Lock()
+	s.notify = fn
+	s.notifyMu.Unlock()
+}
+
+// emitOutput runs the output callback, if any, outside the session locks.
+func (s *Session) emitOutput() {
+	s.notifyMu.Lock()
+	fn := s.notify
+	s.notifyMu.Unlock()
+
+	if fn != nil {
+		fn()
+	}
 }
 
 func exitCode(err error) int {

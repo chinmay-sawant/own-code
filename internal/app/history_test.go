@@ -718,6 +718,7 @@ func TestTreeExpandedFolderScrolls(t *testing.T) {
 	}
 
 	clickID(t, app, "tree-many")
+	drainDirLoads(t, app)
 
 	if err := app.Page().Redraw(context.Background()); err != nil {
 		t.Fatal(err)
@@ -1024,6 +1025,7 @@ func TestTreeWheelAfterPageScroll(t *testing.T) {
 	}
 
 	clickID(t, app, "tree-many")
+	drainDirLoads(t, app)
 	app.scrollTo(400)
 	app.Page().Scroll().SetScrollOffset(0, 400)
 

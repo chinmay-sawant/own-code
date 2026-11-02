@@ -700,3 +700,32 @@ func TestRenderDoesNotMutateSnapshot(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderPartialViewport(t *testing.T) {
+	s := terminal.NewScreen(20, 4)
+	s.Feed([]byte(strings.Repeat("line\r\n", 30)))
+	for _, scroll := range []int{0, 2, 25, 5000} {
+		full := s.Snapshot()
+		full.Running = true
+		partial := s.SnapshotViewport(4, scroll)
+		partial.Running = true
+		want := Render(full, 4, scroll)
+		got := Render(partial, 4, scroll)
+		if fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Fatalf("scroll %d: partial %v differs from full %v", scroll, got, want)
+		}
+	}
+}
+
+func TestNativeModifierKeyNames(t *testing.T) {
+	for key, want := range map[string]string{
+		"ctrl+arrowleft":  "\x1b[1;5D",
+		"alt+arrowright":  "\x1b[1;3C",
+		"ctrl+shift+home": "\x1b[1;6H",
+	} {
+		got, ok := KeyBytesFor(key, false, false, false, false)
+		if !ok || string(got) != want {
+			t.Fatalf("%s = %q, %v; want %q", key, got, ok, want)
+		}
+	}
+}

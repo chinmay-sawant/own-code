@@ -125,6 +125,123 @@ func (a *App) clampGroupScroll(group, y int) int {
 	return y
 }
 
+// resetGroupScroll zeroes one group's vertical offset, wheel accumulator,
+// and horizontal offset without touching the other pane. Group 0 also
+// mirrors to the shared page scroll. Prefer this over resetScroll for any
+// split-path tab or file switch.
+func (a *App) resetGroupScroll(group int) {
+	if group != 1 {
+		group = 0
+	}
+
+	if a.tabScroll[group] == nil {
+		a.tabScroll[group] = map[string]int{}
+	}
+
+	a.scrollGroup[group] = 0
+	a.splitWheelAccum[group] = 0
+	a.scrollXGrp[group] = 0
+
+	if group == 0 {
+		a.scrollY = 0
+		a.scrollTarget = 0
+		a.scrollPending = true
+		a.scrollX = 0
+		if a.page != nil {
+			a.page.ScrollTo(0, 0)
+		}
+	}
+
+	a.repositionInlineCard()
+}
+
+// saveRestoreGroupScroll saves the live offset under oldPath (the previously
+// active tab) and restores newPath's remembered offset, or 0 for a first
+// visit. The other group's offsets are untouched. Split-path opens and tab
+// switches use it instead of zeroing the group.
+func (a *App) saveRestoreGroupScroll(group int, oldPath, newPath string) {
+	if group != 1 {
+		group = 0
+	}
+
+	if a.tabScroll[group] == nil {
+		a.tabScroll[group] = map[string]int{}
+	}
+
+	if oldPath != "" {
+		a.tabScroll[group][oldPath] = a.scrollGroup[group]
+	}
+
+	restored := 0
+	if saved, ok := a.tabScroll[group][newPath]; ok {
+		restored = saved
+	}
+
+	a.scrollGroup[group] = a.clampGroupScroll(group, restored)
+	a.splitWheelAccum[group] = 0
+
+	if group == 0 {
+		a.scrollY = a.scrollGroup[0]
+		a.scrollTarget = a.scrollY
+		a.scrollPending = true
+		if a.page != nil {
+			a.page.ScrollTo(0, a.scrollY)
+		}
+	}
+
+	a.repositionInlineCard()
+}
+
+// restoreActiveGroupScroll restores the group's live active tab remembered
+// offset, or 0. Tab closes use it after removing the tab: the closed tab
+// keeps its last offset under its own path for a later reopen. Closing a
+// background tab leaves the live offset alone, since the remembered value
+// for the active tab is older than its live offset.
+func (a *App) restoreActiveGroupScroll(group int, closedPath string, closedWasActive bool) {
+	if group != 1 {
+		group = 0
+	}
+
+	if a.tabScroll[group] == nil {
+		a.tabScroll[group] = map[string]int{}
+	}
+
+	if closedWasActive && closedPath != "" {
+		a.tabScroll[group][closedPath] = a.scrollGroup[group]
+	}
+
+	if !closedWasActive {
+		return
+	}
+
+	tabs := a.groupTabs(group)
+	active := a.groupActive(group)
+
+	newPath := ""
+	if active >= 0 && active < len(tabs) {
+		newPath = tabs[active]
+	}
+
+	restored := 0
+	if saved, ok := a.tabScroll[group][newPath]; ok && newPath != "" {
+		restored = saved
+	}
+
+	a.scrollGroup[group] = a.clampGroupScroll(group, restored)
+	a.splitWheelAccum[group] = 0
+
+	if group == 0 {
+		a.scrollY = a.scrollGroup[0]
+		a.scrollTarget = a.scrollY
+		a.scrollPending = true
+		if a.page != nil {
+			a.page.ScrollTo(0, a.scrollY)
+		}
+	}
+
+	a.repositionInlineCard()
+}
+
 // scrollGroupBy shifts group's vertical scroll offset by delta pixels, clamped to bounds.
 func (a *App) scrollGroupBy(group, delta int) {
 	if group != 0 && group != 1 {

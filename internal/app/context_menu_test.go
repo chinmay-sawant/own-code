@@ -14,11 +14,11 @@ func TestContextMenuTabRows(t *testing.T) {
 	app.openFile("backend/probe.go")
 
 	rows := app.ContextMenuFor("tab-0")
-	if len(rows) != 5 {
-		t.Fatalf("rows = %d, want 5", len(rows))
+	if len(rows) != 7 {
+		t.Fatalf("rows = %d, want 7", len(rows))
 	}
 
-	labels := []string{"Close", "Close Others", "Close All", "Close All to the Left", "Close All to the Right"}
+	labels := []string{"Unpin Tab", "Close", "Close Others", "Close All to the Left", "Close All to the Right", "Close All", "Reopen Closed Tab"}
 	for i, label := range labels {
 		if rows[i].Label != label {
 			t.Errorf("row %d label = %q, want %q", i, rows[i].Label, label)
@@ -28,9 +28,15 @@ func TestContextMenuTabRows(t *testing.T) {
 			t.Errorf("row %d id = %q, want the code-view prefix", i, rows[i].ID)
 		}
 
-		if !rows[i].Enabled && i != 3 {
+		// tab-0 is the leftmost tab (Close Left disabled) and nothing has
+		// been closed yet (Reopen disabled).
+		if !rows[i].Enabled && i != 3 && i != 6 {
 			t.Errorf("row %d %q is disabled with two tabs", i, rows[i].Label)
 		}
+	}
+
+	if rows[0].ID != "code-view:tab-unpin:0:0" {
+		t.Errorf("pin row id = %q, want the unpin id for the pinned README", rows[0].ID)
 	}
 
 	if rows := app.ContextMenuFor("tab-details"); len(rows) != 0 {
@@ -90,11 +96,11 @@ func TestContextMenuCloseOthersNeedsTwoTabs(t *testing.T) {
 	app := newTestApp(t)
 
 	rows := app.ContextMenuFor("tab-0")
-	if len(rows) != 5 {
-		t.Fatalf("rows = %d, want 5", len(rows))
+	if len(rows) != 7 {
+		t.Fatalf("rows = %d, want 7", len(rows))
 	}
 
-	if rows[1].Enabled {
+	if rows[2].Enabled {
 		t.Fatal("Close Others is enabled with one tab")
 	}
 }
@@ -104,11 +110,12 @@ func TestContextMenuCloseAll(t *testing.T) {
 	app.openFile("backend/probe.go")
 
 	rows := app.ContextMenuFor("tab-0")
-	if len(rows) != 5 {
-		t.Fatalf("rows = %d, want 5", len(rows))
+	if len(rows) != 7 {
+		t.Fatalf("rows = %d, want 7", len(rows))
 	}
 
-	if err := app.MenuAction(context.Background(), rows[2].ID); err != nil {
+	// Close All is explicit and closes pinned tabs too.
+	if err := app.MenuAction(context.Background(), rows[5].ID); err != nil {
 		t.Fatalf("MenuAction: %v", err)
 	}
 
@@ -136,6 +143,16 @@ func TestPageMenuClosesTheTab(t *testing.T) {
 		t.Fatal("tab has no menu rows")
 	}
 
+	closeIdx := -1
+	for i, row := range rows {
+		if row.Label == "Close" {
+			closeIdx = i
+		}
+	}
+	if closeIdx < 0 {
+		t.Fatal("tab menu has no Close row")
+	}
+
 	if !app.presentMenu(40, 50, rows) || !app.View().MenuOpen {
 		t.Fatal("page menu did not open")
 	}
@@ -144,7 +161,7 @@ func TestPageMenuClosesTheTab(t *testing.T) {
 		t.Fatalf("menu origin = %d,%d", app.View().MenuX, app.View().MenuY)
 	}
 
-	box, ok := boxByID(app.Page().Boxes(), "ctx-0")
+	box, ok := boxByID(app.Page().Boxes(), "ctx-"+itoa(closeIdx))
 	if !ok {
 		t.Fatal("menu row was not painted")
 	}
@@ -238,7 +255,17 @@ func TestPageMenuLabelIsVerticallyCentered(t *testing.T) {
 		t.Fatal("page menu did not open")
 	}
 
-	box, ok := boxByID(app.Page().Boxes(), "ctx-0")
+	closeIdx := -1
+	for i, row := range rows {
+		if row.Label == "Close" {
+			closeIdx = i
+		}
+	}
+	if closeIdx < 0 {
+		t.Fatal("tab menu has no Close row")
+	}
+
+	box, ok := boxByID(app.Page().Boxes(), "ctx-"+itoa(closeIdx))
 	if !ok {
 		t.Fatal("menu row was not painted")
 	}

@@ -12,11 +12,17 @@ import (
 	"github.com/chinmay-sawant/own-code/internal/terminal"
 )
 
-// Segment is a run of text that shares one terminal style.
+// Segment is a run of text that shares one terminal style. LinkPath is empty
+// for plain text; when set, the segment is one piece of a clickable file
+// location with its 1-based line and 0-or-1-based column (0 means the row
+// carried no column).
 type Segment struct {
 	Text string
 	// Class holds space-separated CSS classes such as "fg1 bg4 bold".
-	Class string
+	Class    string
+	LinkPath string
+	LinkLine int
+	LinkCol  int
 }
 
 // Row is one rendered terminal line.
@@ -56,16 +62,15 @@ func Render(snapshot terminal.Snapshot, visibleRows, scroll int) View {
 	}
 
 	total := len(snapshot.Lines)
+	if snapshot.TotalLines > 0 {
+		total = snapshot.TotalLines
+	}
 	scroll, maxScroll := ClampScroll(scroll, total, visibleRows)
 
-	start := total - visibleRows - scroll
-	if start < 0 {
-		start = 0
-	}
-	end := start + visibleRows
-	if end > total {
-		end = total
-	}
+	start := max(0, total-visibleRows-scroll)
+	end := min(total, start+visibleRows)
+	start = max(start, snapshot.LineOffset)
+	end = max(start, min(end, snapshot.LineOffset+len(snapshot.Lines)))
 
 	view := View{
 		Rows:      make([]Row, 0, end-start),
@@ -77,7 +82,7 @@ func Render(snapshot terminal.Snapshot, visibleRows, scroll int) View {
 	cursorLine := -1
 	if snapshot.CursorVisible && snapshot.Running &&
 		snapshot.CursorLine >= start && snapshot.CursorLine < end {
-		lineLen := len(snapshot.Lines[snapshot.CursorLine])
+		lineLen := len(snapshot.Lines[snapshot.CursorLine-snapshot.LineOffset])
 		if snapshot.CursorCol >= 0 && snapshot.CursorCol <= lineLen {
 			cursorLine = snapshot.CursorLine
 			view.CursorRow = snapshot.CursorLine
@@ -87,7 +92,7 @@ func Render(snapshot terminal.Snapshot, visibleRows, scroll int) View {
 
 	for line := start; line < end; line++ {
 		view.Rows = append(view.Rows, renderLine(
-			snapshot.Lines[line],
+			snapshot.Lines[line-snapshot.LineOffset],
 			line == cursorLine,
 			snapshot.CursorCol,
 		))
@@ -98,6 +103,11 @@ func Render(snapshot terminal.Snapshot, visibleRows, scroll int) View {
 
 // renderLine converts one snapshot line to merged style segments. The cursor
 // cell is kept in its own segment so only that cell gets the cursor class.
+// File locations from ParseTerminalLinks split the style runs further: each
+// link piece keeps its style, gains the underline class, and carries the
+// link target for the template's click button. Links are recomputed from the
+// row text on every render so scrollback windows keep working without stored
+// per-frame state.
 func renderLine(line terminal.Line, cursor bool, cursorCol int) Row {
 	end := len(line)
 	for end > 0 && isDefaultBlank(line[end-1]) {
@@ -140,7 +150,111 @@ func renderLine(line terminal.Line, cursor bool, cursorCol int) Row {
 		i = j
 	}
 
-	return Row{Segments: segments, Empty: empty}
+	return Row{Segments: applyRowLinks(segments), Empty: empty}
+}
+
+// applyRowLinks splits style segments at file-link boundaries. It joins the
+// segment texts into the row's plain text, parses links once for the visible
+// row, and re-slices each segment so link pieces underline and carry their
+// target. Only visible rows reach here, so parse work stays bounded.
+func applyRowLinks(segments []Segment) []Segment {
+	var b strings.Builder
+	for _, seg := range segments {
+		b.WriteString(seg.Text)
+	}
+	rowText := b.String()
+	links := ParseTerminalLinks(rowText)
+	if len(links) == 0 {
+		return segments
+	}
+
+	rowRunes := len([]rune(rowText))
+	_ = rowRunes
+
+	out := make([]Segment, 0, len(segments)+len(links)*2)
+	offset := 0
+	for _, seg := range segments {
+		segRunes := []rune(seg.Text)
+		segLen := len(segRunes)
+		segStart := offset
+		segEnd := offset + segLen
+		if segLen == 0 {
+			continue
+		}
+		cuts := []int{0, segLen}
+		for _, l := range links {
+			if l.End <= segStart || l.Start >= segEnd {
+				continue
+			}
+			lo := l.Start - segStart
+			if lo < 0 {
+				lo = 0
+			}
+			if lo > 0 && lo < segLen {
+				cuts = append(cuts, lo)
+			}
+			hi := l.End - segStart
+			if hi < 0 {
+				hi = 0
+			}
+			if hi > 0 && hi < segLen {
+				cuts = append(cuts, hi)
+			}
+		}
+		if len(cuts) == 2 {
+			out = append(out, withLinkPiece(seg, segRunes, 0, segLen, segStart, links))
+			offset += segLen
+			continue
+		}
+		sortRunes(cuts)
+		uniq := cuts[:0]
+		for _, c := range cuts {
+			if len(uniq) == 0 || uniq[len(uniq)-1] != c {
+				uniq = append(uniq, c)
+			}
+		}
+		for k := 0; k+1 < len(uniq); k++ {
+			out = append(out, withLinkPiece(seg, segRunes, uniq[k], uniq[k+1], segStart, links))
+		}
+		offset += segLen
+	}
+	if len(out) == 0 {
+		return segments
+	}
+	return out
+}
+
+func withLinkPiece(seg Segment, runes []rune, from, to, segStart int, links []Link) Segment {
+	text := string(runes[from:to])
+	globalStart := segStart + from
+	globalEnd := segStart + to
+	for _, l := range links {
+		if l.Start <= globalStart && globalEnd <= l.End {
+			class := seg.Class
+			if !hasToken(class, "underline") {
+				class = appendClass(class, "underline")
+			}
+			return Segment{Text: text, Class: class, LinkPath: l.Path, LinkLine: l.Line, LinkCol: l.Col}
+		}
+	}
+	return Segment{Text: text, Class: seg.Class}
+}
+
+func sortRunes(v []int) {
+	for i := 1; i < len(v); i++ {
+		for j := i; j > 0 && v[j] < v[j-1]; j-- {
+			v[j], v[j-1] = v[j-1], v[j]
+		}
+	}
+}
+
+func hasToken(class, want string) bool {
+	for _, tok := range strings.Fields(class) {
+		if tok == want {
+			return true
+		}
+	}
+	return false
 }
 
 // cellStyle is the effective style after applying reverse video.
@@ -254,6 +368,24 @@ func KeyBytes(key string, ctrl, shift, alt bool) ([]byte, bool) {
 // is true, unmodified arrows and Home/End use the SS3 forms the shell asked
 // for; modified keys keep the CSI form.
 func KeyBytesFor(key string, ctrl, shift, alt, appCursor bool) ([]byte, bool) {
+	// The native window sends modifier prefixes on caret keys.
+	for {
+		prefix, rest, ok := strings.Cut(key, "+")
+		if !ok {
+			break
+		}
+		switch prefix {
+		case "ctrl":
+			ctrl = true
+		case "shift":
+			shift = true
+		case "alt":
+			alt = true
+		default:
+			return nil, false
+		}
+		key = rest
+	}
 	name := key
 	if len(name) > 1 {
 		name = strings.ToLower(name)

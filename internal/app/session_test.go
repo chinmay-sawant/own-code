@@ -73,12 +73,13 @@ func TestSessionRoundTrip(t *testing.T) {
 		t.Fatalf("load capped state: %v", err)
 	}
 
-	if len(capped.Tabs) != sessionMaxPaths || len(capped.Recents) != sessionMaxPaths {
-		t.Fatalf("caps: tabs = %d, recents = %d", len(capped.Tabs), len(capped.Recents))
+	// Tabs are unlimited and survive the round trip; recents stay budgeted.
+	if len(capped.Tabs) != len(many) {
+		t.Fatalf("tabs = %d, want all %d", len(capped.Tabs), len(many))
 	}
 
-	if capped.Tabs[sessionMaxPaths-1] != many[sessionMaxPaths-1] {
-		t.Fatalf("cap kept %q, want the first %d entries", capped.Tabs[sessionMaxPaths-1], sessionMaxPaths)
+	if len(capped.Recents) != sessionMaxPaths {
+		t.Fatalf("recents = %d, want cap %d", len(capped.Recents), sessionMaxPaths)
 	}
 
 	leftovers, err := filepath.Glob(filepath.Join(dir, ".session-*"))
@@ -231,8 +232,12 @@ func TestSessionSanitizes(t *testing.T) {
 	}
 
 	capped := sessionState{Tabs: many, Recents: many}.sanitize("root")
-	if len(capped.Tabs) != sessionMaxPaths || len(capped.Recents) != sessionMaxPaths {
-		t.Fatalf("sanitize caps: tabs = %d, recents = %d", len(capped.Tabs), len(capped.Recents))
+	if len(capped.Tabs) != len(many) {
+		t.Fatalf("sanitize tabs = %d, want all %d", len(capped.Tabs), len(many))
+	}
+
+	if len(capped.Recents) != sessionMaxPaths {
+		t.Fatalf("sanitize recents = %d, want cap %d", len(capped.Recents), sessionMaxPaths)
 	}
 }
 

@@ -14,7 +14,7 @@ import (
 
 const (
 	termRowH          = 16
-	termCellW         = 7.3
+	termCellW         = 7.2 // monospace advance at the 12 px terminal face, matching diffCellW
 	termDefaultHeight = 240
 	termMinHeight     = 120
 
@@ -27,10 +27,24 @@ const (
 	termTopGap   = 80
 )
 
-// Close stops every terminal shell. It is safe to call more than once and
-// when New never ran.
+// Close stops every terminal shell, the commit patch worker, and the
+// directory loader. It is safe to call more than once and when New never ran.
 func (a *App) Close() {
-	if a == nil || a.term == nil {
+	if a == nil {
+		return
+	}
+
+	a.stopDirLoader()
+
+	if a.patchLoader != nil {
+		a.patchLoader.Close()
+	}
+
+	if a.blameLoader != nil {
+		a.blameLoader.Close()
+	}
+
+	if a.term == nil {
 		return
 	}
 
@@ -130,13 +144,32 @@ func (a *App) terminalMaxScroll() int {
 	return max(0, a.termTotalLines-a.termVisibleRows())
 }
 
+// requestTerminalFrame asks the window for a frame on shell output. It runs
+// on the PTY reader goroutine, like the watcher loop's frame requests.
+func (a *App) requestTerminalFrame() {
+	if a.page != nil {
+		a.page.WantFrameIn(0)
+	}
+}
+
+// newTerminalManager creates the session manager and hooks shell output to
+// frame requests, so typed echo and command output paint on the next frame
+// instead of waiting for an unrelated repaint.
+func (a *App) newTerminalManager() *terminal.Manager {
+	m := terminal.NewManager()
+	m.SetNotify(a.requestTerminalFrame)
+
+	return m
+}
+
 // startTerminalSession opens one shell in the workspace root. Failures keep
 // the panel open with a note instead of crashing or retrying on their own.
 func (a *App) startTerminalSession(ctx context.Context) {
 	a.termOpen = true
+	_ = a.page.Form().Focus(ctx, "")
 
 	if a.term == nil {
-		a.term = terminal.NewManager()
+		a.term = a.newTerminalManager()
 	}
 
 	shell := a.terminalShell()
@@ -185,7 +218,7 @@ func (a *App) toggleTerminal(ctx context.Context) {
 	a.termOpen = true
 
 	if a.term == nil {
-		a.term = terminal.NewManager()
+		a.term = a.newTerminalManager()
 	}
 
 	if _, session := a.term.Active(); session == nil {
@@ -197,6 +230,7 @@ func (a *App) toggleTerminal(ctx context.Context) {
 	a.termFocus = true
 	a.termCols = 0
 	a.termRows = 0
+	_ = a.page.Form().Focus(ctx, "")
 	a.syncTerminalSize(ctx)
 	a.refresh()
 }
@@ -218,6 +252,7 @@ func (a *App) pickTerminal(ctx context.Context, id int) {
 	}
 
 	a.term.SetActive(id)
+	_ = a.page.Form().Focus(ctx, "")
 	a.termFocus = true
 	a.termScroll = 0
 	a.termVersion = 0
@@ -328,7 +363,7 @@ func (a *App) pasteTerminalClipboard() {
 // terminalOwnsKeys reports whether typed keys and clipboard chords belong to
 // the terminal rather than the editor or a focused form field.
 func (a *App) terminalOwnsKeys() bool {
-	return a.termOpen && a.termFocus && !a.settingsOpen && !a.editing &&
+	return a.termOpen && a.termFocus && !a.settingsOpen && !a.confirmOpen &&
 		a.page != nil && a.page.Form().FocusID() == ""
 }
 
@@ -407,7 +442,7 @@ func (a *App) pollTerminal(ctx context.Context) {
 		return
 	}
 
-	id, session := a.term.Active()
+	_, session := a.term.Active()
 	if session == nil {
 		sessions := a.term.Sessions()
 		if len(sessions) == 0 {
@@ -415,7 +450,7 @@ func (a *App) pollTerminal(ctx context.Context) {
 		}
 
 		a.term.SetActive(sessions[0].ID)
-		id, session = a.term.Active()
+		_, session = a.term.Active()
 		if session == nil {
 			return
 		}
@@ -428,12 +463,9 @@ func (a *App) pollTerminal(ctx context.Context) {
 		return
 	}
 
-	snapshot, ok := a.term.Snapshot(id)
-	if !ok {
-		return
-	}
+	snapshot := session.SnapshotViewport(1, 0)
 
-	total := len(snapshot.Lines)
+	total := snapshot.TotalLines
 	if a.termScroll > 0 && total > a.termTotalLines {
 		// New output lands at the bottom. Keep the reader on the same lines
 		// instead of letting the viewport follow the tail.
@@ -465,7 +497,11 @@ func (a *App) terminalView() terminalView {
 	var snapshot terminal.Snapshot
 
 	if a.termOpen && a.term != nil && activeID != 0 {
-		snapshot, hasSnapshot = a.term.Snapshot(activeID)
+		_, session := a.term.Active()
+		if session != nil {
+			snapshot = session.SnapshotViewport(a.termVisibleRows(), a.termScroll)
+			hasSnapshot = true
+		}
 	}
 
 	view := terminalViewState(

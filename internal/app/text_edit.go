@@ -41,6 +41,12 @@ func (a *App) onType(ctx context.Context, text string) error {
 		return nil
 	}
 
+	// The goto and symbol overlays open while editing; the binder owns
+	// their field text, so typed characters must not reach the buffer.
+	if a.gotoOverlayCapturesKeys() {
+		return nil
+	}
+
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
 	text = strings.ReplaceAll(text, "\t", tabSpaces)
@@ -61,6 +67,10 @@ func (a *App) onBackspace(ctx context.Context) error {
 	}
 
 	if !a.editing || a.edit == nil {
+		return nil
+	}
+
+	if a.gotoOverlayCapturesKeys() {
 		return nil
 	}
 
@@ -85,6 +95,10 @@ func (a *App) onDeleteWord(ctx context.Context) error {
 	}
 
 	if !a.editing || a.edit == nil {
+		return nil
+	}
+
+	if a.gotoOverlayCapturesKeys() {
 		return nil
 	}
 
@@ -130,6 +144,10 @@ func (a *App) onCut(ctx context.Context) (string, bool, error) {
 		return "", false, nil
 	}
 
+	if a.gotoOverlayCapturesKeys() {
+		return "", false, nil
+	}
+
 	text, start, end := a.editSelection()
 	if start == end {
 		return "", false, nil
@@ -158,6 +176,10 @@ func (a *App) onPaste(ctx context.Context, text string) error {
 		return nil
 	}
 
+	if a.gotoOverlayCapturesKeys() {
+		return nil
+	}
+
 	if a.editing && a.edit != nil {
 		return a.onType(ctx, text)
 	}
@@ -181,6 +203,10 @@ func (a *App) onSelectAll(ctx context.Context) error {
 		return nil
 	}
 
+	if a.gotoOverlayCapturesKeys() {
+		return nil
+	}
+
 	if a.settingsOpen || !a.editing || a.edit == nil {
 		return nil
 	}
@@ -197,6 +223,10 @@ func (a *App) onSelectAll(ctx context.Context) error {
 // histories never clobber each other.
 func (a *App) onUndo(ctx context.Context) error {
 	if a.terminalOwnsKeys() {
+		return nil
+	}
+
+	if a.gotoOverlayCapturesKeys() {
 		return nil
 	}
 
@@ -229,6 +259,10 @@ func (a *App) onUndo(ctx context.Context) error {
 // revert when the editor is closed.
 func (a *App) onRedo(ctx context.Context) error {
 	if a.terminalOwnsKeys() {
+		return nil
+	}
+
+	if a.gotoOverlayCapturesKeys() {
 		return nil
 	}
 
@@ -265,11 +299,100 @@ func (a *App) editKey(ctx context.Context, key string) error {
 	}
 
 	if a.ctrl {
+		// Rebound chords fire here too: the allows gates below kill the
+		// defaults they replace, and the dispatcher runs the replacement
+		// (unreachable past this branch in onKeyDown). Plain typing never
+		// reaches this branch (it arrives via onType), so buffer text and
+		// the window copy/paste/undo chords stay safe.
+		if handled, err := a.dispatchCustomKeymap(ctx, key); handled || err != nil {
+			return err
+		}
+
 		switch key {
 		case "s":
 			a.saveEdit()
 
 			return a.page.Redraw(ctx)
+		case "f":
+			// Ctrl+F opens the find bar from edit mode, and Ctrl+Shift+F
+			// the workspace search. The bar lives in the token-view
+			// crumbs, so the buffer folds first (dirty text is kept) and
+			// the bar becomes visible.
+			if a.shift {
+				if !a.keymapAllows("workspace-search", key) {
+					return nil
+				}
+
+				a.finishEdit()
+
+				return a.openWorkspaceSearch(ctx)
+			}
+
+			if !a.keymapAllows("find-in-file", key) {
+				return nil
+			}
+
+			a.finishEdit()
+
+			return a.openFind(ctx)
+		case "g":
+			// Ctrl+G opens the go-to-line overlay, in or out of edit mode.
+			// Key recon: the window sends "g" with the ctrl flag tracked
+			// from the separate control key event.
+			return a.openGotoPalette(ctx)
+		case "h":
+			// Ctrl+H opens the replace bar from edit mode, and
+			// Ctrl+Shift+H the workspace replace. The selection seeds the
+			// query before the fold, like the token-view path.
+			if a.shift {
+				if !a.keymapAllows("workspace-replace", key) {
+					return nil
+				}
+
+				a.finishEdit()
+
+				return a.openWorkspaceReplace(ctx)
+			}
+
+			if !a.keymapAllows("replace-in-file", key) {
+				return nil
+			}
+
+			if strings.TrimSpace(a.findQuery) == "" {
+				if seed, ok := a.replaceSeedQuery(); ok {
+					a.findQuery = clampFieldLen(seed)
+					a.page.Form().SetFormValue("find", a.findQuery)
+				}
+			}
+
+			a.finishEdit()
+
+			return a.openReplace(ctx)
+		case "o":
+			// Ctrl+Shift+O opens the file-scoped symbol overlay. A plain
+			// Ctrl+O keeps its old no-op.
+			if a.shift {
+				return a.openSymbolPalette(ctx)
+			}
+
+			return nil
+		case "m":
+			// Ctrl+M jumps to the matching bracket; Ctrl+Shift+M selects
+			// to it. Brackets inside strings and comments are skipped.
+			return a.jumpToBracket(ctx, a.shift)
+		case "d":
+			// Ctrl+D jumps to the definition under the caret. The allows
+			// gate kills the chord when the action is rebound; the
+			// dispatcher below fires the replacement.
+			if !a.keymapAllows("goto-definition", key) {
+				return nil
+			}
+
+			return a.gotoDefinitionAtCaret(ctx)
+		case "slash", "/":
+			// Ctrl+/ toggles line comments. Both key names arrive
+			// depending on layout and window mapping.
+			return a.toggleLineComment(ctx)
 		default:
 			return nil
 		}
@@ -303,7 +426,29 @@ func (a *App) editKey(ctx context.Context, key string) error {
 		}
 
 		return a.replaceEditRange(ctx, text, min(anchor, caret), max(anchor, caret), "")
+	case "tab":
+		// Tab indents (Shift+Tab outdents) while editing, but never steals
+		// focus from an overlay input, the terminal, or a form field: those
+		// keep Tab for navigation. Key recon: "tab" with the shift flag.
+		// onType's tab expansion stays as the fallback for windows that
+		// deliver Tab as text instead of a key.
+		focus := ""
+		if a.page != nil {
+			focus = a.page.Form().FocusID()
+		}
+
+		if a.gotoOverlayCapturesKeys() || a.terminalOwnsKeys() || (focus != "" && focus != "editor" && focus != "edit-surface") {
+			return nil
+		}
+
+		return a.indentSelection(ctx, a.shift)
 	case "escape":
+		// An open goto/symbol overlay closes first; otherwise Esc leaves
+		// edit mode as before.
+		if a.gotoOverlayCapturesKeys() {
+			return a.closePalette(ctx)
+		}
+
 		a.finishEdit()
 		a.refresh()
 
@@ -316,6 +461,8 @@ func (a *App) editKey(ctx context.Context, key string) error {
 		anchor = caret
 	}
 
+	// A caret move drops the bracket-match flash.
+	a.clearBracket()
 	a.editCaret, a.editAnchor = caret, anchor
 	a.ensureEditCaretVisible()
 	a.refresh()
@@ -341,14 +488,19 @@ func (a *App) replaceEditRange(ctx context.Context, text string, start, end int,
 
 	a.pushUndo()
 	a.editRedo = nil
+	a.clearBracket()
 
 	next := make([]rune, 0, len(runes)-(end-start)+len([]rune(insert)))
 	next = append(next, runes[:start]...)
 	next = append(next, []rune(insert)...)
 	next = append(next, runes[end:]...)
 
+	// Typing auto-pins the file so a dirty preview survives.
+	if a.edit != nil {
+		a.autoPinForEdit(a.edit.Path)
+	}
 	a.edit.SetText(string(next))
-	a.dirty[a.edit.Path] = a.edit.Dirty
+	a.setDirty(a.edit.Path, a.edit.Dirty)
 	a.editCaret = start + utf8.RuneCountInString(insert)
 	a.editAnchor = a.editCaret
 	line, _ := a.editDisplayLineCol()
@@ -357,6 +509,7 @@ func (a *App) replaceEditRange(ctx context.Context, text string, start, end int,
 	}
 	a.commitEditBuffer()
 	a.ensureEditCaretVisible()
+	a.scheduleAutoSave()
 	a.refresh()
 
 	return a.page.Redraw(ctx)
@@ -419,10 +572,11 @@ func (a *App) restoreEdit(snap editSnapshot) {
 	}
 
 	a.edit.SetText(snap.Text)
-	a.dirty[a.edit.Path] = a.edit.Dirty
+	a.setDirty(a.edit.Path, a.edit.Dirty)
 	a.editCaret = snap.Caret
 	a.editAnchor = snap.Anchor
 	a.commitEditBuffer()
+	a.scheduleAutoSave()
 }
 
 // ensureEditCaretVisible scrolls the page so the caret's visual row is inside

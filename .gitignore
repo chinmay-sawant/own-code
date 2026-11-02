@@ -34,3 +34,7 @@ Thumbs.db
 # User session files are written to the OS config dir, not here.
 # Kept here so a stray local session file never gets committed.
 session-*.json
+
+# Generated merge-conflict demo repo (testdata/merge-conflicts/setup.sh).
+# It holds a nested .git dir mid-merge and is rebuilt on demand.
+/testdata/merge-conflicts/demo/

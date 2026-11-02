@@ -30,7 +30,7 @@ func (a *App) toggleEdit() {
 	}
 
 	raw, err := a.ws.readFile(doc.Path)
-	if a.dirty[doc.Path] && doc.Err == "" {
+	if a.isDirty(doc.Path) && doc.Err == "" {
 		raw = []byte(strings.Join(doc.Lines, "\n") + "\n")
 		err = nil
 	}
@@ -44,12 +44,15 @@ func (a *App) toggleEdit() {
 
 	a.edit = edit.NewBuffer(doc.Path, raw)
 	a.editing = true
+	// Entering edit mode auto-pins the file so a dirty preview survives.
+	a.autoPinForEdit(doc.Path)
 	a.editCaret = 0
 	a.editAnchor = 0
 	a.editUndo = nil
 	a.editRedo = nil
 	a.preview = false
 	a.findOpen = false
+	a.replaceOpen = false
 	a.resetScroll()
 	a.ensureEditCaretVisible()
 	a.refresh()
@@ -74,6 +77,9 @@ func (a *App) beginEditAt(line, displayCol int) {
 	if a.edit == nil {
 		return
 	}
+
+	// Editing auto-pins the file so a dirty preview is never replaced.
+	a.autoPinForEdit(a.edit.Path)
 
 	runes := []rune(a.edit.Text())
 	offset := 0
@@ -126,9 +132,12 @@ func (a *App) applyEditText(text string) {
 		return
 	}
 
+	// Typing auto-pins the file so a dirty preview survives.
+	a.autoPinForEdit(a.edit.Path)
 	a.edit.SetText(text)
-	a.dirty[a.edit.Path] = a.edit.Dirty
+	a.setDirty(a.edit.Path, a.edit.Dirty)
 	a.view.EditDirty = a.edit.Dirty
+	a.scheduleAutoSave()
 }
 
 // finishEdit folds the in-memory buffer back into the document and leaves
@@ -138,6 +147,7 @@ func (a *App) finishEdit() {
 		return
 	}
 
+	path := a.editPath()
 	a.commitEditBuffer()
 	a.editing = false
 	a.edit = nil
@@ -145,6 +155,11 @@ func (a *App) finishEdit() {
 	a.editAnchor = 0
 	a.editUndo = nil
 	a.editRedo = nil
+
+	// Focus-change autosave fires when the buffer folds on navigation.
+	if path != "" {
+		a.autosaveFocusSave()
+	}
 }
 
 // commitEditBuffer updates the document behind the buffer without writing to
@@ -174,7 +189,7 @@ func (a *App) commitEditBuffer() {
 	doc.Preview = nil
 	doc.PreviewLine = nil
 	doc.Wrap = nil
-	a.dirty[doc.Path] = a.edit.Dirty
+	a.setDirty(doc.Path, a.edit.Dirty)
 }
 
 // saveEdit writes the live buffer to the workspace.
@@ -194,9 +209,13 @@ func (a *App) saveEdit() {
 	}
 
 	a.edit.MarkSaved()
-	a.dirty[path] = false
+	a.setDirty(path, false)
 	a.docs[path] = a.ws.openDoc(path)
 	a.commitEditBuffer()
+	a.cancelAutoSave()
+	// A save moves the file's mtime, so the cached blame lines are stale:
+	// drop them and let the next frame re-request the new stat key.
+	a.invalidateBlame(path)
 	a.showToast("success", "File saved", path)
 	a.refresh()
 }

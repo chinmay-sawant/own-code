@@ -73,8 +73,11 @@ func TestEditCaretFirstClickAndVerticalKeys(t *testing.T) {
 	if !ok {
 		t.Fatal("missing code body")
 	}
+	// The press targets the painted third line, which sits below the
+	// pinned "#" header block.
+	track := float64(app.View().TrackTop)
 	x := body.X + editTextLeft + 4*codeCellW
-	y := body.Y + 2*rowH + rowH/2
+	y := body.Y + track + 2*rowH + rowH/2
 	if err := app.Page().Edit().Press(ctx, x, y); err != nil {
 		t.Fatal(err)
 	}
@@ -95,13 +98,16 @@ func TestEditCaretFirstClickAndVerticalKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The pinned "#" header shifts the painted rows down by the sticky
+	// block height; the caret assertions follow the track, not the body.
+	trackPx := app.View().TrackTop
 	cx := int(body.X) + editTextLeft + row.CaretLeft
-	cy := int(body.Y) + 2*rowH + 5
+	cy := int(body.Y) + trackPx + 2*rowH + 5
 	r, g, b, _ := img.At(cx, cy).RGBA()
 	if r>>8 != 122 || g>>8 != 162 || b>>8 != 247 {
 		t.Fatalf("caret pixel at %d,%d = %d,%d,%d, want accent blue", cx, cy, r>>8, g>>8, b>>8)
 	}
-	top := int(body.Y) + 2*rowH + 2
+	top := int(body.Y) + trackPx + 2*rowH + 2
 	r, g, b, _ = img.At(cx, top).RGBA()
 	if r>>8 != 122 || g>>8 != 162 || b>>8 != 247 {
 		t.Fatalf("caret top pixel at %d,%d = %d,%d,%d, want accent blue", cx, top, r>>8, g>>8, b>>8)

@@ -171,6 +171,7 @@ func TestDrawerResizeWinsOverRail(t *testing.T) {
 	}
 
 	clickID(t, app, "tree-many")
+	drainDirLoads(t, app)
 
 	if err := app.Page().Redraw(ctx); err != nil {
 		t.Fatal(err)

@@ -14,6 +14,13 @@ import (
 // confirmPreviewLimit caps the file names listed in the discard dialog.
 const confirmPreviewLimit = 6
 
+// confirmReplacePreviewLimit caps the file names listed in the workspace
+// replace dialog. Ten rows name the blast radius without scrolling.
+const confirmReplacePreviewLimit = 10
+
+// confirmKindReplaceAll is the confirm kind for a workspace replace-all.
+const confirmKindReplaceAll = "replace-all"
+
 // scmGuard blocks git writes in the bundled sample workspace.
 func (a *App) scmGuard() bool {
 	if a.ws.Sample {
@@ -517,7 +524,38 @@ func (a *App) closeConfirm() {
 	a.confirmPaths = nil
 	a.confirmTitle = ""
 	a.confirmMsg = ""
+	a.keymapPendingAction, a.keymapPendingChord, a.keymapPendingOthers = "", "", nil
+	a.pendingExcludesScan, a.pendingExcludesSearch = nil, nil
+	a.confirmPending = nil
+	a.confirmAfter = ""
+	a.confirmEvictGroup = 0
+	a.confirmEvictPath = ""
+	a.confirmEvictPinned = false
+	a.confirmBulkGroup = 0
+	a.confirmBulkPaths = nil
+	a.confirmMerge = false
+	a.confirmProceed = nil
 	a.refresh()
+}
+
+// confirmOK runs the pending confirm action: a workspace replace-all,
+// an unsaved save, or the classic discard and settings arms.
+func (a *App) confirmOK(ctx context.Context) error {
+	if !a.confirmOpen {
+		return nil
+	}
+
+	if a.confirmKind == confirmKindReplaceAll {
+		a.closeConfirm()
+
+		return a.applyWorkspaceReplace(ctx)
+	}
+
+	if unsavedKind(a.confirmKind) {
+		return a.confirmUnsavedSave(ctx)
+	}
+
+	return a.confirmDiscard(ctx)
 }
 
 // confirmDiscard runs the pending discard after the dialog confirms.
@@ -526,11 +564,35 @@ func (a *App) confirmDiscard(ctx context.Context) error {
 		return nil
 	}
 
+	if unsavedKind(a.confirmKind) {
+		return nil
+	}
+
+	// Settings confirms share the dialog: a risky terminal chord or
+	// single-letter rebind, and an overbroad excludes edit. The pending
+	// state applies before closeConfirm clears it.
+	if a.confirmKind == "keymap-risky" {
+		a.applyKeymapPending()
+		a.closeConfirm()
+		a.refresh()
+
+		return nil
+	}
+
+	if a.confirmKind == "excludes-overbroad" {
+		a.applyPendingExcludes()
+		a.closeConfirm()
+
+		return nil
+	}
+
 	paths := append([]string(nil), a.confirmPaths...)
 	kind := a.confirmKind
 	a.closeConfirm()
 
 	switch kind {
+	case confirmExplorerDelete:
+		return a.deleteExplorerConfirmed(ctx, paths)
 	case "discard-selected", "discard-all":
 		if err := a.discardPaths(ctx, paths); err != nil {
 			return err
@@ -560,17 +622,31 @@ func (a *App) confirmViewState() confirmView {
 		return confirmView{}
 	}
 
+	limit := confirmPreviewLimit
+	label, hint := "", ""
+	if a.confirmKind == confirmKindReplaceAll {
+		limit = confirmReplacePreviewLimit
+		label, hint = "Replace", "Enter replace · Esc cancel"
+	}
+
+	if a.confirmKind == confirmExplorerDelete {
+		label, hint = "Delete", "Enter delete · Esc cancel"
+	}
+
 	files := append([]string(nil), a.confirmPaths...)
-	if len(files) > confirmPreviewLimit {
-		files = files[:confirmPreviewLimit]
+	if len(files) > limit {
+		files = files[:limit]
 	}
 
 	return confirmView{
 		Show:    true,
+		Kind:    a.confirmKind,
 		Title:   a.confirmTitle,
 		Message: a.confirmMsg,
 		Files:   files,
 		Count:   len(a.confirmPaths),
+		OkLabel: label,
+		OkHint:  hint,
 	}
 }
 
@@ -616,7 +692,7 @@ func (a *App) forgetSCMDoc(path string) {
 	}
 
 	delete(a.docs, path)
-	delete(a.dirty, path)
+	a.setDirty(path, false)
 }
 
 // refreshAfterSCMMutation rescans the workspace and reloads the change set

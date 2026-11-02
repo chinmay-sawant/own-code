@@ -28,6 +28,8 @@ The panel follows live output while it is at the bottom. Mouse wheel and the scr
 
 Copy puts the visible terminal output on the clipboard. It copies the current screen or the visible scrollback window; it does not copy an arbitrary text selection. Use Paste to send clipboard text to the focused shell, then press Enter to run it. The terminal's Copy and Paste controls are separate from the app's editing and explorer shortcuts. While the terminal has focus, `Ctrl+Shift+C` copies and `Ctrl+Shift+V` pastes; `Ctrl+C` interrupts the running command rather than copying. Press Ctrl plus the backtick key to toggle the panel from anywhere.
 
+Paths in terminal output that look like `path:line` or `path:line:col` are links. Click one to open the file at that line in a preview tab. Relative paths resolve against the workspace root, absolute paths inside the workspace are relativized, and paths outside it open directly. Python tracebacks and Go compiler positions are recognized too; a missing file shows a toast instead of opening.
+
 ## Choose a shell
 
 Set `OWN_CODE_SHELL` before starting own-code to choose the shell executable. own-code reads only the executable name or path from the variable. It does not read arguments from the value, and it does not run a command from it automatically.
@@ -57,7 +59,7 @@ If `OWN_CODE_SHELL` is unset, own-code uses `$SHELL` on Unix when set, otherwise
 
 ## Working directory
 
-A new session starts in the active workspace root. That is the directory passed with `-root`, or the current directory when `-root` is omitted.
+A new session starts in the active workspace root. That is the directory passed with `-root`, or the most recent project when `-root` is omitted.
 
 ```sh
 pwd

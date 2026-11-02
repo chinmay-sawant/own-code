@@ -399,3 +399,69 @@ func TestManagerConcurrentReaders(t *testing.T) {
 		t.Error("snapshot should contain the final output line")
 	}
 }
+
+func TestManagerNotifyFiresOnOutput(t *testing.T) {
+	requireUnixShell(t)
+
+	manager := NewManager()
+	t.Cleanup(func() { _ = manager.CloseAll() })
+
+	var mu sync.Mutex
+	calls := 0
+	manager.SetNotify(func() {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+	})
+
+	id, err := manager.Open(Config{
+		Shell: "/bin/sh",
+		Args:  []string{"-c", "printf 'notify-marker\\n'"},
+		Cols:  40,
+		Rows:  10,
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	waitFor(t, "shell output", func() bool {
+		snapshot, ok := manager.Snapshot(id)
+		if !ok {
+			return false
+		}
+		return strings.Contains(snapshotText(snapshot), "notify-marker")
+	})
+
+	mu.Lock()
+	got := calls
+	mu.Unlock()
+	if got == 0 {
+		t.Fatal("notify callback never fired for shell output")
+	}
+
+	manager.SetNotify(nil)
+}
+
+func TestManagerNotifiesExit(t *testing.T) {
+	requireUnixShell(t)
+	manager := NewManager()
+	defer manager.CloseAll()
+	exited := make(chan struct{}, 1)
+	manager.SetNotify(func() {
+		_, session := manager.Active()
+		if session != nil && !session.Info().Running {
+			select {
+			case exited <- struct{}{}:
+			default:
+			}
+		}
+	})
+	if _, err := manager.Open(Config{Shell: "/bin/sh", Args: []string{"-c", "exit 0"}}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-exited:
+	case <-time.After(sessionTimeout):
+		t.Fatal("exit did not notify renderer")
+	}
+}

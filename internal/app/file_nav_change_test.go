@@ -404,3 +404,50 @@ func TestHunkArrowsTrackChangeBlocks(t *testing.T) {
 		}
 	}
 }
+
+// TestCachedChangeStartsMatchesScan pins the per-frame change-block cache:
+// it must equal a fresh scan, survive repeat frames, and refresh when the
+// diff generation or the wrap shape changes.
+func TestCachedChangeStartsMatchesScan(t *testing.T) {
+	app := newTestApp(t)
+	path := "web/settings.js"
+	app.changes = changeSet{Files: []changedFile{{Path: path, Status: "M", Hunks: []hunk{{
+		OldStart: 1, NewStart: 1,
+		Lines: []diffLine{
+			{Kind: ' ', OldNo: 1, NewNo: 1, Text: "const a = 1;"},
+			{Kind: '-', OldNo: 2, Text: "var x = foo(1);"},
+			{Kind: '+', NewNo: 2, Text: "const x = foo(2);"},
+			{Kind: ' ', OldNo: 3, NewNo: 3, Text: "bar();"},
+		},
+	}}}}}
+	app.selectDiff(path)
+
+	check := func(stage string) {
+		t.Helper()
+		rows := app.diffDisplayRows()
+		want := diffChangeStarts(rows)
+		if got := app.cachedChangeStarts(rows); !slices.Equal(got, want) {
+			t.Fatalf("%s: cached starts = %v, want %v", stage, got, want)
+		}
+		// A repeat frame with identical rows must reuse the scan.
+		if got := app.cachedChangeStarts(rows); !slices.Equal(got, want) {
+			t.Fatalf("%s repeat: cached starts = %v, want %v", stage, got, want)
+		}
+		if nav := app.fileNavChangeRows(path); !slices.Equal(nav, want) {
+			t.Fatalf("%s fileNav: starts = %v, want %v", stage, nav, want)
+		}
+	}
+
+	check("unified")
+	app.setSplit(true)
+	check("split")
+	app.wrap = !app.wrap
+	check("wrap toggled")
+	// A new generation (file edited) must refresh the cache.
+	app.changes.Files[0].Hunks = append(app.changes.Files[0].Hunks, hunk{
+		OldStart: 10, NewStart: 10,
+		Lines: []diffLine{{Kind: '+', NewNo: 10, Text: "extra();"}},
+	})
+	app.rebuildDiffRows()
+	check("regenerated")
+}

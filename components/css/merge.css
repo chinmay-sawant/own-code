@@ -232,7 +232,7 @@
 .merge-btn.compare.on { border-color: rgba(240, 183, 90, 0.6); background: var(--amber-soft); color: var(--amber); }
 .merge-btn:disabled { opacity: 0.45; cursor: default; }
 .merge-btn:focus { outline: 0; }
-.merge-btn:focus-visible { outline: 1px solid var(--accent); }
+.merge-btn:focus-visible { outline: 0; border-color: #2b3240; background-color: var(--panel-3); }
 
 @media (max-width: 1120px) {
   .merge-note { display: none; }

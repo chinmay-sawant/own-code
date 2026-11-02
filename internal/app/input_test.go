@@ -526,19 +526,12 @@ func TestSampleHistoryGraph(t *testing.T) {
 func TestTabsStayInsideStrip(t *testing.T) {
 	app := newTestApp(t)
 
-	opened := 0
-
 	for _, file := range app.ws.Files {
 		if file.Path == "README.md" {
 			continue
 		}
 
 		app.openFile(file.Path)
-		opened++
-
-		if opened == maxTabs {
-			break
-		}
 	}
 
 	if err := app.Page().Redraw(context.Background()); err != nil {
@@ -564,11 +557,47 @@ func TestTabsStayInsideStrip(t *testing.T) {
 		}
 	}
 
-	if len(view.Tabs) < maxTabs && !view.TabsNext {
-		t.Fatal("tabs overflow but tabs-next is missing")
+	total := len(app.tabs)
+	if view.TabsPrev || view.TabsNext {
+		if len(view.Tabs) >= total {
+			t.Fatalf("tab arrows show but all %d tabs render", total)
+		}
+	} else if len(view.Tabs) != total {
+		t.Fatalf("tabs = %d rendered, want all %d without overflow", len(view.Tabs), total)
+	}
+}
+
+// TestPreviewTabDoesNotOverlap checks a preview tab lays out after the
+// previous tab instead of on top of it. The tab div used to carry the bare
+// `preview` class, which also matches the Markdown preview container's
+// absolute-position rule and pulled the tab out of the strip flow.
+func TestPreviewTabDoesNotOverlap(t *testing.T) {
+	app := newTestApp(t)
+
+	app.openFileAt(0, "backend/probe.go", true)
+	app.openFileAtPreview(0, "backend/server.go", true)
+	app.openFileAtPreview(0, "web/theme.css", true)
+
+	if err := app.Page().Redraw(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 
-	if len(view.Tabs) == maxTabs && view.TabsNext {
-		t.Fatal("all tabs render but tabs-next shows")
+	view := app.View()
+	if len(view.Tabs) < 2 {
+		t.Fatalf("want pinned + preview tabs rendered, got %d", len(view.Tabs))
+	}
+
+	prevRight := -1.0
+	for _, row := range view.Tabs {
+		box, ok := boxByID(app.Page().Boxes(), fmt.Sprintf("tab-%d", row.Index))
+		if !ok {
+			t.Fatalf("missing tab-%d", row.Index)
+		}
+
+		if box.X < prevRight-1 {
+			t.Fatalf("tab-%d at %.0f overlaps the previous tab ending at %.0f", row.Index, box.X, prevRight)
+		}
+
+		prevRight = box.X + box.W
 	}
 }

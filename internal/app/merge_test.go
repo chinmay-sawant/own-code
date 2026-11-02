@@ -527,3 +527,37 @@ func TestLiveChangesWithoutConflictsKeepsOrdinaryDiff(t *testing.T) {
 		t.Fatalf("selected diff = %q", app.View().Diff.Selected)
 	}
 }
+
+func TestMergeSideLabelOnlyOnFirstLine(t *testing.T) {
+	base := "top\nsame\nbottom\n"
+	ours := "top\nours one\nours two\nbottom\n"
+	theirs := "top\ntheirs one\ntheirs two\nbottom\n"
+	dir := mergeConflictRepo(t, mergeTestPath, base, ours, theirs)
+	app := newMergeTestApp(t, dir)
+	app.openMergeConflict(context.Background(), mergeTestPath)
+
+	var oursFirst, theirsFirst []bool
+	for _, row := range app.mergeRows {
+		if row.Kind != mergeRowSide {
+			continue
+		}
+		switch row.Side {
+		case "ours":
+			oursFirst = append(oursFirst, row.SideFirst)
+		case "theirs":
+			theirsFirst = append(theirsFirst, row.SideFirst)
+		default:
+			t.Fatalf("unexpected side %q without compare mode", row.Side)
+		}
+	}
+
+	if len(oursFirst) != 2 || len(theirsFirst) != 2 {
+		t.Fatalf("side lines = ours %d theirs %d, want 2 and 2", len(oursFirst), len(theirsFirst))
+	}
+	if !oursFirst[0] || oursFirst[1] {
+		t.Fatalf("ours SideFirst = %v, want [true false]", oursFirst)
+	}
+	if !theirsFirst[0] || theirsFirst[1] {
+		t.Fatalf("theirs SideFirst = %v, want [true false]", theirsFirst)
+	}
+}
