@@ -35,7 +35,10 @@
   border: 0;
   background: transparent;
   cursor: col-resize;
+  transition: background-color 120ms ease;
 }
+
+.split-divider:hover { background-color: rgba(122, 162, 247, 0.32); }
 
 .split-divider:focus { outline: 0; }
 
@@ -236,6 +239,50 @@
 .crumb-btn.on { border-color: rgba(122, 162, 247, 0.5); background-color: var(--accent-soft); color: var(--accent); }
 .crumb-btn.off { color: #3a4252; }
 .crumb-btn.off:hover { background-color: transparent; border-color: var(--line); color: #3a4252; }
+
+/* Split panes are half width: a fixed single row cannot hold the status
+   mark, language pill, path, and the Wrap/Blame/Copy buttons, so the
+   buttons push past the pane edge (see the 720 px split overflow where
+   copy-path/copy-file painted beyond the pane). Scoped to split only, the
+   crumbs bar wraps its controls onto a second line inside the pane instead
+   of overflowing right. Single-pane keeps the fixed 30 px single line, so
+   TestFileCrumbPathStaysOnOneLine and editorBodyTop math are untouched;
+   only split panes grow, capped at two rows, and the code body (flex: 1)
+   absorbs the height. */
+.editor.split .crumbs,
+#crumbs-2 {
+  flex: 0 1 auto;
+  height: auto;
+  min-height: var(--crumb-h);
+  max-height: calc(var(--crumb-h) * 2);
+  flex-wrap: wrap;
+  row-gap: 2px;
+  align-content: center;
+  overflow: hidden;
+}
+.editor.split .crumbs .file-path,
+#crumbs-2 .file-path {
+  /* Basis 0 (not content): the path never forces a wrap by itself. It
+     stays on the first line and shrinks with its ellipsis while only the
+     buttons drop to the second line. A content-sized basis would push the
+     path onto line 2 in narrow panes, stacking three lines under the
+     two-row max-height cap and clipping the buttons. */
+  flex: 1 1 0;
+  min-width: 0;
+}
+.editor.split .crumbs .crumb-btn,
+.editor.split .crumbs .crumb-meta,
+#crumbs-2 .crumb-btn,
+#crumbs-2 .crumb-meta {
+  flex: 0 1 auto;
+}
+/* The spring would hold the buttons on the first line until they push past
+   the pane edge; collapsing it lets them wrap to the second line instead.
+   Scoped to crumbs so the tabstrip spring is untouched. */
+.editor.split .crumbs .tabs-fill,
+#crumbs-2 .tabs-fill {
+  flex: 0 0 4px;
+}
 
 .findbar { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; overflow: hidden; }
 .find-input {

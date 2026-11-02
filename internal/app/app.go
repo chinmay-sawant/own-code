@@ -1319,7 +1319,11 @@ func (a *App) buildView() View {
 
 		if doc := a.groupDoc(0); doc != nil {
 			winW, _ := a.page.Size()
-			v.ActiveNameShort, v.ActiveDirShort = clipFileCrumbPath(v.PaneWidth, winW, v.ActiveName, v.ActiveDir)
+			if a.split {
+				v.ActiveNameShort, v.ActiveDirShort = clipFileCrumbPathSplit(v.PaneWidth, winW, v.ActiveName, v.ActiveDir)
+			} else {
+				v.ActiveNameShort, v.ActiveDirShort = clipFileCrumbPath(v.PaneWidth, winW, v.ActiveName, v.ActiveDir)
+			}
 		}
 	}
 

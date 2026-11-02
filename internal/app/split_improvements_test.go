@@ -731,3 +731,138 @@ func TestSplitThumbDragIsolation(t *testing.T) {
 		t.Fatal("rail-2 drag did not move group 1")
 	}
 }
+
+// TestSplitSanitizeDefaultsRatios checks a missing (zero) ratio sanitizes
+// to the app defaults instead of clamping 0 into the minimum rail, while
+// wild values still clamp.
+func TestSplitSanitizeDefaultsRatios(t *testing.T) {
+	t.Parallel()
+
+	fresh := sessionState{}.sanitize("/work/repo")
+	if fresh.SplitRatio != defaultSplitRatio {
+		t.Fatalf("fresh split ratio = %v, want default %v", fresh.SplitRatio, defaultSplitRatio)
+	}
+	if fresh.HistoryRatio != historyDefaultRatio {
+		t.Fatalf("fresh history ratio = %v, want default %v", fresh.HistoryRatio, historyDefaultRatio)
+	}
+
+	high := sessionState{SplitRatio: 2, HistoryRatio: 9}.sanitize("root")
+	if high.SplitRatio != sessionSplitMax {
+		t.Fatalf("high split ratio = %v, want %v", high.SplitRatio, sessionSplitMax)
+	}
+	if high.HistoryRatio != sessionHistoryMax {
+		t.Fatalf("high history ratio = %v, want %v", high.HistoryRatio, sessionHistoryMax)
+	}
+
+	low := sessionState{SplitRatio: -1, HistoryRatio: -3}.sanitize("root")
+	if low.SplitRatio != sessionSplitMin {
+		t.Fatalf("low split ratio = %v, want %v", low.SplitRatio, sessionSplitMin)
+	}
+	if low.HistoryRatio != sessionHistoryMin {
+		t.Fatalf("low history ratio = %v, want %v", low.HistoryRatio, sessionHistoryMin)
+	}
+}
+
+// TestSplitToggleResetsRatio checks opening the split always starts even:
+// a stale ratio never carries into the new second pane.
+func TestSplitToggleResetsRatio(t *testing.T) {
+	app := newTestApp(t)
+
+	app.toggleSplit()
+	if app.splitRatio != defaultSplitRatio {
+		t.Fatalf("fresh split ratio = %v, want default %v", app.splitRatio, defaultSplitRatio)
+	}
+
+	app.setSplitRatio(0.7)
+	if app.splitRatio != 0.7 {
+		t.Fatalf("setup ratio = %v, want 0.7", app.splitRatio)
+	}
+
+	app.toggleSplit()
+	if app.split {
+		t.Fatal("split still open after toggle close")
+	}
+
+	app.toggleSplit()
+	if !app.split {
+		t.Fatal("split did not reopen")
+	}
+	if app.splitRatio != defaultSplitRatio {
+		t.Fatalf("reopened split ratio = %v, want default %v", app.splitRatio, defaultSplitRatio)
+	}
+}
+
+// TestSplitDividerDoubleClickCycles checks divider clicks: a single click
+// only focuses, and each double-click steps even -> narrow left ->
+// narrow right -> even.
+func TestSplitDividerDoubleClickCycles(t *testing.T) {
+	app := newTestApp(t)
+	ctx := context.Background()
+
+	app.toggleSplit()
+	app.setSplitRatio(0.5)
+	if err := app.Page().Redraw(ctx); err != nil {
+		t.Fatalf("redraw: %v", err)
+	}
+
+	click := func() {
+		t.Helper()
+		if err := app.onClick(ctx, ownframe.Box{ID: "split-divider", Action: "split-divider"}); err != nil {
+			t.Fatalf("divider click: %v", err)
+		}
+	}
+
+	// Single click focuses without moving the ratio.
+	click()
+	if app.splitRatio != defaultSplitRatio {
+		t.Fatalf("single click moved ratio to %v", app.splitRatio)
+	}
+	if got := app.page.Form().FocusID(); got != "split-divider" {
+		t.Fatalf("single click focus = %q, want split-divider", got)
+	}
+
+	// Double-click completes the pair and minimizes the left pane.
+	click()
+	if app.splitRatio != sessionSplitMin {
+		t.Fatalf("first cycle = %v, want min %v", app.splitRatio, sessionSplitMin)
+	}
+
+	// Next pair maximizes the left pane.
+	click()
+	click()
+	if app.splitRatio != sessionSplitMax {
+		t.Fatalf("second cycle = %v, want max %v", app.splitRatio, sessionSplitMax)
+	}
+
+	// Next pair wraps back to even.
+	click()
+	click()
+	if app.splitRatio != defaultSplitRatio {
+		t.Fatalf("third cycle = %v, want default %v", app.splitRatio, defaultSplitRatio)
+	}
+}
+
+// TestSplitDividerEndCycles checks the End key on a focused divider steps
+// the same presets as a double-click.
+func TestSplitDividerEndCycles(t *testing.T) {
+	app := newTestApp(t)
+	ctx := context.Background()
+
+	app.toggleSplit()
+	app.setSplitRatio(0.5)
+	if err := app.Page().Redraw(ctx); err != nil {
+		t.Fatalf("redraw: %v", err)
+	}
+	if err := app.page.Form().Focus(ctx, "split-divider"); err != nil {
+		t.Fatalf("focus divider: %v", err)
+	}
+
+	for _, want := range []float64{sessionSplitMin, sessionSplitMax, defaultSplitRatio} {
+		if err := app.onKeyDown(ctx, "end"); err != nil {
+			t.Fatalf("divider end: %v", err)
+		}
+		if app.splitRatio != want {
+			t.Fatalf("end cycle = %v, want %v", app.splitRatio, want)
+		}
+	}
+}

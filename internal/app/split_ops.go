@@ -56,6 +56,9 @@ func (a *App) toggleSplit() {
 
 	a.split = true
 	a.focusGroup = 1
+	// Every fresh split opens even: a stale persisted ratio (e.g. the old
+	// 0.2 floor) never carries into the new second pane.
+	a.splitRatio = a.clampSplitRatio(defaultSplitRatio, a.editorWidth())
 	// The new right pane starts where the left one is: seed both groups
 	// from the shared single-pane offset.
 	a.scrollXGrp[0] = a.scrollX
@@ -74,6 +77,34 @@ func (a *App) toggleSplit() {
 
 	a.resetScroll()
 	a.refresh()
+	a.persistSession()
+}
+
+// cycleSplitRatio steps the divider through its presets: even, narrow
+// left, narrow right, then back to even. It backs the divider
+// double-click and the End key so both minimize/maximize without the mouse.
+func (a *App) cycleSplitRatio() {
+	next := defaultSplitRatio
+	switch {
+	case splitRatioNear(a.splitRatio, defaultSplitRatio):
+		next = sessionSplitMin
+	case splitRatioNear(a.splitRatio, sessionSplitMin):
+		next = sessionSplitMax
+	default:
+		next = defaultSplitRatio
+	}
+	a.setSplitRatio(next)
+}
+
+// splitRatioNear reports whether two ratios match within a hair, so exact
+// preset stops still cycle even after float round-trips.
+func splitRatioNear(a, b float64) bool {
+	const eps = 1e-9
+	d := a - b
+	if d < 0 {
+		d = -d
+	}
+	return d < eps
 }
 
 // leftActivePath returns the first group's active path.

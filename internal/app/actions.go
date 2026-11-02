@@ -18,9 +18,10 @@ import (
 const doubleClickWindow = 500 * time.Millisecond
 
 // isDoubleClickTarget reports whether action can complete a double-click:
-// a tree/welcome file open or a tab-strip focus.
+// a tree/welcome file open, a tab-strip focus, or a split-divider reset.
 func isDoubleClickTarget(action string) bool {
-	return strings.HasPrefix(action, "open:") ||
+	return action == "split-divider" ||
+		strings.HasPrefix(action, "open:") ||
 		strings.HasPrefix(action, "tab2:") ||
 		strings.HasPrefix(action, "tab:")
 }
@@ -192,6 +193,19 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.clearToast()
 	case action == "split-toggle":
 		a.toggleSplit()
+	case action == "split-divider":
+		// Single click just focuses the divider for keyboard resizing;
+		// double-click cycles the presets (even, narrow left, narrow
+		// right). Drags never reach here: they claim via onDragStart.
+		if a.split && a.mode == "explorer" {
+			if a.clickIsDouble(action) {
+				a.cycleSplitRatio()
+			} else {
+				a.refresh()
+
+				return a.page.Form().Focus(ctx, "split-divider")
+			}
+		}
 	case strings.HasPrefix(action, "focus-group:"):
 		if index, ok := actionIndex(action, "focus-group:"); ok {
 			a.setFocusGroup(index)
@@ -2764,23 +2778,23 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 	}
 
 	// A focused split divider resizes the panes from the keyboard: arrows
-	// nudge, Home restores the default. Other keys fall through so the
-	// divider never traps navigation.
+	// nudge, Home restores the default, End cycles the presets like a
+	// double-click. Other keys fall through so the divider never traps
+	// navigation.
 	if a.page.Form().FocusID() == "split-divider" && a.split && a.mode == "explorer" {
-		ratio := a.splitRatio
-
 		switch key {
 		case "arrowleft":
-			ratio -= splitRatioStep
+			a.setSplitRatio(a.splitRatio - splitRatioStep)
 		case "arrowright":
-			ratio += splitRatioStep
+			a.setSplitRatio(a.splitRatio + splitRatioStep)
 		case "home":
-			ratio = defaultSplitRatio
+			a.setSplitRatio(defaultSplitRatio)
+		case "end":
+			a.cycleSplitRatio()
 		default:
 			return nil
 		}
 
-		a.setSplitRatio(ratio)
 		a.refresh()
 
 		return a.page.Redraw(ctx)

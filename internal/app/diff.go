@@ -248,6 +248,24 @@ func clipFileCrumbPath(paneWidth, windowWidth int, name, dir string) (string, st
 	return clipCrumbPath(paneWidth, windowWidth, name, dir, fileCrumbRightWidePx, fileCrumbRightNarrowPx, false)
 }
 
+// fileCrumbSplitRightWidePx reserves the split-mode first line around the
+// path: the left pills (status mark and language, about 84 px) plus crumbs
+// padding, with slack for the wider mono advance. The Wrap/Blame/Copy
+// buttons wrap to a second line inside the pane (see the split crumbs CSS),
+// so they need no reserve on the first line. Single-pane keeps the full
+// fileCrumbRight reserve above; only split panes use this smaller budget.
+const (
+	fileCrumbSplitRightWidePx   = 180
+	fileCrumbSplitRightNarrowPx = 140
+)
+
+// clipFileCrumbPathSplit keeps the split-mode left-pane header inside its
+// narrower pane. Buttons wrap below, so the path may use more of the first
+// line than the single-pane clip allows.
+func clipFileCrumbPathSplit(paneWidth, windowWidth int, name, dir string) (string, string) {
+	return clipCrumbPath(paneWidth, windowWidth, name, dir, fileCrumbSplitRightWidePx, fileCrumbSplitRightNarrowPx, false)
+}
+
 // clipSecondCrumbPath keeps the second pane's header on one line. That bar
 // carries no buttons, so it uses its own smaller reserve.
 func clipSecondCrumbPath(paneWidth, windowWidth int, name, dir string) (string, string) {

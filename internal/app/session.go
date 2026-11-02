@@ -210,8 +210,18 @@ func (s sessionState) sanitize(root string) sessionState {
 	s.Active = clampSessionIndex(s.Active, len(s.Tabs))
 	s.Active2 = clampSessionIndex(s.Active2, len(s.Tabs2))
 	s.FocusGroup = clampSessionIndex(s.FocusGroup, sessionGroupCount)
-	s.SplitRatio = clampSessionRatio(s.SplitRatio, sessionSplitMin, sessionSplitMax)
-	s.HistoryRatio = clampSessionRatio(s.HistoryRatio, sessionHistoryMin, sessionHistoryMax)
+	// A missing ratio is the zero value: fresh sessions open even at the
+	// app default instead of clamping 0 into the minimum rail.
+	if s.SplitRatio == 0 {
+		s.SplitRatio = defaultSplitRatio
+	} else {
+		s.SplitRatio = clampSessionRatio(s.SplitRatio, sessionSplitMin, sessionSplitMax)
+	}
+	if s.HistoryRatio == 0 {
+		s.HistoryRatio = historyDefaultRatio
+	} else {
+		s.HistoryRatio = clampSessionRatio(s.HistoryRatio, sessionHistoryMin, sessionHistoryMax)
+	}
 	s.DrawerExtra = clampDrawerExtra(s.DrawerExtra)
 	s.Zoom = clampSessionZoom(s.Zoom)
 	// FontSize stays zero when missing so restore can fall back to
