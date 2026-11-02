@@ -719,7 +719,10 @@ func (a *App) beginExplorerInput(ctx context.Context, mode, dir, target string) 
 		return err
 	}
 
-	return a.page.Form().Focus(ctx, "explorer-input")
+	// Click handlers run inside the window's redraw batch, so a prompt a
+	// menu or palette click opens is not in the form state yet. Focus
+	// after layout queues the focus for the next tick in that case.
+	return a.focusAfterLayout(ctx, "explorer-input")
 }
 
 // commitExplorerInput validates the prompt and runs the op. Validation and
@@ -748,7 +751,7 @@ func (a *App) commitExplorerInput(ctx context.Context) error {
 			return err
 		}
 
-		return a.page.Form().Focus(ctx, "explorer-input")
+		return a.focusAfterLayout(ctx, "explorer-input")
 	}
 
 	fail := func(title string, err error) error {
@@ -764,7 +767,7 @@ func (a *App) commitExplorerInput(ctx context.Context) error {
 			return err
 		}
 
-		return a.page.Form().Focus(ctx, "explorer-input")
+		return a.focusAfterLayout(ctx, "explorer-input")
 	}
 
 	switch mode {

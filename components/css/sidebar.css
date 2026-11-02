@@ -52,6 +52,8 @@
 
 .filter {
   flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
   height: 28px;
   margin: 8px 9px 6px;
   display: flex;
@@ -76,8 +78,14 @@
   color: var(--icon);
   pointer-events: none;
 }
+/* The input must never push past the filter box: a long unbroken value
+   (white-space:pre) reports a huge intrinsic width, so the flex item starts
+   from zero and clips. nowrap + ellipsis keeps the tail readable inside the
+   box, and the data-ownframe-field override beats the engine's pre-wrap
+   rewrite for the painted span. */
 .filter-input {
-  flex: 1;
+  flex: 1 1 0;
+  width: 0;
   min-width: 0;
   max-width: 100%;
   height: 26px;
@@ -90,14 +98,51 @@
   background-color: transparent;
   color: var(--text);
   font-size: 10.5px;
-  white-space: pre;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.filter-input[data-ownframe-field][data-ownframe-focus="1"] { border: 1px solid var(--muted); outline: 0; }
+.filter-input[data-ownframe-field] {
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.filter-input[data-ownframe-field][data-ownframe-focus="1"] { outline: 1px solid var(--muted); outline-offset: -1px; border: 0; }
 
 .filter-x { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; border-radius: 3px; color: var(--dim); font-size: 13px; line-height: 1; }
 .filter-x:hover { background-color: var(--panel-3); color: var(--text); }
+
+/* Inline explorer new-file / rename prompt ---------------------------------- */
+
+.explorer-input {
+  flex: 0 0 auto;
+  margin: 0 9px 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background-color: var(--panel-2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.explorer-input-title { color: var(--muted); font-size: 10px; font-weight: 650; }
+
+.explorer-input-field {
+  width: 100%;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--muted);
+  border-radius: 4px;
+  background-color: var(--panel);
+  color: var(--text);
+  font-size: 11px;
+  outline: none;
+}
+
+.explorer-input-error { color: var(--red); font-size: 10px; line-height: 1.4; }
 
 /* Tree --------------------------------------------------------------------- */
 

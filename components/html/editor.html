@@ -328,7 +328,7 @@
 </section>
 
 {{if .Split}}
-<button class="split-divider" id="split-divider" type="button" title="Drag to resize panes (arrow keys when focused, Home resets)" aria-label="Resize editor panes: drag, or use Left and Right, Home resets" style="left:{{.SplitDivLeft}}px;width:{{.SplitDivW}}px"><span class="split-grip">⋮</span></button>
+<button class="split-divider" id="split-divider" type="button" title="Drag to resize panes (arrow keys when focused, Home resets)" aria-label="Resize editor panes: drag, or use Left and Right, Home resets" style="left:{{.SplitDivLeft}}px;width:{{.SplitDivW}}px;top:{{.SplitDivTop}}px;height:{{.SplitDivH}}px"><span class="split-grip" aria-hidden="true"></span></button>
 <section class="editor editor-second{{if .Second.Focused}} focus{{end}}" id="editor-window-2" style="left:{{.Second.Left}}px;width:{{.Second.Width}}px">
   <div class="tabstrip" id="tabstrip-2">
     {{if .Second.TabsPrev}}<button class="tab-nav" id="tabs2-prev" data-action="tabs2-prev" type="button" title="Earlier tabs" aria-label="Earlier tabs"{{if $.Terminal.Focus}} tabindex="-1"{{end}}>

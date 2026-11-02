@@ -37,10 +37,14 @@ type View struct {
 	FilterNote   string
 	DirLoadNote  string
 
-	// ExplorerInputOpen/Title publish the inline new-file/rename prompt
-	// state for the sidebar template.
+	// ExplorerInputOpen/Title/Value/Error publish the inline new-file/rename
+	// prompt state for the sidebar template.
 	ExplorerInputOpen  bool
 	ExplorerInputTitle string
+	// ExplorerInputValue is the live input text (data-bind target);
+	// ExplorerInputError is the inline validation message.
+	ExplorerInputValue string
+	ExplorerInputError string
 
 	// SideW is the drawer width in page pixels, resizable from 268 px up
 	// to 348 px (about 30% wider) via the drawer-resize handle.
@@ -133,9 +137,13 @@ type View struct {
 	PaneLeft    int
 	PaneWidth   int
 	// SplitDivLeft/SplitDivW place the draggable split divider on the
-	// 1 px gutter between the panes. Only meaningful when Split.
+	// 1 px gutter between the panes. SplitDivTop/SplitDivH stretch it the
+	// full editor height so the hit box never collapses to content height.
+	// Only meaningful when Split.
 	SplitDivLeft int
 	SplitDivW    int
+	SplitDivTop  int
+	SplitDivH    int
 	Second       secondaryView
 
 	Diff         diffView
@@ -197,6 +205,10 @@ type View struct {
 	KeymapRows        []keymapRow
 	KeymapCapture     string
 	KeymapPending     string
+	HelpRows          []keymapRow
+	AppName           string
+	AppVersion        string
+	AppScope          string
 	ScanText          string
 	SearchText        string
 	// ScanBad/SearchBad are the 1-based line numbers holding invalid globs.
@@ -464,9 +476,10 @@ type codeRow struct {
 	Hint      string
 	// Blame is the gutter annotation for the line's last commit: the short
 	// hash, or "Not committed" for uncommitted lines. BlameTitle is the
-	// hover text (hash plus author) and BlameHash is the full commit hash,
-	// empty for uncommitted lines. All three are empty on wrapped
-	// continuation rows and while blame is off.
+	// richer hover text (short summary line plus full hash, author email,
+	// full date, body snippet, and the click hint) and BlameHash is the
+	// full commit hash, empty for uncommitted lines. All three are empty
+	// on wrapped continuation rows and while blame is off.
 	Blame          string
 	BlameTitle     string
 	BlameHash      string

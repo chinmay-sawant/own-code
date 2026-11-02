@@ -298,6 +298,7 @@ func zoomOverlayCSS(b *strings.Builder, px func(int) string) {
 
 func zoomDetailsCSS(b *strings.Builder, px func(int) string) {
 	writeZoomRules(b, px, []zoomRule{
+		{".details", []string{" width:", " !important;"}, []int{280}},
 		{".det-head", []string{" height:", " !important; flex-basis:", " !important; padding:0 ", " 0 ", " !important;"}, []int{34, 34, 8, 16}},
 		{".det-file", []string{" gap:", " !important; padding:", " ", " !important;"}, []int{10, 14, 16}},
 		{".ficon.lg", []string{" width:", " !important; height:", " !important; flex-basis:", " !important; border-radius:", " !important;"}, []int{30, 30, 30, 7}},

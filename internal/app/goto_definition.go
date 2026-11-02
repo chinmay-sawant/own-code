@@ -280,6 +280,16 @@ func gotoGeneratedFile(ws *workspace, path string) bool {
 // caret in place; cross-file jumps open the file (recorded nav history and
 // dirty guards flow through openFile) and land on the definition line.
 func (a *App) gotoDefinitionAtCaret(ctx context.Context) error {
+	// Definition jumps stay in the file view: opening another mode's file
+	// from Source Control or the merge editor would resettle panes, the
+	// divider, and the drawers, so the chord asks to return instead.
+	if a.mode != "explorer" {
+		a.showToast("info", "Go to definition", "Go to definition jumps in the file view. Return to Explorer.")
+		a.refresh()
+
+		return a.page.Redraw(ctx)
+	}
+
 	doc := a.activeDoc()
 	if doc == nil || doc.Err != "" || doc.Binary {
 		a.showToast("info", "Go to definition", "Open a text file before jumping to a definition.")

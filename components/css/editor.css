@@ -272,9 +272,21 @@
 .find-btn:hover, .find-btn.on { border-color: rgba(122, 162, 247, 0.5); background-color: var(--accent-soft); color: var(--accent); }
 .find-btn.text { width: auto; padding: 0 8px; font-size: 8.5px; }
 .find-btn.text:disabled { opacity: 0.45; cursor: default; }
-.findbar.with-replace { flex-wrap: wrap; row-gap: 4px; }
-.replace-row { display: flex; align-items: center; gap: 5px; flex-basis: 100%; }
-.find-error { flex-basis: 100%; color: #e8a0a0; font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The crumbs bar is a fixed 30 px header: Go's scroll math bakes that height
+   into editorBodyTop, row windowing, and hit testing, so the find bar must
+   never grow a second row, even with the replace row or a validation error
+   open. Everything shares one wrapped-never row; the two text fields shrink
+   while buttons keep their size, and any tail clips inside the bar instead
+   of painting over the code. The !important widths beat the zoom override's
+   fixed 190 px so the fields stay flexible at every zoom. */
+.findbar.with-replace { flex-wrap: nowrap; row-gap: 0; }
+.findbar.with-replace .find-input {
+  flex: 1 1 0 !important;
+  width: auto !important;
+  min-width: 0 !important;
+}
+.replace-row { display: flex; align-items: center; gap: 5px; flex: 1 1 auto; min-width: 0; flex-basis: auto; overflow: hidden; }
+.find-error { flex: 0 1 auto; min-width: 0; flex-basis: auto; color: #e8a0a0; font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .editor-scroll-thumb { position: absolute; right: 8px; width: 8px; z-index: 40; background-color: var(--muted); cursor: ns-resize; }
 
@@ -388,7 +400,11 @@
   top: 0;
   left: 0;
   right: 0;
-  z-index: 5;
+  /* No z-index: the engine flattens an explicit z-index into a global band
+     instead of nesting it, so z-index 5 painted this block below the band-10
+     editor fills and the code-body background covered it. Unset, it inherits
+     band 10 with the rows, and DOM order (sticky after .track) paints it on
+     top. See .gutter-mark/.ln for the same trap. */
   background-color: var(--bg);
   border-bottom: 1px solid var(--line-soft);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);

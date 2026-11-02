@@ -151,27 +151,47 @@ func focusGroupForClick(id string) (int, bool) {
 }
 
 // splitDividerGeometry centers the divider hit box on the 1 px gutter
-// between the panes.
+// between the panes. The width is scaled for the layout zoom so the hit
+// target stays 6 px at every zoom, matching the drawer-resize handle.
 func (a *App) splitDividerGeometry() (int, int) {
 	left, width := a.paneGeometry()
 	mid := left + width
 
-	divLeft := mid - splitDividerW/2
+	w := a.zx(splitDividerW)
+	divLeft := mid - w/2
 	if divLeft < left {
 		divLeft = left
 	}
 
-	return divLeft, splitDividerW
+	return divLeft, w
+}
+
+// splitDividerTopPx pins the divider to the editor top, below the titlebar.
+func (a *App) splitDividerTopPx() int {
+	return a.zx(windowControlTop)
+}
+
+// splitDividerHPx stretches the divider the full editor height, like the
+// sidebar and details panels, so the hit box never collapses to content
+// height (the engine does not resolve top+bottom into a height).
+func (a *App) splitDividerHPx() int {
+	h := a.viewportH - a.zx(windowControlTop) - a.zx(windowControlBottom)
+	if h < 1 {
+		h = 1
+	}
+
+	return h
 }
 
 // clampSplitRatio keeps a pane fraction inside the session limits and the
 // minimum pane width on both sides.
 func (a *App) clampSplitRatio(ratio float64, total int) float64 {
-	if total > 2*paneMinWidth {
-		if min := float64(paneMinWidth) / float64(total); ratio < min {
+	minW := a.zx(paneMinWidth)
+	if total > 2*minW {
+		if min := float64(minW) / float64(total); ratio < min {
 			ratio = min
 		}
-		if max := float64(total-paneMinWidth) / float64(total); ratio > max {
+		if max := float64(total-minW) / float64(total); ratio > max {
 			ratio = max
 		}
 	}

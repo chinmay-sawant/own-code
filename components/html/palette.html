@@ -70,12 +70,18 @@
       <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke-width="1.5" stroke-linecap="round">
         <circle cx="6" cy="6" r="4.1"/><path d="m9.2 9.2 3 3"/>
       </svg>
-      <input id="palette" class="palette-input" type="text" data-bind="PaletteQuery" placeholder="{{if eq .Palette.Mode "symbols"}}Search symbols in this file{{else if eq .Palette.Mode "goto"}}:<line>[:<col>]{{else}}Search files by name{{end}}" autocomplete="off" spellcheck="false" aria-label="{{if eq .Palette.Mode "symbols"}}Search symbols in this file{{else if eq .Palette.Mode "goto"}}Go to line{{else}}Search files{{end}}" maxlength="255">
+      <input id="palette" class="palette-input" type="text" data-bind="PaletteQuery" placeholder="{{if eq .Palette.Mode "symbols"}}Search symbols in this file{{else if eq .Palette.Mode "goto"}}:<line>[:<col>]{{else}}Search files by name{{end}}" autocomplete="off" spellcheck="false" aria-label="{{if eq .Palette.Mode "symbols"}}Search symbols in this file{{else if eq .Palette.Mode "goto"}}Go to line{{else}}Search files{{end}}" {{if eq .Palette.Mode "goto"}}maxlength="48"{{else}}maxlength="255"{{end}}>
       <button class="palette-close" id="palette-close" data-action="palette-close" type="button" title="Close search" aria-label="Close search">×</button>
     </div>
     <div class="palette-list" role="group" aria-label="{{if eq .Palette.Mode "symbols"}}Symbol results{{else if eq .Palette.Mode "goto"}}Go to line{{else}}Quick open results{{end}}">
       {{range .Palette.Rows}}
-      {{if .Symbol}}
+      {{if .Cmd}}
+      <button class="palette-row palette-cmd{{if .Active}} on{{end}}" id="palette-cmd-{{.Cmd}}" data-action="palette-cmd:{{.Cmd}}" type="button" aria-label="{{.Name}}">
+        <span class="ficon cmd-badge">&gt;</span>
+        <span class="palette-text"><b>{{.Name}}</b><span>{{.Dir}}</span></span>
+        <span class="palette-go">↵</span>
+      </button>
+      {{else if .Symbol}}
       <button class="palette-row symbol-row{{if .Active}} on{{end}}" id="palette-{{.Path}}-{{.No}}" data-action="symbol-open:{{.Path}}:{{.No}}" type="button" aria-label="Go to {{.Name}} on line {{.No}}">
         <span class="okind ok-{{.Kind}}">{{.Kind}}</span>
         <span class="palette-text"><b>{{.Name}}</b><span>{{.Kind}} · {{.Path}}:{{.No}}</span></span>

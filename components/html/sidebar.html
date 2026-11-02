@@ -21,9 +21,17 @@
       <svg class="filter-icon" width="12" height="12" viewBox="0 0 14 14" fill="none" stroke-width="1.5" stroke-linecap="round">
         <circle cx="6" cy="6" r="4.1"/><path d="m9.2 9.2 3 3"/>
       </svg>
-      <input id="filter" class="filter-input" type="text" data-bind="Filter" placeholder="Filter by name or path" autocomplete="off" spellcheck="false"{{if .Modal}} tabindex="-1"{{end}} maxlength="255">
+      <input id="filter" class="filter-input" type="text" data-bind="Filter" placeholder="Filter by name or path" autocomplete="off" spellcheck="false" size="1"{{if .Modal}} tabindex="-1"{{end}} maxlength="255">
       {{if .Filter}}<button class="filter-x" id="filter-clear" data-action="filter-clear" type="button" title="Clear filter" aria-label="Clear filter"{{if .Modal}} tabindex="-1"{{end}}>×</button>{{end}}
     </div>
+
+    {{if .ExplorerInputOpen}}
+    <div class="explorer-input" id="explorer-input-wrap">
+      <div class="explorer-input-title">{{.ExplorerInputTitle}}</div>
+      <input id="explorer-input" class="explorer-input-field" type="text" data-bind="ExplorerInputValue" placeholder="Name" autocomplete="off" spellcheck="false" aria-label="{{.ExplorerInputTitle}}"{{if .Modal}} tabindex="-1"{{end}} maxlength="255">
+      {{if .ExplorerInputError}}<div class="explorer-input-error" id="explorer-input-error" role="alert">{{.ExplorerInputError}}</div>{{end}}
+    </div>
+    {{end}}
 
     <div class="tree" id="tree-pane">
       {{if .StickyTree}}

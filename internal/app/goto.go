@@ -89,12 +89,20 @@ func isGotoNum(s string) bool {
 	return true
 }
 
-// atoiGoto parses a digit-only string.
+// gotoMaxNum caps a parsed go-to coordinate. A pasted line spec with dozens
+// of digits saturates here instead of wrapping the int, so the clamp toast
+// names a sane request and Enter on overlong input cannot break layout.
+const gotoMaxNum = 1 << 30
+
+// atoiGoto parses a digit-only string, saturating at gotoMaxNum.
 func atoiGoto(s string) int {
 	n := 0
 
 	for _, r := range s {
 		n = n*10 + int(r-'0')
+		if n > gotoMaxNum {
+			return gotoMaxNum
+		}
 	}
 
 	return n

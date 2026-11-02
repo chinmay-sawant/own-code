@@ -889,6 +889,8 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 			// Single-click previews: reuses the group preview slot.
 			a.openFilePreview(path)
 		}
+	case strings.HasPrefix(action, "palette-cmd:"):
+		return a.runPaletteCommand(ctx, strings.TrimPrefix(action, "palette-cmd:"))
 	case strings.HasPrefix(action, "dir:"):
 		path := strings.TrimPrefix(action, "dir:")
 		if (a.ctrl || a.shift) && !a.editing {
@@ -1079,6 +1081,14 @@ func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 		}
 
 		a.commitDialogMsg = next
+		a.refresh()
+	case "explorer-input":
+		next := clampFieldLen(a.view.ExplorerInputValue)
+		if next == a.explorerInput.Value {
+			return nil
+		}
+
+		a.explorerInput.Value = next
 		a.refresh()
 	}
 
@@ -1404,6 +1414,34 @@ func (a *App) treeKeyDown(ctx context.Context, key string) (bool, error) {
 
 	if index < 0 && stickyIndex < 0 {
 		return false, nil
+	}
+
+	// Explorer file ops: Delete opens the delete confirm, F2 opens the
+	// inline rename prompt. Both gate on explorerOpReady so overlays,
+	// text fields, and missing selection keep their keys.
+	if a.explorerOpReady() {
+		switch key {
+		case "delete", "del":
+			targets := a.explorerDeleteTargets(path)
+			if len(targets) == 0 {
+				return true, nil
+			}
+
+			a.openExplorerDeleteConfirm(targets)
+			a.refresh()
+
+			return true, a.page.Redraw(ctx)
+		case "f2":
+			if _, ok := a.lookupTreePath(path); !ok {
+				return true, nil
+			}
+
+			if err := a.beginExplorerInput(ctx, explorerInputRename, "", path); err != nil {
+				return true, err
+			}
+
+			return true, nil
+		}
 	}
 
 	if key == "space" {
@@ -2133,6 +2171,23 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 
 	if a.confirmOpen {
 		return nil
+	}
+
+	// The inline explorer prompt owns Enter/Escape while open. Enter
+	// commits (invalid names stay inline), Escape cancels. Other keys
+	// belong to the input field, so return early and let the binder type.
+	if a.explorerInput.Open {
+		if key == "escape" {
+			return a.cancelExplorerInput(ctx)
+		}
+
+		if key == "enter" && a.page.Form().FocusID() == "explorer-input" {
+			return a.commitExplorerInput(ctx)
+		}
+
+		if a.page.Form().FocusID() == "explorer-input" {
+			return nil
+		}
 	}
 
 	// A Rebind capture eats the next key: Esc cancels, anything else becomes
@@ -2905,6 +2960,14 @@ func (a *App) onSubmit(ctx context.Context) error {
 		return nil
 	}
 
+	// The inline explorer prompt commits on Enter. It routes before the
+	// editing and palette branches so a focused prompt never inserts a
+	// newline or opens a file. Invalid names stay inline via
+	// commitExplorerInput; only success closes the prompt.
+	if a.explorerInput.Open && a.page.Form().FocusID() == "explorer-input" {
+		return a.commitExplorerInput(ctx)
+	}
+
 	// Goto and symbol overlays submit from the palette input in or out of
 	// edit mode; they route before the editing branch so Enter jumps
 	// instead of inserting a newline.
@@ -3130,7 +3193,7 @@ func mergeTextFocus(focus string) bool {
 	switch focus {
 	case "filter", "palette", "find", "find-replace", "branch-filter", "workspace-search",
 		"workspace-replace",
-		"project-path", "drawer-path", "browse-filter", "editor", "edit-surface":
+		"project-path", "drawer-path", "browse-filter", "editor", "edit-surface", "explorer-input":
 		return true
 	default:
 		return false

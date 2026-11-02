@@ -14,7 +14,9 @@
 }
 
 .with-details .details { transform: translateX(0); pointer-events: auto; }
-.with-details .editor { width: calc(100vw - var(--activity-w) - var(--side-w) - 280px); }
+/* Editor widths are owned by Go inline geometry (paneGeometry/secondGeometry
+   already subtract the details drawer), so no CSS width override lives here:
+   a static calc would double-subtract details and break split + details. */
 
 .det-head {
   height: 34px;

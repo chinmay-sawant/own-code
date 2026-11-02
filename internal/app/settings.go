@@ -1125,7 +1125,7 @@ func chordFromEvent(ctrl, shift bool, key string) string {
 // appearance for unknown or empty values.
 func (a *App) settingsTabName() string {
 	switch a.settingsTab {
-	case "keyboard", "files":
+	case "keyboard", "files", "help", "about":
 		return a.settingsTab
 	default:
 		return "appearance"
@@ -1197,6 +1197,23 @@ func (a *App) keymapRows() []keymapRow {
 		})
 	}
 	return rows
+}
+
+// appName/appVersion/appScope feed the Settings → About tab.
+// The scope line mirrors the README one-liner so the dialog states what
+// the app is without duplicating longer docs.
+const (
+	appName    = "own-code"
+	appVersion = "v0.0.1"
+	appScope   = "Desktop app for reading code and reviewing diffs."
+)
+
+// helpRows is the read-only Help table: the full keymap catalog with the
+// live (effective) binding per row, so user rebinds show up here while
+// editing stays in the Keyboard tab. It shares keymapRows, which already
+// resolves diffs against defaults and marks fixed window-owned chords.
+func (a *App) helpRows() []keymapRow {
+	return a.keymapRows()
 }
 
 // scanFilterAllowsGitignore reports the live useGitignore toggle.

@@ -23,14 +23,19 @@ const (
 
 // pasteTargetReady reports whether explorer paste may run: no overlay owns
 // the keyboard and no text field owns the focus. The palette, search, find,
-// filter, and browser inputs keep their keystrokes instead of pasting files.
+// filter, explorer-input, and browser inputs keep their keystrokes instead
+// of pasting files.
 func (a *App) pasteTargetReady() bool {
 	if a.paletteOpen || a.branchOpen || a.searchOpen || a.settingsOpen || a.fileMenu || a.browseOpen {
 		return false
 	}
 
+	if a.explorerInput.Open {
+		return false
+	}
+
 	switch a.page.Form().FocusID() {
-	case "palette", "workspace-search", "workspace-replace", "find", "find-replace", "filter", "branch-filter", "project-path", "drawer-path", "browse-filter":
+	case "palette", "workspace-search", "workspace-replace", "find", "find-replace", "filter", "branch-filter", "project-path", "drawer-path", "browse-filter", "explorer-input":
 		return false
 	}
 

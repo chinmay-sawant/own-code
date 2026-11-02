@@ -87,12 +87,13 @@ func (a *App) paneGeometry() (int, int) {
 	}
 
 	left := int(float64(total) * a.splitRatio)
-	if left < paneMinWidth {
-		left = paneMinWidth
+	minW := a.zx(paneMinWidth)
+	if left < minW {
+		left = minW
 	}
 
-	if left > total-paneMinWidth {
-		left = total - paneMinWidth
+	if left > total-minW {
+		left = total - minW
 	}
 
 	if left < 1 {

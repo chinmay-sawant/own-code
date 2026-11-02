@@ -113,7 +113,7 @@ func (a *App) pinKeyReady() bool {
 	}
 
 	switch a.page.Form().FocusID() {
-	case "palette", "workspace-search", "find", "filter", "branch-filter", "project-path", "drawer-path", "browse-filter", "editor", "edit-surface":
+	case "palette", "workspace-search", "find", "filter", "branch-filter", "project-path", "drawer-path", "browse-filter", "editor", "edit-surface", "explorer-input":
 		return false
 	}
 

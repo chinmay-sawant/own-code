@@ -8,6 +8,8 @@
         <button class="settings-nav-item{{if eq .SettingsTab "appearance"}} settings-nav-active{{end}}" id="settings-tab-appearance" data-action="settings-tab:appearance" type="button" role="tab" aria-selected="{{if eq .SettingsTab "appearance"}}true{{else}}false{{end}}">Appearance</button>
         <button class="settings-nav-item{{if eq .SettingsTab "keyboard"}} settings-nav-active{{end}}" id="settings-tab-keyboard" data-action="settings-tab:keyboard" type="button" role="tab" aria-selected="{{if eq .SettingsTab "keyboard"}}true{{else}}false{{end}}">Keyboard</button>
         <button class="settings-nav-item{{if eq .SettingsTab "files"}} settings-nav-active{{end}}" id="settings-tab-files" data-action="settings-tab:files" type="button" role="tab" aria-selected="{{if eq .SettingsTab "files"}}true{{else}}false{{end}}">Files &amp; Search</button>
+        <button class="settings-nav-item{{if eq .SettingsTab "help"}} settings-nav-active{{end}}" id="settings-tab-help" data-action="settings-tab:help" type="button" role="tab" aria-selected="{{if eq .SettingsTab "help"}}true{{else}}false{{end}}">Help</button>
+        <button class="settings-nav-item{{if eq .SettingsTab "about"}} settings-nav-active{{end}}" id="settings-tab-about" data-action="settings-tab:about" type="button" role="tab" aria-selected="{{if eq .SettingsTab "about"}}true{{else}}false{{end}}">About</button>
       </div>
       <div class="settings-content" id="settings-viewport">
         <div class="settings-scroll" id="settings-scroll" style="top:{{.SettingsScrollTop}}px">
@@ -39,6 +41,19 @@
         </div>
         <div class="settings-caption">Custom scan excludes hide entirely (unlike dimmed gitignored rows). Search skips scan-excluded, search-excluded, and — unless toggled — ignored files. Search caps: 200 matches, 8 per file.</div>
         <div class="settings-foot"><button class="settings-btn primary" id="settings-rescan" data-action="settings-rescan" type="button">Apply &amp; Rescan</button><span class="settings-foot-note">Scan budget honors -files.</span></div>
+        {{else if eq .SettingsTab "help"}}
+        <div class="settings-title">Help</div>
+        <div class="settings-caption">Every shortcut in one place. Bindings follow your Keyboard rebinds — a customized row names its default. Editing stays in the Keyboard tab.</div>
+        <div class="settings-help-list" id="settings-help-list">
+        {{range .HelpRows}}
+        <div class="settings-help-row" id="help-{{.Action}}">
+          <span class="settings-help-action"><code>{{.Action}}</code></span><span class="settings-help-label">{{.Label}}</span><span class="settings-help-binding">{{.Chord}}{{if .Custom}} (default {{.Default}}){{end}}{{if .Fixed}} · fixed{{end}}</span>
+        </div>
+        {{end}}
+        </div>
+        {{else if eq .SettingsTab "about"}}
+        <div class="settings-title">About</div>
+        <div class="settings-about" id="settings-about"><b>{{.AppName}} {{.AppVersion}}</b><span>{{.AppScope}}</span></div>
         {{else}}
         <div class="settings-title">Color theme</div>
         <div class="settings-caption">Choose the colors for the editor and interface.</div>

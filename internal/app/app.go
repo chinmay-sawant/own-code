@@ -747,6 +747,11 @@ func NewWithLimit(root string, limit int) (*App, error) {
 		PresentMenu:    a.presentMenu,
 	})
 	page.Scroll().SetWindowing(true)
+	// The window scrolls the page to drive the editor's row window, so the
+	// shell chrome (titlebar, activity rails, sidebar, statusbar) must stay
+	// on the viewport. Pin every layer at the editor's z band (10) and above;
+	// scrolling content stays below it.
+	page.Scroll().SetViewportPinZ(10)
 	page.SetScrollWindow(a.onScroll)
 	page.SetTick(a.tickWatch)
 
@@ -1156,7 +1161,7 @@ func (a *App) buildView() View {
 	winW, _ := a.page.Size()
 	v := View{
 		Mode:          a.mode,
-		Filter:        clampFieldLen(a.filter),
+		Filter:        clipFilterDisplay(clampFieldLen(a.filter)),
 		Details:       a.details,
 		DevOn:         a.devOn,
 		MenuOpen:      a.menuOpen,
@@ -1192,6 +1197,10 @@ func (a *App) buildView() View {
 		SettingsTab:   a.settingsTabName(),
 		FontLabel:     a.fontLabel(),
 		KeymapRows:    a.keymapRows(),
+		HelpRows:      a.helpRows(),
+		AppName:       appName,
+		AppVersion:    appVersion,
+		AppScope:      appScope,
 		ScanText:      a.scanDraftText(),
 		SearchText:    a.searchDraftText(),
 		ScanBad:       invalidGlobLines(a.scanDraftText()),
@@ -1248,6 +1257,8 @@ func (a *App) buildView() View {
 	v.TreeVisible = a.treeVisibleRows()
 	v.ExplorerInputOpen = a.explorerInput.Open
 	v.ExplorerInputTitle = a.explorerInputTitle()
+	v.ExplorerInputValue = clampFieldLen(a.explorerInput.Value)
+	v.ExplorerInputError = a.explorerInput.Error
 	a.fillTreeScroll(&v)
 	a.fillBrowseScroll(&v)
 	a.fillSettingsScroll(&v)
@@ -1268,6 +1279,8 @@ func (a *App) buildView() View {
 	v.PaneLeft, v.PaneWidth = a.paneGeometry()
 	if v.Split {
 		v.SplitDivLeft, v.SplitDivW = a.splitDividerGeometry()
+		v.SplitDivTop = a.splitDividerTopPx()
+		v.SplitDivH = a.splitDividerHPx()
 	}
 
 	if doc := a.groupDoc(0); doc != nil {

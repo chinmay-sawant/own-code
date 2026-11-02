@@ -77,4 +77,12 @@
 .settings-toggle:hover .settings-check:empty { border-color: var(--text); }
 .settings-foot { display: flex; align-items: center; gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line-soft); flex-wrap: wrap; }
 .settings-foot-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.settings-help-list { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; }
+.settings-help-row { display: grid; grid-template-columns: 148px 1fr auto; gap: 10px; align-items: baseline; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; margin: 0; background-color: var(--panel-2); color: var(--text); line-height: 1.5; }
+.settings-help-action code { font-family: var(--mono); font-size: 11px; color: var(--text); background-color: var(--panel-3); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
+.settings-help-label { color: var(--text); font-size: 12px; min-width: 0; }
+.settings-help-binding { font-family: var(--mono); font-size: 11px; color: var(--muted); text-align: right; white-space: nowrap; }
+.settings-about { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; color: var(--text); background-color: var(--panel-2); }
+.settings-about b { font-size: 12px; font-weight: 650; line-height: 1.4; }
+.settings-about span { color: var(--muted); font-size: 11px; line-height: 1.5; }
 @media (max-width: 760px) { .settings-panel { left: 20px; } .settings-nav { width: 132px; flex-basis: 132px; } }

@@ -299,16 +299,75 @@ func (a *App) editKey(ctx context.Context, key string) error {
 	}
 
 	if a.ctrl {
+		// Rebound chords fire here too: the allows gates below kill the
+		// defaults they replace, and the dispatcher runs the replacement
+		// (unreachable past this branch in onKeyDown). Plain typing never
+		// reaches this branch (it arrives via onType), so buffer text and
+		// the window copy/paste/undo chords stay safe.
+		if handled, err := a.dispatchCustomKeymap(ctx, key); handled || err != nil {
+			return err
+		}
+
 		switch key {
 		case "s":
 			a.saveEdit()
 
 			return a.page.Redraw(ctx)
+		case "f":
+			// Ctrl+F opens the find bar from edit mode, and Ctrl+Shift+F
+			// the workspace search. The bar lives in the token-view
+			// crumbs, so the buffer folds first (dirty text is kept) and
+			// the bar becomes visible.
+			if a.shift {
+				if !a.keymapAllows("workspace-search", key) {
+					return nil
+				}
+
+				a.finishEdit()
+
+				return a.openWorkspaceSearch(ctx)
+			}
+
+			if !a.keymapAllows("find-in-file", key) {
+				return nil
+			}
+
+			a.finishEdit()
+
+			return a.openFind(ctx)
 		case "g":
 			// Ctrl+G opens the go-to-line overlay, in or out of edit mode.
 			// Key recon: the window sends "g" with the ctrl flag tracked
 			// from the separate control key event.
 			return a.openGotoPalette(ctx)
+		case "h":
+			// Ctrl+H opens the replace bar from edit mode, and
+			// Ctrl+Shift+H the workspace replace. The selection seeds the
+			// query before the fold, like the token-view path.
+			if a.shift {
+				if !a.keymapAllows("workspace-replace", key) {
+					return nil
+				}
+
+				a.finishEdit()
+
+				return a.openWorkspaceReplace(ctx)
+			}
+
+			if !a.keymapAllows("replace-in-file", key) {
+				return nil
+			}
+
+			if strings.TrimSpace(a.findQuery) == "" {
+				if seed, ok := a.replaceSeedQuery(); ok {
+					a.findQuery = clampFieldLen(seed)
+					a.page.Form().SetFormValue("find", a.findQuery)
+				}
+			}
+
+			a.finishEdit()
+
+			return a.openReplace(ctx)
 		case "o":
 			// Ctrl+Shift+O opens the file-scoped symbol overlay. A plain
 			// Ctrl+O keeps its old no-op.

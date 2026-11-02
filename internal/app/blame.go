@@ -32,7 +32,9 @@ type blameLine struct {
 	Hash        string
 	Short       string
 	Author      string
+	AuthorMail  string
 	Date        string
+	FullDate    string
 	Summary     string
 	Uncommitted bool
 }
@@ -255,12 +257,29 @@ func loadBlame(ctx context.Context, root, path string) ([]blameLine, error) {
 // file line. Each "\t<content>" line closes the current block header: the
 // author, date, and summary seen since that header belong to the line. A
 // block whose hash is all zeros is an uncommitted line. Unknown lines are
-// ignored so a newer git never breaks the gutter.
+// ignored so a newer git never breaks the gutter. Real porcelain repeats
+// the header for every line but carries the author meta only on the first
+// header per commit, so meta is remembered per hash and carried forward to
+// repeat headers that arrive without it.
 func parseBlamePorcelain(out string) []blameLine {
 	var lines []blameLine
 
 	cur := blameLine{}
+	meta := map[string]blameLine{}
 	have := false
+
+	remember := func() {
+		if cur.Hash == "" {
+			return
+		}
+		meta[cur.Hash] = blameLine{
+			Author:     cur.Author,
+			AuthorMail: cur.AuthorMail,
+			Date:       cur.Date,
+			FullDate:   cur.FullDate,
+			Summary:    cur.Summary,
+		}
+	}
 
 	for _, ln := range strings.Split(out, "\n") {
 		if strings.HasPrefix(ln, "\t") {
@@ -276,6 +295,13 @@ func parseBlamePorcelain(out string) []blameLine {
 		if isBlameHeader(ln) {
 			hash := ln[:commitHashLen]
 			cur = blameLine{Hash: hash, Short: blameShort(hash)}
+			if m, ok := meta[hash]; ok {
+				cur.Author = m.Author
+				cur.AuthorMail = m.AuthorMail
+				cur.Date = m.Date
+				cur.FullDate = m.FullDate
+				cur.Summary = m.Summary
+			}
 			if isZeroHash(hash) {
 				cur.Uncommitted = true
 			}
@@ -291,10 +317,19 @@ func parseBlamePorcelain(out string) []blameLine {
 		switch {
 		case strings.HasPrefix(ln, "author "):
 			cur.Author = strings.TrimPrefix(ln, "author ")
+			remember()
+		case strings.HasPrefix(ln, "author-mail "):
+			mail := strings.TrimSpace(strings.TrimPrefix(ln, "author-mail "))
+			cur.AuthorMail = strings.Trim(mail, "<>")
+			remember()
 		case strings.HasPrefix(ln, "author-time "):
-			cur.Date = blameDate(strings.TrimPrefix(ln, "author-time "))
+			raw := strings.TrimSpace(strings.TrimPrefix(ln, "author-time "))
+			cur.Date = blameDate(raw)
+			cur.FullDate = blameFullDate(raw)
+			remember()
 		case strings.HasPrefix(ln, "summary "):
 			cur.Summary = strings.TrimPrefix(ln, "summary ")
+			remember()
 		}
 	}
 
@@ -349,6 +384,18 @@ func blameDate(raw string) string {
 	return time.Unix(secs, 0).Format("2006-01-02")
 }
 
+// blameFullDate formats a porcelain author-time stamp as a full local date
+// with time and zone (YYYY-MM-DD HH:MM:SS -0700). Bad input stays blank so
+// the hover falls back to the short date.
+func blameFullDate(raw string) string {
+	secs, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if err != nil {
+		return ""
+	}
+
+	return time.Unix(secs, 0).Format("2006-01-02 15:04:05 -0700")
+}
+
 // blameDisplay is the gutter text for one line: the short hash, or
 // "Not committed" for uncommitted lines.
 func blameDisplay(line blameLine) string {
@@ -359,25 +406,73 @@ func blameDisplay(line blameLine) string {
 	return line.Short
 }
 
-// blameTitle is the hover text for one line: short hash, author, date, and
-// summary, or the uncommitted note.
+// blameTitle is the hover text for one line: the legacy short summary line
+// plus full hash, author email, full date, and the click hint. The first
+// line keeps the short hash, author, date, and summary so the gutter text
+// stays searchable in the hover; the lines after carry the richer detail.
+// Body text comes from blameTitleBody when the commit is in history.
 func blameTitle(line blameLine) string {
+	return blameTitleBody(line, "")
+}
+
+// blameTitleBody adds the commit body (from the loaded history) under the
+// subject. The body is trimmed to a short snippet so the native tooltip
+// stays readable; the full message lives in the commit diff behind the
+// click.
+func blameTitleBody(line blameLine, body string) string {
 	if line.Uncommitted {
 		return "Not committed"
 	}
 
-	title := line.Short
+	base := line.Short
 	if line.Author != "" {
-		title += " · " + line.Author
+		base += " · " + line.Author
 	}
 	if line.Date != "" {
-		title += " · " + line.Date
+		base += " · " + line.Date
 	}
 	if line.Summary != "" {
-		title += " · " + line.Summary
+		base += " · " + line.Summary
+	}
+	if base == "" {
+		base = line.Hash
 	}
 
-	return title
+	detail := []string{base}
+	if line.Hash != "" {
+		detail = append(detail, "commit "+line.Hash)
+	}
+
+	author := line.Author
+	if line.AuthorMail != "" {
+		if author != "" {
+			author += " <" + line.AuthorMail + ">"
+		} else {
+			author = line.AuthorMail
+		}
+	}
+	if author != "" {
+		detail = append(detail, "Author: "+author)
+	}
+
+	fullDate := line.FullDate
+	if fullDate == "" {
+		fullDate = line.Date
+	}
+	if fullDate != "" {
+		detail = append(detail, "Date: "+fullDate)
+	}
+
+	if trimmed := strings.TrimSpace(body); trimmed != "" {
+		if runes := []rune(trimmed); len(runes) > 240 {
+			trimmed = string(runes[:240]) + "…"
+		}
+		detail = append(detail, "", trimmed)
+	}
+
+	detail = append(detail, "", "Click to open commit diff")
+
+	return strings.Join(detail, "\n")
 }
 
 // blameStatKey keys the blame cache by path plus size and mtime, so a save
@@ -587,11 +682,27 @@ func (a *App) decorateBlame(doc *fileDoc, rows []codeRow, group int) {
 		}
 
 		row.Blame = blameDisplay(entry)
-		row.BlameTitle = blameTitle(entry)
 		if !entry.Uncommitted {
 			row.BlameHash = entry.Hash
 		}
+		row.BlameTitle = blameTitleBody(entry, a.blameBody(entry.Hash))
 	}
+}
+
+// blameBody returns the commit body for one blame hash from the loaded
+// history, or "" when the commit is outside the history. Porcelain blame
+// carries only the subject, so the history fills in the rest without extra
+// git calls or new loading states.
+func (a *App) blameBody(hash string) string {
+	if hash == "" || isZeroHash(hash) {
+		return ""
+	}
+
+	if commit := a.findCommit(hash); commit != nil {
+		return commit.Body
+	}
+
+	return ""
 }
 
 // toggleBlame flips the blame gutter and keeps the top source line in view,
