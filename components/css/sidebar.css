@@ -128,7 +128,7 @@
   gap: 6px;
 }
 
-.explorer-input-title { color: var(--muted); font-size: 10px; font-weight: 650; }
+.explorer-input-title { display: flex; align-items: center; min-height: 16px; color: var(--muted); font-size: 10px; font-weight: 650; line-height: normal; }
 
 .explorer-input-field {
   width: 100%;
@@ -139,6 +139,7 @@
   background-color: var(--panel);
   color: var(--text);
   font-size: 11px;
+  line-height: 24px;
   outline: none;
 }
 

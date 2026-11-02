@@ -133,8 +133,14 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 	case action == "":
 		if box.ID == "filter" || box.ID == "palette" || box.ID == "find" || box.ID == "find-replace" || box.ID == "branch-filter" ||
 			box.ID == "workspace-search" || box.ID == "workspace-replace" || box.ID == "editor" || box.ID == "edit-surface" || box.ID == "project-path" ||
-			box.ID == "drawer-path" || box.ID == "browse-filter" || box.ID == "commit-message" {
+			box.ID == "drawer-path" || box.ID == "browse-filter" || box.ID == "commit-message" || box.ID == "explorer-input" {
 			return nil
+		}
+
+		// Clicking the prompt frame (title, padding, error) lands the
+		// caret back in the name field instead of blurring it.
+		if box.ID == "explorer-input-wrap" || box.ID == "explorer-input-title" || box.ID == "explorer-input-error" {
+			return a.page.Form().Focus(ctx, "explorer-input")
 		}
 
 		// A press on the card body is the start of a header drag, not a

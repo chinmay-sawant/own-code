@@ -83,6 +83,8 @@ func zoomTreeCSS(b *strings.Builder, px func(int) string) {
 		{".filter", []string{" height:", " !important; margin:", " ", " ", " !important; gap:", " !important; padding:0 ", " !important;"}, []int{28, 8, 9, 6, 7, 8}},
 		{".filter-icon, .filter-icon svg", []string{" width:", " !important; height:", " !important;"}, []int{12, 12}},
 		{".filter-input", []string{" height:", " !important; line-height:", " !important;"}, []int{26, 26}},
+		{".explorer-input-field", []string{" height:", " !important; line-height:", " !important;"}, []int{26, 24}},
+		{".explorer-input-title", []string{" min-height:", " !important;"}, []int{16}},
 		{".filter-x", []string{" width:", " !important; height:", " !important; border-radius:", " !important;"}, []int{18, 18, 3}},
 		{".tree", []string{" padding:", " 0 ", " !important;"}, []int{1, 4}},
 		{".trow", []string{" gap:", " !important; padding-right:", " !important; border-left-width:", " !important;"}, []int{7, 10, 2}},
@@ -151,7 +153,7 @@ func zoomEditorCSS(b *strings.Builder, px func(int) string) {
 		// Editor scroll rail and context menu.
 		{".editor-scroll-thumb", []string{" right:", " !important; width:", " !important; border-radius:", " !important;"}, []int{8, 8, 4}},
 		{".ctx-menu", []string{" min-width:", " !important; padding:", " !important; border-radius:", " !important;"}, []int{188, 4, 8}},
-		{".ctx-item", []string{" height:", " !important; line-height:", " !important; padding:0 ", " !important; border-radius:", " !important;"}, []int{26, 26, 10, 5}},
+		{".ctx-item", []string{" height:", " !important; padding:0 ", " !important; border-radius:", " !important;"}, []int{26, 10, 5}},
 		{".keys em", []string{" min-width:", " !important; height:", " !important; padding:0 ", " !important; border-radius:", " !important;"}, []int{24, 22, 4, 3}},
 		// Welcome and empty states.
 		{".welcome-card", []string{" width:", " !important; padding:", " ", " ", " !important; border-radius:", " !important; gap:", " !important;"}, []int{548, 28, 30, 22, 8, 12}},
