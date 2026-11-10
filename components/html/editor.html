@@ -325,7 +325,7 @@
       {{end}}
     </div>
     {{end}}
-    {{if .EditorScroll.Show}}<button class="editor-scroll-thumb" id="editor-scroll-thumb" type="button" aria-label="Scroll editor" tabindex="-1" style="top:{{.EditorScroll.Top}}px;height:{{.EditorScroll.Height}}px"><svg width="8" height="{{.EditorScroll.Height}}" aria-hidden="true"><rect width="8" height="{{.EditorScroll.Height}}" fill="#a6adba"/></svg></button>{{end}}
+    {{if .EditorScroll.Show}}<button class="editor-scroll-thumb" id="editor-scroll-thumb" type="button" aria-label="Scroll editor" tabindex="-1" style="top:{{.EditorScroll.Top}}px;height:{{.EditorScroll.Height}}px"><svg width="8" height="{{.EditorScroll.Height}}" aria-hidden="true"><rect width="8" height="{{.EditorScroll.Height}}" fill="{{.ThumbColor}}"/></svg></button>{{end}}
   </div>
 </section>
 
@@ -425,7 +425,7 @@
       {{end}}
     </div>
     {{end}}
-    {{if .Second.EditorScroll.Show}}<button class="editor-scroll-thumb" id="editor-scroll-thumb-2" type="button" aria-label="Scroll second editor" tabindex="-1" style="top:{{.Second.EditorScroll.Top}}px;height:{{.Second.EditorScroll.Height}}px"><svg width="8" height="{{.Second.EditorScroll.Height}}" aria-hidden="true"><rect width="8" height="{{.Second.EditorScroll.Height}}" fill="#a6adba"/></svg></button>{{end}}
+    {{if .Second.EditorScroll.Show}}<button class="editor-scroll-thumb" id="editor-scroll-thumb-2" type="button" aria-label="Scroll second editor" tabindex="-1" style="top:{{.Second.EditorScroll.Top}}px;height:{{.Second.EditorScroll.Height}}px"><svg width="8" height="{{.Second.EditorScroll.Height}}" aria-hidden="true"><rect width="8" height="{{.Second.EditorScroll.Height}}" fill="{{.ThumbColor}}"/></svg></button>{{end}}
   </div>
 </section>
 {{end}}

@@ -103,9 +103,9 @@ button.pln:focus { outline: 0; }
 .prow-summary .ptext { color: var(--syntax-keyword); font-weight: 600; }
 .prow-summary .pmark { color: var(--accent); }
 
-.prow-code { background-color: rgba(255, 255, 255, 0.035); }
+.prow-code { background-color: var(--panel-2); }
 .prow-code .ptext { color: var(--syntax-string); font-family: var(--mono); font-size: 11px; }
-.prow-code .pmark { background-color: rgba(255, 255, 255, 0.035); }
+.prow-code .pmark { background-color: var(--panel-2); }
 
 .prow-quote .ptext { color: var(--muted); }
 .prow-quote .pmark { color: var(--accent); }
@@ -134,7 +134,7 @@ button.pln:focus { outline: 0; }
 }
 
 .crumb-btn.on {
-  border-color: rgba(122, 162, 247, 0.4);
+  border-color: var(--accent-strong);
   background-color: var(--accent-soft);
   color: var(--accent);
 }
