@@ -668,7 +668,7 @@ func TestUnifiedLineRevertButtons(t *testing.T) {
 					baseVisible = true
 				}
 			case ".line-revert:hover":
-				if strings.Contains(decl, "#f07178") {
+				if strings.Contains(decl, "var(--red)") || strings.Contains(decl, "#f07178") {
 					hoverDanger = true
 				}
 			case ".line-revert:focus-visible":

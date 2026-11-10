@@ -158,6 +158,10 @@ type View struct {
 	Confirm      confirmView
 	SettingsOpen bool
 	Themes       []themeRow
+	// ThumbColor and PanelColor carry theme colors into inline SVG paints;
+	// the SVG rasterizer does not resolve currentColor or var().
+	ThumbColor   string
+	PanelColor   string
 	Palette      paletteView
 	PaletteQuery string
 	SearchQuery  string

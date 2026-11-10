@@ -1223,6 +1223,8 @@ func (a *App) buildView() View {
 		HasWSL:        wsl.Available(),
 		Alert:         a.fileAlert,
 		Themes:        a.themeRows(),
+		ThumbColor:    thumbColorFor(a.theme),
+		PanelColor:    panelColorFor(a.theme),
 		AutoSave:      validAutoSave(a.autoSave),
 		AutoSaveDelay: clampAutoSaveDelay(firstNonZero(a.autoSaveDelayMs, autoSaveDefaultDelay)),
 		MaxFPS:        a.EffectiveMaxFPS(),

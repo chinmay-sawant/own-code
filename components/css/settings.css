@@ -17,8 +17,8 @@
    only on overflow, with an SVG rect for the thumb because the engine
    drops an empty thumb's background. */
 .settings-scroll { position: relative; padding-bottom: 14px; }
-.settings-rail { position: fixed; z-index: 61; width: 8px; display: block; padding: 0; border: 0; background-color: transparent; color: var(--dim); }
-.settings-thumb { position: absolute; left: 1px; width: 6px; min-height: 18px; display: block; border-radius: 3px; background-color: var(--dim); color: var(--dim); }
+.settings-rail { position: fixed; z-index: 61; width: 8px; display: block; padding: 0; border: 0; background-color: transparent; color: var(--thumb); }
+.settings-thumb { position: absolute; left: 1px; width: 6px; min-height: 18px; display: block; border-radius: 3px; background-color: var(--thumb); color: var(--thumb); }
 .settings-title { color: var(--text); font-size: 14px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.4; margin: 0 0 6px; }
 .settings-caption { color: var(--muted); font-size: 12px; line-height: 1.55; margin: 0 0 14px; max-width: 62ch; }
 .settings-caption code { font-family: var(--mono); font-size: 11px; color: var(--text); background-color: var(--panel-3); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
@@ -40,6 +40,8 @@
 .swatch-contrast { background-color: #000000; }
 .swatch-glass { background-color: #202d3d; background-image: linear-gradient(180deg, rgba(255,255,255,0.24), rgba(255,255,255,0.02)); }
 .swatch-glass-light { background-color: #e5ebf3; background-image: linear-gradient(180deg, rgba(255,255,255,0.75), rgba(119,154,200,0.06)); }
+.swatch-ember { background-color: #241b14; background-image: linear-gradient(180deg, rgba(254,128,25,0.22), rgba(254,128,25,0.03)); }
+.swatch-ember-light { background-color: #f8efdd; background-image: linear-gradient(180deg, rgba(255,255,255,0.78), rgba(175,58,3,0.07)); }
 .settings-sub { color: var(--text); font-size: 12px; font-weight: 650; line-height: 1.4; margin: 20px 0 8px; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
 .settings-count { flex: 0 0 auto; color: var(--muted); font-weight: 400; font-size: 11px; }
 .settings-stepper { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; flex-wrap: wrap; }

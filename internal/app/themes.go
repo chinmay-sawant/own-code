@@ -22,6 +22,8 @@ func themeCatalog() []theme {
 		{"contrast", "High Contrast", "Bright text and strong boundaries", "#000000", "#101010", "#171717", "#252525", "#858585", "#ffffff", "#eeeeee", "#bdbdbd", "#75caff", "#ff9dff", "#ffdf75", "#75caff", "#a5f79a", "#ffba86", "#bdbdbd", "#a6eaff", "#ff9a9a", "#24598a"},
 		{"glass", "Liquid Glass", "Layered slate chrome with cool glass highlights", "#0b111b", "#101824", "#172230", "#202d3d", "rgba(230,241,255,0.16)", "#eff4fb", "#b7c3d3", "#8794a7", "#76baff", "#c4a2ff", "#78c7f0", "#70d5a6", "#f0a57b", "#f1ca75", "#95a2b4", "#9ab6ff", "#e2ecfb", "rgba(118,186,255,0.22)"},
 		{"glass-light", "Liquid Glass Light", "Clear chrome over a cool neutral canvas", "#f2f5f9", "#ffffff", "#eef2f7", "#e5ebf3", "rgba(31,55,86,0.14)", "#1c2737", "#536276", "#7c8ba0", "#0a84ff", "#a34479", "#1267b2", "#167346", "#96501e", "#805a13", "#77869a", "#365f9a", "#17263b", "rgba(10,132,255,0.18)"},
+		{"ember", "Ember", "A warm, retro charcoal-brown editor lit by gruvbox orange", "#241b14", "#1e1712", "#2b231c", "#342b23", "#463a2e", "#ecdfc9", "#b3a48d", "#96877a", "#fe8019", "#fe8019", "#fabd2f", "#8fb9de", "#b8bb26", "#d3869b", "#928374", "#74c3ae", "#f5e9d2", "rgba(254,128,25,0.22)"},
+		{"ember-light", "Ember Light", "Warm parchment and burnt orange, the light twin of Ember", "#f8efdd", "#eee2cd", "#e5d8c1", "#d9cbb2", "#c4b49c", "#3a2f23", "#66594a", "#5f5343", "#af3a03", "#af3a03", "#8a5f00", "#356a78", "#5f5f06", "#8f3f71", "#6f6254", "#34694c", "#2e251d", "rgba(175,58,3,0.16)"},
 	}
 }
 
@@ -81,6 +83,22 @@ func themeCSS(id string) string {
 			--red-word:rgba(168,52,69,0.20); --red-active:rgba(168,52,69,0.14);
 			--red-gutter:rgba(168,52,69,0.07); --amber-soft:rgba(128,90,19,0.10);`
 		}
+		if id == "ember" {
+			semantic = `--green:#6fd287; --red:#fb4934; --amber:#ffc14d; --purple:#c89ade;
+			--accent-soft:rgba(254,128,25,0.13); --green-bg:rgba(111,210,135,0.10);
+			--green-word:rgba(111,210,135,0.25); --green-active:rgba(111,210,135,0.17);
+			--green-gutter:rgba(111,210,135,0.08); --red-bg:rgba(251,73,52,0.10);
+			--red-word:rgba(251,73,52,0.25); --red-active:rgba(251,73,52,0.17);
+			--red-gutter:rgba(251,73,52,0.08); --amber-soft:rgba(255,193,77,0.12);`
+		}
+		if id == "ember-light" {
+			semantic = `--green:#1f7a38; --red:#b03a30; --amber:#805400; --purple:#733d7e;
+			--accent-soft:rgba(175,58,3,0.10); --green-bg:rgba(31,122,56,0.08);
+			--green-word:rgba(31,122,56,0.20); --green-active:rgba(31,122,56,0.14);
+			--green-gutter:rgba(31,122,56,0.07); --red-bg:rgba(176,58,48,0.08);
+			--red-word:rgba(176,58,48,0.20); --red-active:rgba(176,58,48,0.14);
+			--red-gutter:rgba(176,58,48,0.07); --amber-soft:rgba(128,84,0,0.10);`
+		}
 		icons := ""
 		if id == "light" || id == "solarized" || id == "glass-light" {
 			icons = `
@@ -94,15 +112,102 @@ func themeCSS(id string) string {
 .lang-html { background:#fae0d9 !important; color:#9b3c25 !important; }
 .lang-yaml { background:#d8efe8 !important; color:#146451 !important; }
 .lang-shell { background:#e5eed9 !important; color:#466420 !important; }
-.lang-plain { background:#e4e7eb !important; color:#485464 !important; }`
+.lang-plain { background:#e4e7eb !important; color:#485464 !important; }
+.lang-image { background:#fde3ee !important; color:#8a3a5a !important; }
+.t-code { background-color:rgba(0,0,0,0.07) !important; }`
+		}
+		if id == "ember-light" {
+			icons = `
+.commit-tip-float, .inline-card { box-shadow:none !important; }
+.lang-go { background:#d8eaea !important; color:#075c63 !important; }
+.lang-python { background:#f2e4bb !important; color:#6b5200 !important; }
+.lang-javascript { background:#f4ecbc !important; color:#635200 !important; }
+.lang-markdown { background:#dfe6f2 !important; color:#244a7d !important; }
+.lang-css { background:#ece0ee !important; color:#5c3468 !important; }
+.lang-json { background:#f5e2c6 !important; color:#6e4a08 !important; }
+.lang-html { background:#f6dcd0 !important; color:#8d3a1e !important; }
+.lang-yaml { background:#dcecdf !important; color:#1e5c38 !important; }
+.lang-shell { background:#e8ebcf !important; color:#495a12 !important; }
+.lang-plain { background:#e9dfcd !important; color:#5a4c3c !important; }
+.lang-image { background:#f5dde4 !important; color:#7c3a50 !important; }
+.t-code { background-color:rgba(58,44,24,0.10) !important; }`
 		}
 		glass := ""
 		if id == "glass" || id == "glass-light" {
 			glass = glassCSS(id)
 		}
-		return fmt.Sprintf(`:root { %s --bg:%s !important; --panel:%s !important; --panel-2:%s !important; --panel-3:%s !important; --line:%s !important; --line-soft:%s !important; --text:%s !important; --muted:%s !important; --dim:%s !important; --icon:%s !important; --icon-strong:%s !important; --accent:%s !important; --syntax-keyword:%s !important; --syntax-type:%s !important; --syntax-function:%s !important; --syntax-string:%s !important; --syntax-number:%s !important; --syntax-comment:%s !important; --syntax-operator:%s !important; --syntax-variable:%s !important; --selection:%s !important; }`, semantic, t.Background, t.Panel, t.Panel2, t.Panel3, t.Line, t.Line, t.Text, t.Muted, t.Dim, t.Muted, t.Muted, t.Accent, t.Keyword, t.Type, t.Function, t.String, t.Number, t.Comment, t.Operator, t.Variable, t.Selection) + icons + glass + termCSS(id)
+		thumb := thumbColorFor(id)
+		return fmt.Sprintf(`:root { %s --bg:%s !important; --panel:%s !important; --panel-2:%s !important; --panel-3:%s !important; --line:%s !important; --line-soft:%s !important; --text:%s !important; --muted:%s !important; --dim:%s !important; --icon:%s !important; --icon-strong:%s !important; --accent:%s !important; --accent-strong:%s !important; --thumb:%s !important; --syntax-keyword:%s !important; --syntax-type:%s !important; --syntax-function:%s !important; --syntax-string:%s !important; --syntax-number:%s !important; --syntax-comment:%s !important; --syntax-operator:%s !important; --syntax-variable:%s !important; --selection:%s !important; }`, semantic, t.Background, t.Panel, t.Panel2, t.Panel3, t.Line, t.Line, t.Text, t.Muted, t.Dim, t.Muted, t.Muted, t.Accent, accentStrongFor(id), thumb, t.Keyword, t.Type, t.Function, t.String, t.Number, t.Comment, t.Operator, t.Variable, t.Selection) + icons + glass + termCSS(id)
 	}
 	return ""
+}
+
+// thumbColorFor returns the thumb hex for one theme; themeCSS paints the
+// CSS side via --thumb and templates bake the same hex into inline SVG
+// fills (the SVG rasterizer resolves neither currentColor nor var()).
+func thumbColorFor(id string) string {
+	switch id {
+	case "dracula":
+		return "#cdd2e0"
+	case "light":
+		return "#9d9d9d"
+	case "solarized":
+		return "#b9b19e"
+	case "nord":
+		return "#d8dee9"
+	case "contrast":
+		return "#d9d9d9"
+	case "glass":
+		return "#cfe0f2"
+	case "glass-light":
+		return "#8fa8c0"
+	case "ember":
+		return "#d3c6b2"
+	case "ember-light":
+		return "#a5947c"
+	default: // midnight
+		return "#c5c9d1"
+	}
+}
+
+// panelColorFor returns the theme's panel-2 hex for inline SVG fills (the
+// hollow commit-graph node sits on panel-2).
+func panelColorFor(id string) string {
+	for _, t := range themeCatalog() {
+		if t.ID == id {
+			return t.Panel2
+		}
+	}
+	return "#10131b" // midnight panel-2
+}
+
+// accentStrongFor is the accent's own hue at icon/ring strength: washes
+// behind borders, focus rings, and active accents that need more presence
+// than --accent-soft. Light themes keep a lower alpha so the wash stays
+// legible on pale panels; dark themes get a glow-like wash.
+func accentStrongFor(id string) string {
+	switch id {
+	case "dracula":
+		return "rgba(189,147,249,0.45)"
+	case "light":
+		return "rgba(0,95,184,0.30)"
+	case "solarized":
+		return "rgba(0,109,163,0.30)"
+	case "nord":
+		return "rgba(136,192,208,0.40)"
+	case "contrast":
+		return "rgba(117,202,255,0.45)"
+	case "glass":
+		return "rgba(118,186,255,0.36)"
+	case "glass-light":
+		return "rgba(10,132,255,0.28)"
+	case "ember":
+		return "rgba(254,128,25,0.38)"
+	case "ember-light":
+		return "rgba(175,58,3,0.30)"
+	default: // midnight
+		return "rgba(122,162,247,0.40)"
+	}
 }
 
 // glassCSS uses OwnFrame's backdrop blur and edge refraction for glass surfaces.
@@ -219,6 +324,20 @@ func termPaletteFor(id string) termPalette {
 			"#0a84ff", "#d7006d", "#0071e3", "#4a5c7a",
 			"#7a8aa6", "#e51400", "#0a9b4a", "#a66c00",
 			"#3b9bff", "#e04a9b", "#33b8ff", "#0a1930",
+		}}
+	case "ember":
+		return termPalette{"#1a130e", [16]string{
+			"#2b221a", "#fb4934", "#b8bb26", "#fabd2f",
+			"#83a598", "#d3869b", "#8ec07c", "#ebdbb2",
+			"#665c54", "#fb6a52", "#c9d24e", "#fed975",
+			"#9dc4d4", "#e5aac4", "#b1e3d8", "#f7ecd9",
+		}}
+	case "ember-light":
+		return termPalette{"#f0e4cd", [16]string{
+			"#33291f", "#b03a30", "#1f7a38", "#8a5f00",
+			"#356a78", "#8f3f71", "#34694c", "#6a5c4c",
+			"#7d7162", "#c8483a", "#2e8a47", "#a57608",
+			"#3f7a96", "#a34f88", "#3f8262", "#241b14",
 		}}
 	default:
 		return termPalette{"#080a10", [16]string{

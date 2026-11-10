@@ -21,7 +21,7 @@
   align-items: center;
   gap: 2px;
   padding: 0 6px;
-  border: 1px solid rgba(122, 162, 247, 0.22);
+  border: 1px solid var(--accent-strong);
   border-radius: 10px;
   background-color: var(--panel);
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.14);
@@ -45,8 +45,8 @@
 
 .file-nav-change { width: 20px; flex-basis: 20px; font-size: 14px; }
 
-.file-nav-arrow.off { color: #3a4252; }
-.file-nav-arrow.off:hover { background-color: transparent; color: #3a4252; }
+.file-nav-arrow.off { color: var(--dim); }
+.file-nav-arrow.off:hover { background-color: transparent; color: var(--dim); }
 
 .file-nav-pos {
   flex: 0 0 auto;

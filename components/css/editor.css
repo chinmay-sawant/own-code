@@ -13,7 +13,7 @@
   background-color: var(--bg);
 }
 
-.editor.focus { box-shadow: inset 0 2px 0 rgba(122, 162, 247, 0.35); }
+.editor.focus { box-shadow: inset 0 2px 0 var(--accent-strong); }
 .editor-second { border-left: 1px solid var(--line); }
 
 /* Split focus: the idle pane dims its tab strip so the focused side reads
@@ -38,7 +38,7 @@
   transition: background-color 120ms ease;
 }
 
-.split-divider:hover { background-color: rgba(122, 162, 247, 0.32); }
+.split-divider:hover { background-color: var(--accent-strong); }
 
 .split-divider:focus { outline: 0; }
 
@@ -214,7 +214,7 @@
    exactly as before and stays opaque to the ink. */
 .crumbs .crumb-btn.on {
   background-color: var(--bg);
-  background-image: linear-gradient(rgba(122, 162, 247, 0.12), rgba(122, 162, 247, 0.12));
+  background-image: linear-gradient(var(--accent-soft), var(--accent-soft));
   box-shadow: inset 0 0 18px 10px var(--bg);
 }
 /* Same 2px lift as .seg-btn: the meta line shares the row with the mono
@@ -235,10 +235,10 @@
   font-size: 9px;
 }
 
-.crumb-btn:hover { border-color: #2b3240; color: var(--text); background-color: var(--panel-2); }
-.crumb-btn.on { border-color: rgba(122, 162, 247, 0.5); background-color: var(--accent-soft); color: var(--accent); }
-.crumb-btn.off { color: #3a4252; }
-.crumb-btn.off:hover { background-color: transparent; border-color: var(--line); color: #3a4252; }
+.crumb-btn:hover { border-color: var(--muted); color: var(--text); background-color: var(--panel-2); }
+.crumb-btn.on { border-color: var(--accent-strong); background-color: var(--accent-soft); color: var(--accent); }
+.crumb-btn.off { color: var(--dim); }
+.crumb-btn.off:hover { background-color: transparent; border-color: var(--line); color: var(--dim); }
 
 /* Split panes are half width: a fixed single row cannot hold the status
    mark, language pill, path, and the Wrap/Blame/Copy buttons, so the
@@ -303,7 +303,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.find-input:focus { border-color: rgba(122, 162, 247, 0.55); }
+.find-input:focus { border-color: var(--accent-strong); }
 .find-count { display: inline-flex; align-items: center; justify-content: flex-start; text-align: left; height: 21px; color: var(--dim); font-size: 8.5px; white-space: nowrap; }
 .find-btn {
   width: 20px;
@@ -316,7 +316,7 @@
   color: var(--muted);
   font-size: 9px;
 }
-.find-btn:hover, .find-btn.on { border-color: rgba(122, 162, 247, 0.5); background-color: var(--accent-soft); color: var(--accent); }
+.find-btn:hover, .find-btn.on { border-color: var(--accent-strong); background-color: var(--accent-soft); color: var(--accent); }
 .find-btn.text { width: auto; padding: 0 8px; font-size: 8.5px; }
 .find-btn.text:disabled { opacity: 0.45; cursor: default; }
 /* The crumbs bar is a fixed 30 px header: Go's scroll math bakes that height
@@ -333,9 +333,9 @@
   min-width: 0 !important;
 }
 .replace-row { display: flex; align-items: center; gap: 5px; flex: 1 1 auto; min-width: 0; flex-basis: auto; overflow: hidden; }
-.find-error { flex: 0 1 auto; min-width: 0; flex-basis: auto; color: #e8a0a0; font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.find-error { flex: 0 1 auto; min-width: 0; flex-basis: auto; color: var(--red); font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.editor-scroll-thumb { position: absolute; right: 8px; width: 8px; z-index: 40; background-color: var(--muted); cursor: ns-resize; }
+.editor-scroll-thumb { position: absolute; right: 8px; width: 8px; z-index: 40; background-color: var(--thumb); cursor: ns-resize; }
 
 /* Code body ---------------------------------------------------------------- */
 
@@ -729,7 +729,7 @@ button.blame:focus { outline: 0; }
   background-color: var(--panel-2);
 }
 
-.quick-row:hover { border-color: rgba(122, 162, 247, 0.35); background-color: var(--panel-3); }
+.quick-row:hover { border-color: var(--accent-strong); background-color: var(--panel-3); }
 .quick-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .quick-text b { font-size: 10px; font-weight: 600; color: var(--text); overflow: hidden; white-space: nowrap; }
 .quick-text span { font-size: 8.5px; color: var(--dim); overflow: hidden; white-space: nowrap; }
@@ -792,7 +792,7 @@ button.blame:focus { outline: 0; }
   font-weight: 600;
 }
 
-.button:hover { border-color: #2b3240; background-color: var(--panel-3); }
+.button:hover { border-color: var(--muted); background-color: var(--panel-3); }
 
 @media (max-width: 1300px) {
   .brand-sub { display: none; }
@@ -806,9 +806,9 @@ button.blame:focus { outline: 0; }
 
 /* Diff expander accordion rows */
 .drow.expand {
-  background-color: rgba(122, 162, 247, 0.08);
-  border-top: 1px solid rgba(122, 162, 247, 0.15);
-  border-bottom: 1px solid rgba(122, 162, 247, 0.15);
+  background-color: var(--accent-soft);
+  border-top: 1px solid var(--accent-soft);
+  border-bottom: 1px solid var(--accent-soft);
   height: var(--row-h);
   line-height: var(--row-h);
   display: flex;
@@ -833,10 +833,10 @@ button.blame:focus { outline: 0; }
 }
 
 .expand-btn {
-  background: rgba(122, 162, 247, 0.12);
-  border: 1px solid rgba(122, 162, 247, 0.25);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-strong);
   border-radius: 3px;
-  color: #7aa2f7;
+  color: var(--accent);
   font-family: var(--mono);
   font-size: 10px;
   line-height: 14px;
@@ -849,9 +849,9 @@ button.blame:focus { outline: 0; }
 }
 
 .expand-btn:hover {
-  background: rgba(122, 162, 247, 0.22);
-  color: #9ab8ff;
-  border-color: rgba(122, 162, 247, 0.4);
+  background: var(--accent-strong);
+  color: var(--accent);
+  border-color: var(--accent-strong);
 }
 
 .expand-btn.expand-all {
