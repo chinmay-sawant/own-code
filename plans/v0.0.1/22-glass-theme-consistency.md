@@ -103,3 +103,18 @@ declarations from every `components/css/*.css` and fails if a file exceeds its a
 Budgets: base 24 (lang badges), settings 18 (swatches), sidebar 9, window-control 5, editor 4,
 merge 4, inline_card 3, palette 2, history/file_nav/popup 1, the rest 0. It cannot check HTML
 inline `style=` attributes or Go-side theme strings, only component CSS.
+
+## Second pass: edge lines (after user review of the live app)
+
+The user found the dark glass theme harsh: near-white outlines and bright rules.
+
+| Item | Cause | Fix |
+|---|---|---|
+| Near-white rims on inputs, tabs, buttons, cards, settings rows | `glassCSS` and `glassSkin` set `border-color` to 1px translucent `rgba(225,239,255,0.13-0.25)`, which renders near-white on glass | Opaque blended hairlines in `themes.go` (dark `#334055`, `#2a3445`; light `#cdd5df`, `#c3ccd8`) |
+| Bright dividers everywhere | `--line` / `--line-soft` took the catalog rgba for glass | `lineFor` / `lineSoftFor` return opaque blends for glass |
+| Muddy sidebar gradient vs flat editor | Chrome tint alpha 0.19-0.20 plus a strong gradient | Calmer tint (0.05 gradient, 0.78-0.82 base) on sidebar, tab strip, title and status bars |
+| Thick pale divider beside the sidebar | `.drawer-resize` SVG had a fixed `#8f8f8f` fill | SVG fills with `currentColor`; default unchanged for flat themes, glass sets a hairline colour |
+| Blue line above the tab strip | `.editor.focus` 2px accent border | 1px soft accent for glass and glass-light |
+
+Verified by headless frames (`TestScreenshotGlass`) for `glass`, `glass-light`, and the flat `midnight` (unchanged).
+Known: the coloured blur blob in the Settings frame is ownframe's glass lens effect at the default pointer position; it appears in the "before" frames too and is not part of this change.

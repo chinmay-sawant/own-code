@@ -31,9 +31,9 @@ var colorLiteralBudget = map[string]int{
 	"inline_card.css":    3,  // shadow + old/new line washes
 	"history.css":        1,  // shadow
 	"palette.css":        2,  // scrim (glass overrides) + search-match highlight
-	"scrollrails.css":    0,
-	"popup.css":          1, // soft shadow (glass sets box-shadow none)
-	"file_nav.css":       1, // soft shadow
+	"scrollrails.css":    1,  // .drawer-resize default grip colour
+	"popup.css":          1,  // soft shadow (glass sets box-shadow none)
+	"file_nav.css":       1,  // soft shadow
 	"diff.css":           0,
 }
 

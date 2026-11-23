@@ -576,7 +576,14 @@ func (m *lspManager) reportFailure(ev lspEvent) {
 		a.showToast("info", name+" not found",
 			fmt.Sprintf("Install it for diagnostics (%s), or set lsp.servers.%s in settings.json.", lspInstallHint(name), name))
 	} else {
-		a.showToast("error", name+" failed to start", ev.err.Error())
+		msg := ev.err.Error()
+		if name == "typescript-language-server" && strings.Contains(msg, "TypeScript installation") {
+			// The server looks for typescript in the workspace's node_modules
+			// (or tsserver.path); a global TypeScript 7 has no tsserver.js.
+			msg = "It needs TypeScript 5 or 6 in the project: run `npm i -D typescript` in the workspace, or set lsp.servers.typescript-language-server.initializationOptions.tsserver.path in settings.json."
+		}
+
+		a.showToast("error", name+" failed to start", msg)
 	}
 
 	m.log.addf("%s: %v", name, ev.err)

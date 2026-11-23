@@ -33,7 +33,7 @@
    file/source-control drawer from 268 px up to 348 px (about 30% more) so
    long files and cards fit. It sits after the scroll rails in the document,
    so it wins ties where they overlap, while rail thumbs keep working because
-   their centers sit clear of this strip. The 2 px SVG bar paints a universal mid-gray (#8f8f8f) so the handle reads on both dark and light chrome without a theme token; hover washes the strip so the target is unmistakable. */
+   their centers sit clear of this strip. The 2 px SVG bar paints a universal mid-gray so the handle reads on both dark and light chrome without a theme token; hover washes the strip so the target is unmistakable. */
 .drawer-resize {
   position: fixed;
   z-index: 27;
@@ -44,6 +44,9 @@
   /* A whisper of fill so the handle owns a paint op and hit-tests above the
      drawer and editor edges; the 2 px SVG bar is the visible affordance. */
   background-color: var(--panel-2);
+  /* The bar takes this colour (the SVG fills with currentColor), so a theme
+     can tone it down; the default is the universal mid-gray. */
+  color: #8f8f8f;
   cursor: ew-resize;
 }
 
