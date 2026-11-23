@@ -1,0 +1,74 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: ubuntu-latest,    goos: linux,   goarch: amd64, name: own-code-linux-amd64}
+          - {runner: ubuntu-24.04-arm, goos: linux,   goarch: arm64, name: own-code-linux-arm64}
+          - {runner: macos-15-intel,   goos: darwin,  goarch: amd64, name: own-code-macos-amd64}
+          - {runner: macos-latest,     goos: darwin,  goarch: arm64, name: own-code-macos-arm64}
+          - {runner: windows-latest,   goos: windows, goarch: amd64, name: own-code-windows-amd64.exe}
+          - {runner: windows-latest,   goos: windows, goarch: arm64, name: own-code-windows-arm64.exe}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install ebiten build dependencies
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgl1-mesa-dev xorg-dev libasound2-dev
+
+      - name: Check out ownframe and blinkless siblings (versions from go.mod)
+        shell: bash
+        run: .github/scripts/checkout-siblings.sh
+
+      - name: Build
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -trimpath -ldflags "-s -w" -o "dist/${{ matrix.name }}" ./cmd/own-code
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: dist/${{ matrix.name }}
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum own-code-* > SHA256SUMS
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist/* \
+            --repo "${{ github.repository }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes

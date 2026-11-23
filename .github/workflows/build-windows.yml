@@ -14,26 +14,10 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Checkout ownframe sibling at pinned commit
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          # Pinned ownframe commit from go.mod pseudo-version
-          # v0.0.3-0.20261102133043-abb99008f1dc (fix/replay-fixed-chunk-scroll, merged).
-          # Keep in sync with go.mod.
-          $Pin = "abb99008f1dc882ad26c3a57f8ba094512632f6b"
-          if (Test-Path ..\ownframe) { Remove-Item -Recurse -Force ..\ownframe }
-          git clone --depth 1 --branch master --filter=blob:none --sparse https://github.com/chinmay-sawant/ownframe.git ..\ownframe
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          git -C ..\ownframe sparse-checkout set --no-cone '/*.go' '/go.mod' '/internal/'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $Head = (git -C ..\ownframe rev-parse HEAD).Trim()
-          if ($Head -ne $Pin) {
-            git -C ..\ownframe fetch --depth 1 origin $Pin
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            git -C ..\ownframe checkout $Pin
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
+      # Versions come from go.mod, so this workflow cannot drift from it.
+      - name: Check out ownframe and blinkless siblings
+        shell: bash
+        run: .github/scripts/checkout-siblings.sh
 
       - name: Build Windows binary
         shell: pwsh

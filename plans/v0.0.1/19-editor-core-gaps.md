@@ -11,12 +11,12 @@ These sit under the LSP work; several are prerequisites.
 ## Features
 - [ ] Multi-cursor: `Ctrl+Alt+Up/Down`, `Alt+Click`, `Ctrl+D` is taken by go-to-definition, so use `Ctrl+Shift+L` "select all occurrences" and a rebindable "add next occurrence".
 - [ ] Column (box) selection.
-- [ ] Move line up/down, duplicate line, delete line, join lines, transpose.
-- [ ] Auto-close brackets/quotes and surround-selection.
+- [x] Move line up/down, duplicate line, delete line, join lines (transpose not done).
+- [x] Auto-close brackets/quotes and surround-selection.
 - [ ] Word-wise movement/deletion (`Ctrl+Left/Right/Backspace`) if not complete; verify against a test matrix.
 - [ ] Emmet and snippets (user-defined JSON snippets first).
 - [ ] Encoding and EOL: detect UTF-8 BOM/UTF-16/Latin-1, show in status bar, convert. Preserve original EOL on save (workspace replace already preserves CRLF).
-- [ ] `.editorconfig` support (tab width, indent style, trim trailing whitespace, final newline).
+- [x] `.editorconfig` support (tab width, indent style, trim trailing whitespace on save; final newline is always written by the buffer).
 - [ ] Format-on-save hook for external formatters (`gofmt`, `prettier`) before LSP formatting exists.
 - [ ] Per-file undo history survives tab switch (verify) and optionally restarts (session).
 

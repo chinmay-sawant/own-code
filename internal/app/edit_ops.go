@@ -199,6 +199,7 @@ func (a *App) saveEdit() {
 	}
 
 	path := a.edit.Path
+	a.trimEditForSave(path)
 	data := a.edit.Save()
 
 	if err := a.ws.writeFile(path, data); err != nil {

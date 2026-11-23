@@ -182,6 +182,10 @@ Chrome's browser and GPU processes alone, 347 MB PSS, are larger than the entire
 | **`Ctrl+Shift+O`** | Go to symbol in the active file |
 | **`Ctrl+M`** | Jump to the matching bracket (`Ctrl+Shift+M` selects to it) |
 | **`Ctrl+/`** | Toggle line comment while editing |
+| **`Alt+Up` `Alt+Down`** | Move the line or selected lines up or down while editing |
+| **`Ctrl+Shift+D`** | Duplicate the line or selected lines |
+| **`Ctrl+Shift+K`** | Delete the line or selected lines |
+| **`Ctrl+J`** | Join the line with the next (or the selected lines) |
 | **`Tab` `Shift+Tab`** | Indent or outdent while editing |
 | **`Ctrl+F`** | Find in the active file |
 | **`Ctrl+H`** | Find and replace in the active file (`Enter` replaces next, `Ctrl+Enter` replaces all) |
@@ -221,7 +225,7 @@ Chrome's browser and GPU processes alone, 347 MB PSS, are larger than the entire
 - Text files over 512 KB and files with a NUL byte show a notice. A text file over 20,000 lines keeps the first 20,000. A line over 32 KB shows a notice instead of opening. Images preview up to 32 MB and 16 megapixels.
 - A diff over 512 KB, 20,000 lines, or one line over 32 KB renders one notice row. A commit patch that hits its 512 KB read cap shows the same notice.
 - The scan skips `.git`, `node_modules`, `vendor`, build output, and unsupported binary extensions. PNG, JPEG, GIF, and SVG files are scanned and open in the image viewer.
-- There is no horizontal scroll. Files and diff cells soft wrap. `Z` turns wrap off and the diff clips with an ellipsis.
+- Files and diff cells soft wrap by default, so there is nothing to scroll sideways. `Z` turns wrap off; the editor and diff then scroll horizontally (wheel or keyboard, per editor group, clamped to the longest line) and diff cells can also clip with an ellipsis.
 - The History pane loads 20 commits, then grows the page as the rail crosses half the loaded rows, up to 500. Patches load on a background worker.
 - This app targets desktop. There is no phone layout or mobile path.
 - The fsnotify watcher is desktop only. `-web` keeps the manual Refresh and `R` path.

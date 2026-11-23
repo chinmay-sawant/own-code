@@ -635,6 +635,11 @@ func keymapCatalog() []keymapEntry {
 		{"cut-path", "Cut path / file", "Ctrl+X", false},
 		{"select-all-files", "Select all files", "Ctrl+A", false},
 		{"line-card", "Open line card", "Ctrl+I", false},
+		{actionMoveLineUp, "Move line up", "Alt+ArrowUp", false},
+		{actionMoveLineDown, "Move line down", "Alt+ArrowDown", false},
+		{actionDuplicateLn, "Duplicate line", "Ctrl+Shift+D", false},
+		{actionDeleteLine, "Delete line", "Ctrl+Shift+K", false},
+		{actionJoinLines, "Join lines", "Ctrl+J", false},
 		{"mode-explorer", "Go to Explorer", "1", false},
 		{"mode-changes", "Go to Source Control", "2", false},
 		{"toggle-details", "Toggle details", "3", false},
@@ -1013,6 +1018,8 @@ func (a *App) runKeymapAction(ctx context.Context, action string) error {
 	case "line-card":
 		a.showInlineCardAtCurrent()
 		return a.page.Redraw(ctx)
+	case actionMoveLineUp, actionMoveLineDown, actionDuplicateLn, actionDeleteLine, actionJoinLines:
+		return a.runLineOp(ctx, action)
 	case "mode-explorer":
 		a.setMode(ctx, "explorer")
 		return a.page.Redraw(ctx)

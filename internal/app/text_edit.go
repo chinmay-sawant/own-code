@@ -51,6 +51,10 @@ func (a *App) onType(ctx context.Context, text string) error {
 	text = strings.ReplaceAll(text, "\r", "\n")
 	text = strings.ReplaceAll(text, "\t", tabSpaces)
 
+	if handled, err := a.autoPairType(ctx, text); handled || err != nil {
+		return err
+	}
+
 	return a.insertEditText(ctx, text)
 }
 
@@ -75,6 +79,12 @@ func (a *App) onBackspace(ctx context.Context) error {
 	}
 
 	text, start, end := a.editSelection()
+	if start == end {
+		if from, to, ok := pairBackspaceSpan([]rune(text), start); ok {
+			return a.replaceEditRange(ctx, text, from, to, "")
+		}
+	}
+
 	if start == end && start > 0 {
 		start--
 	}
@@ -296,6 +306,11 @@ func (a *App) onRedo(ctx context.Context) error {
 func (a *App) editKey(ctx context.Context, key string) error {
 	if a.settingsOpen || !a.editing || a.edit == nil {
 		return nil
+	}
+
+	// Line operations (move, duplicate, delete, join) honor rebinding.
+	if handled, err := a.lineOpKey(ctx, key); handled || err != nil {
+		return err
 	}
 
 	if a.ctrl {

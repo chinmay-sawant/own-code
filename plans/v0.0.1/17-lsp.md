@@ -17,8 +17,8 @@
 
 ## Phases
 **Phase 1: plumbing (no UI)**
-- [ ] Transport + client + fake-server tests (in-process pipe server).
-- [ ] UTF-16 conversion with fuzz/property tests, including emoji and CRLF.
+- [x] Transport + client + fake-server tests (in-process pipe server). Evidence: `internal/lsp/{transport,client,registry}.go`, `client_test.go`; `go test -race ./internal/lsp/...` passes.
+- [x] UTF-16 conversion with fuzz/property tests, including emoji and CRLF. Evidence: `internal/lsp/position.go`, `position_test.go` (round-trip property test, `FuzzPosition` ran 5s clean).
 - [ ] `didOpen` / `didChange` (full sync first) / `didSave` / `didClose` from tabs. Debounce changes (about 150 ms).
 - [ ] Settings schema, registry, "LSP: Show log" palette command.
 
