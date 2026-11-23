@@ -60,7 +60,6 @@ func (a *App) searchViewState() searchView {
 				Index:    i,
 				Path:     hit.Path,
 				Name:     baseName(hit.Path),
-				Dir:      dirName(hit.Path),
 				Line:     hit.Line,
 				Col:      hit.Col,
 				Before:   hit.Before,

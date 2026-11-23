@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -72,8 +72,11 @@ type lspManager struct {
 	byURI   map[string]*lspDoc
 	// failed holds server names that could not start; they are not retried
 	// until settings change or the project switches.
-	failed map[string]bool
-	diags  map[string][]lspDiag
+	failed         map[string]bool
+	diags          map[string][]lspDiag
+	diagOwners     map[string]*lspServer
+	problemSummary problemCounts
+	problemsDirty  bool
 	// problems is the flattened list the Details drawer shows, indexed by
 	// the problem:N click action.
 	problems []lspProblem
@@ -113,15 +116,16 @@ type lspEvent struct {
 func (a *App) lspManager() *lspManager {
 	if a.lspm == nil {
 		a.lspm = &lspManager{
-			app:      a,
-			connect:  defaultLSPConnect,
-			debounce: lspDebounce,
-			servers:  map[string]*lspServer{},
-			docs:     map[string]*lspDoc{},
-			byURI:    map[string]*lspDoc{},
-			failed:   map[string]bool{},
-			diags:    map[string][]lspDiag{},
-			log:      newLSPLog(),
+			app:        a,
+			connect:    defaultLSPConnect,
+			debounce:   lspDebounce,
+			servers:    map[string]*lspServer{},
+			docs:       map[string]*lspDoc{},
+			byURI:      map[string]*lspDoc{},
+			failed:     map[string]bool{},
+			diags:      map[string][]lspDiag{},
+			diagOwners: map[string]*lspServer{},
+			log:        newLSPLog(),
 		}
 		a.lspm.configure()
 	}
@@ -173,17 +177,18 @@ func (a *App) lspTouch(path string) {
 
 // pollLSP runs on every tick: it applies server events, reconciles open tabs
 // with synced documents, and flushes debounced changes. It does no I/O.
-func (a *App) pollLSP(_ context.Context) {
+func (a *App) pollLSP(ctx context.Context) error {
 	m := a.lspm
 	if m == nil {
 		// Nothing to do until a syncable file is open.
 		if !a.lspCandidate() {
-			return
+			return nil
 		}
 
 		m = a.lspManager()
 	}
 
+	hoverWasShown := m.hv.shown
 	changed := m.drain()
 
 	if !lspSettingsEqual(m.cfg, a.settings.LSP) {
@@ -202,12 +207,20 @@ func (a *App) pollLSP(_ context.Context) {
 		changed = true
 	}
 
-	m.stopIdle()
+	changed = m.stopIdle() || changed
 	m.pollHover()
 
 	if changed {
 		a.refresh()
 	}
+
+	// Tick runs outside OwnFrame's input redraw batch. SetData publishes the
+	// snapshot, but a redraw is needed to paint server events and hover exits.
+	if changed || hoverWasShown != m.hv.shown {
+		return a.page.Redraw(ctx)
+	}
+
+	return nil
 }
 
 // lspCandidate reports whether any open tab could be synced, so an app that
@@ -406,7 +419,7 @@ func (m *lspManager) serverFor(cfg lsp.ServerConfig, root string) *lspServer {
 
 func (m *lspManager) closeDoc(doc *lspDoc) {
 	delete(m.docs, doc.path)
-	delete(m.diags, doc.path)
+	m.setDiagnostics(doc.path, doc.server, nil)
 
 	if doc.server == nil {
 		return
@@ -466,7 +479,8 @@ func (m *lspManager) flush() bool {
 }
 
 // stopIdle shuts down servers that have had no documents for a while.
-func (m *lspManager) stopIdle() {
+func (m *lspManager) stopIdle() bool {
+	changed := false
 	for key, srv := range m.servers {
 		if srv.docCount > 0 || srv.idleSince.IsZero() || time.Since(srv.idleSince) < lspIdleStop {
 			continue
@@ -474,7 +488,9 @@ func (m *lspManager) stopIdle() {
 
 		srv.enqueue(lspOp{kind: lspOpStop})
 		delete(m.servers, key)
+		changed = m.clearServerDiagnostics(srv) || changed
 	}
+	return changed
 }
 
 // drain applies server events on the loop.
@@ -517,28 +533,74 @@ func (m *lspManager) drain() bool {
 // applyDiag installs a diagnostics batch unless a newer document version has
 // already been sent (stale response).
 func (m *lspManager) applyDiag(ev lspEvent) bool {
-	doc := m.byURI[ev.uri]
-	if doc == nil || doc.server != ev.server {
+	if ev.server == nil || m.servers[ev.server.key] != ev.server {
 		return false
 	}
 
-	if ev.hasVersion && ev.version < doc.version {
-		return false
-	}
-
-	if len(ev.diags) == 0 {
-		if _, ok := m.diags[doc.path]; !ok {
+	if doc := m.byURI[ev.uri]; doc != nil {
+		if doc.server != ev.server || (ev.hasVersion && ev.version < doc.version) {
 			return false
 		}
-
-		delete(m.diags, doc.path)
-
-		return true
+		return m.setDiagnostics(doc.path, ev.server, ev.diags)
 	}
 
-	m.diags[doc.path] = ev.diags
+	if ev.hasVersion {
+		return false
+	}
 
+	path, err := lsp.PathFromURI(ev.uri)
+	if err != nil || !filepath.IsAbs(path) {
+		return false
+	}
+
+	root := m.app.lspAbsPath(".")
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == "." || !filepath.IsLocal(rel) {
+		return false
+	}
+	serverRel, err := filepath.Rel(ev.server.root, path)
+	if err != nil || !filepath.IsLocal(serverRel) {
+		return false
+	}
+
+	cfg, ok := m.reg.ForPath(rel)
+	if !ok || cfg.Name != ev.server.cfg.Name {
+		return false
+	}
+
+	rel = filepath.ToSlash(rel)
+	if owner := m.diagOwners[rel]; owner != nil && owner != ev.server {
+		return false
+	}
+	return m.setDiagnostics(rel, ev.server, ev.diags)
+}
+
+func (m *lspManager) setDiagnostics(path string, server *lspServer, next []lspDiag) bool {
+	if slices.Equal(m.diags[path], next) && (len(next) == 0 || m.diagOwners[path] == server) {
+		return false
+	}
+	m.problemSummary.add(m.diags[path], -1)
+	m.problemSummary.add(next, 1)
+	if len(next) == 0 {
+		delete(m.diags, path)
+		delete(m.diagOwners, path)
+	} else {
+		m.diags[path] = next
+		m.diagOwners[path] = server
+	}
+	m.problemsDirty = true
 	return true
+}
+
+func (m *lspManager) clearServerDiagnostics(server *lspServer) bool {
+	changed := false
+	for path, owner := range m.diagOwners {
+		if owner == server {
+			m.setDiagnostics(path, server, nil)
+			changed = true
+		}
+	}
+	return changed
 }
 
 // serverGone drops a dead server and forgets its documents' diagnostics. The
@@ -548,14 +610,16 @@ func (m *lspManager) serverGone(srv *lspServer, failed bool) {
 		return
 	}
 
-	delete(m.servers, srv.key)
+	if m.servers[srv.key] == srv {
+		delete(m.servers, srv.key)
+	}
+	m.clearServerDiagnostics(srv)
 
-	for path, doc := range m.docs {
+	for _, doc := range m.docs {
 		if doc.server != srv {
 			continue
 		}
 
-		delete(m.diags, path)
 		delete(m.byURI, doc.uri)
 		doc.server = nil
 		doc.skipped = true
@@ -574,13 +638,13 @@ func (m *lspManager) reportFailure(ev lspEvent) {
 	var missing *lspMissingError
 	if errors.As(ev.err, &missing) {
 		a.showToast("info", name+" not found",
-			fmt.Sprintf("Install it for diagnostics (%s), or set lsp.servers.%s in settings.json.", lspInstallHint(name), name))
+			lspInstallHint(name))
 	} else {
 		msg := ev.err.Error()
 		if name == "typescript-language-server" && strings.Contains(msg, "TypeScript installation") {
 			// The server looks for typescript in the workspace's node_modules
 			// (or tsserver.path); a global TypeScript 7 has no tsserver.js.
-			msg = "It needs TypeScript 5 or 6 in the project: run `npm i -D typescript` in the workspace, or set lsp.servers.typescript-language-server.initializationOptions.tsserver.path in settings.json."
+			msg = "It needs TypeScript 5 or 6 in the project: run `npm i -D typescript@5` in the workspace, or set lsp.servers.typescript-language-server.initializationOptions.tsserver.path in settings.json."
 		}
 
 		a.showToast("error", name+" failed to start", msg)
@@ -596,11 +660,13 @@ func (m *lspManager) shutdownAll(wait bool) {
 		delete(m.servers, key)
 	}
 
-	for path, doc := range m.docs {
-		delete(m.docs, path)
-		delete(m.byURI, doc.uri)
-		delete(m.diags, path)
-	}
+	clear(m.docs)
+	clear(m.byURI)
+	clear(m.diags)
+	clear(m.diagOwners)
+	m.problemSummary = problemCounts{}
+	m.problems = nil
+	m.problemsDirty = false
 
 	if m.timer != nil {
 		m.timer.Stop()
@@ -858,22 +924,22 @@ func (s *lspServer) onNotify(method string, params json.RawMessage) {
 	sent := s.sent[p.URI]
 	s.smu.Unlock()
 
-	if sent == nil {
-		return
-	}
-
 	// A response for an older version than the one last sent is stale.
-	if p.Version != nil && *p.Version < sent.version {
+	if p.Version != nil && (sent == nil || *p.Version < sent.version) {
 		return
 	}
 
+	var lines []string
+	if sent != nil {
+		lines = sent.lines
+	}
 	diags := make([]lspDiag, 0, len(p.Diagnostics))
 	for _, d := range p.Diagnostics {
 		if d.Severity == lsp.SeverityHint {
 			continue
 		}
 
-		diags = append(diags, newLSPDiag(sent.lines, d))
+		diags = append(diags, newLSPDiag(lines, d))
 	}
 
 	ev := lspEvent{kind: lspEvDiag, server: s, uri: p.URI, diags: diags}

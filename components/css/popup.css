@@ -71,10 +71,11 @@
 .popup-line {
   min-height: 16px;
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 16px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.popup-line.code { font-family: var(--mono); font-size: 9px; }
+.popup-line.code { font-family: var(--mono); font-size: 11px; }
+.popup-divider { height: 1px; margin: 2px 0; background-color: var(--line-soft); }
 .popup-gap { height: 6px; }

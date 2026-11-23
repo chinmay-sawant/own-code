@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -28,6 +30,12 @@ func (p *pipeIO) Read(b []byte) (int, error) {
 }
 
 func (p *pipeIO) Write(b []byte) (int, error) {
+	if len(b) == 1 && b[0] == '\r' {
+		if _, err := p.stdin.Write([]byte("\r\n")); err != nil {
+			return 0, err
+		}
+		return 1, nil
+	}
 	return p.stdin.Write(b)
 }
 
@@ -52,9 +60,8 @@ func startCommand(cmd *exec.Cmd, cols, rows int) (sessionIO, error) {
 		_ = stdin.Close()
 		return nil, err
 	}
-	// StdoutPipe owns cmd.Stdout, so stderr cannot share that writer. Send
-	// stderr to the app's console instead of dropping it.
-	cmd.Stderr = os.Stderr
+	// Both streams share the output pipe so command errors reach the panel.
+	cmd.Stderr = cmd.Stdout
 
 	if err := cmd.Start(); err != nil {
 		_ = stdin.Close()
@@ -69,4 +76,15 @@ func defaultShell() string {
 		return shell
 	}
 	return "cmd.exe"
+}
+
+func interactiveShellArgs(shell string) []string {
+	switch strings.ToLower(filepath.Base(shell)) {
+	case "powershell", "powershell.exe", "pwsh", "pwsh.exe":
+		return []string{"-NoLogo", "-Command", "-"}
+	case "bash", "bash.exe":
+		return []string{"--login", "-i"}
+	default:
+		return nil
+	}
 }

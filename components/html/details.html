@@ -19,24 +19,6 @@
     <span>Status</span><b>{{if .Status}}{{.Status}}{{else}}clean{{end}}</b>
   </div>
 
-  {{if .LSP.Show}}
-  <div class="det-sub"><span>Problems</span><span class="mono dim">{{.LSP.Total}}</span></div>
-  <div class="problems" id="problems">
-    {{range .LSP.Problems}}
-    <button class="pbrow" id="problem-{{.Index}}" data-action="problem:{{.Index}}" type="button" title="{{.Full}}" aria-label="{{.Full}} at {{.Where}}"{{if $.Modal}} tabindex="-1"{{end}}>
-      <span class="pbmark {{.Class}}">{{.Mark}}</span>
-      <span class="pbbody">
-        <span class="pbtext">{{.Text}}</span>
-        <span class="pbloc mono">{{.Name}} {{.Where}}</span>
-      </span>
-    </button>
-    {{else}}
-    <div class="det-empty">No problems found.</div>
-    {{end}}
-    {{if .LSP.More}}<div class="det-empty">+{{.LSP.More}} more</div>{{end}}
-  </div>
-  {{end}}
-
   <div class="det-sub"><span>Outline</span><span class="mono dim">{{len .Outline}}</span></div>
 
   <div class="outline">

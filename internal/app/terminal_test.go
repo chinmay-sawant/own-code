@@ -428,3 +428,28 @@ func TestTerminalInterruptRestoresPrompt(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+func TestTerminalAndProblemsShareBottomPanel(t *testing.T) {
+	app := newTerminalTestApp(t)
+	t.Cleanup(app.Close)
+	ctx := context.Background()
+	if err := app.Page().Redraw(ctx); err != nil {
+		t.Fatal(err)
+	}
+	clickID(t, app, "act-terminal")
+	id := app.View().Terminal.Active
+	sendTerminalCommand(t, app, ctx, "printf 'dock-%s\\n' retained")
+	waitTerminalContains(t, app, "dock-retained")
+
+	clickID(t, app, "bottom-problems-tab")
+	if v := app.View(); !v.LSP.Open || v.Terminal.Open || v.Terminal.Focus || v.Details {
+		t.Fatalf("Problems did not replace the terminal in the bottom panel: open=%v terminal=%v focused=%v details=%v",
+			v.LSP.Open, v.Terminal.Open, v.Terminal.Focus, v.Details)
+	}
+
+	clickID(t, app, "bottom-terminal-tab")
+	if v := app.View(); v.LSP.Open || !v.Terminal.Open || !v.Terminal.Focus || v.Terminal.Active != id {
+		t.Fatalf("Terminal did not resume the same session: problems=%v terminal=%+v", v.LSP.Open, v.Terminal)
+	}
+	waitTerminalContains(t, app, "dock-retained")
+}

@@ -222,7 +222,7 @@ func glassCSS(id string) string {
 .sidebar .side-hsplit .hsplit-grip { color:transparent !important; }
 .sidebar .side-hsplit:hover .hsplit-grip, .sidebar .side-hsplit:focus-visible .hsplit-grip { color:rgba(118,186,255,0.8) !important; }
 .titlebar, .statusbar { background-color:rgba(14,20,31,0.82) !important; background-image:linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01)) !important; border-color:#334055 !important; backdrop-filter:blur(12px) saturate(1.25) refract(2.5px) !important; }
-.settings-btn, .tab, .palette-row { background-image:linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.01)) !important; }
+.settings-btn { background-image:linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.01)) !important; }
 .settings-header { background-color:rgba(255,255,255,0.02) !important; background-image:linear-gradient(108deg, rgba(255,255,255,0.07), rgba(255,255,255,0.01) 48%, rgba(118,186,255,0.035)) !important; }
 .settings-nav { background-color:rgba(14,23,37,0.20) !important; background-image:linear-gradient(148deg, rgba(255,255,255,0.04), rgba(255,255,255,0.008) 58%, rgba(118,186,255,0.025)) !important; border-right-color:#2a3445 !important; }
 .settings-content { background-color:rgba(16,25,38,0.045) !important; background-image:linear-gradient(128deg, rgba(255,255,255,0.025), rgba(255,255,255,0) 34%, rgba(255,255,255,0) 70%, rgba(118,186,255,0.05)) !important; }
@@ -233,11 +233,9 @@ func glassCSS(id string) string {
 .settings-btn:not(.primary) { background-color:rgba(25,36,51,0.09) !important; background-image:linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01) 62%, rgba(118,186,255,0.025)) !important; border-color:#2a3445 !important; }
 .settings-toggle:hover, .settings-toggle:focus-visible { background-color:rgba(118,186,255,0.08) !important; background-image:linear-gradient(115deg, rgba(255,255,255,0.06), rgba(118,186,255,0.04)) !important; }
 .settings-theme.selected, .palette-row.on, .tab.on { border-color:#3d78ab !important; }
-.settings-panel, .palette, .confirm-panel, .inline-card, .commit-tip-float, .settings-theme, .settings-key, .settings-perview, .settings-area, .settings-btn { border-top-color:#3a475c !important; }
 * { box-shadow:none !important; }
-.editor.focus { border-top:1px solid #2f5473 !important; }
-.drawer-resize { color:#334055 !important; }
-.drawer-resize:hover { color:#3d78ab !important; background-color:transparent !important; }
+.editor.focus { border-top:1px solid var(--line-soft) !important; }
+.drawer-grip { background-color:var(--line-soft); }
 .term-body.focus { outline:1px solid #3d78ab !important; outline-offset:-1px; }
 .merge-actions.current { border-left:2px solid var(--red) !important; }`
 	}
@@ -250,7 +248,7 @@ func glassCSS(id string) string {
 .sidebar .side-hsplit .hsplit-grip { color:transparent !important; }
 .sidebar .side-hsplit:hover .hsplit-grip, .sidebar .side-hsplit:focus-visible .hsplit-grip { color:rgba(10,132,255,0.8) !important; }
 .titlebar, .statusbar { background-color:rgba(244,247,251,0.82) !important; background-image:linear-gradient(180deg, rgba(255,255,255,0.88), rgba(255,255,255,0.18)) !important; border-color:#c7d0db !important; backdrop-filter:blur(12px) saturate(1.2) refract(2.5px) !important; }
-.settings-btn, .tab, .palette-row { background-image:linear-gradient(180deg, rgba(255,255,255,0.62), rgba(255,255,255,0.06)) !important; }
+.settings-btn { background-image:linear-gradient(180deg, rgba(255,255,255,0.62), rgba(255,255,255,0.06)) !important; }
 .settings-header { background-color:rgba(255,255,255,0.025) !important; background-image:linear-gradient(108deg, rgba(255,255,255,0.23), rgba(255,255,255,0.055) 48%, rgba(10,132,255,0.035)) !important; }
 .settings-nav { background-color:rgba(239,244,250,0.14) !important; background-image:linear-gradient(148deg, rgba(255,255,255,0.18), rgba(255,255,255,0.035) 58%, rgba(10,132,255,0.025)) !important; border-right-color:#d8dee7 !important; }
 .settings-content { background-color:rgba(245,248,252,0.045) !important; background-image:linear-gradient(128deg, rgba(255,255,255,0.075), rgba(255,255,255,0) 34%, rgba(255,255,255,0) 70%, rgba(10,132,255,0.06)) !important; }
@@ -261,11 +259,9 @@ func glassCSS(id string) string {
 .settings-btn:not(.primary) { background-color:rgba(245,248,252,0.08) !important; background-image:linear-gradient(145deg, rgba(255,255,255,0.18), rgba(255,255,255,0.045) 62%, rgba(10,132,255,0.025)) !important; border-color:#d5dbe4 !important; }
 .settings-toggle:hover, .settings-toggle:focus-visible { background-color:rgba(10,132,255,0.06) !important; background-image:linear-gradient(115deg, rgba(255,255,255,0.20), rgba(10,132,255,0.045)) !important; }
 .settings-theme.selected, .palette-row.on, .tab.on { border-color:#69aef0 !important; }
-.settings-panel, .palette, .confirm-panel, .inline-card, .commit-tip-float, .settings-theme, .settings-key, .settings-perview, .settings-area, .settings-btn { border-top-color:#ffffff !important; }
 * { box-shadow:none !important; }
-.editor.focus { border-top:1px solid #a9cdf0 !important; }
-.drawer-resize { color:#c3ccd8 !important; }
-.drawer-resize:hover { color:#8cc0f5 !important; background-color:transparent !important; }
+.editor.focus { border-top:1px solid var(--line-soft) !important; }
+.drawer-grip { background-color:var(--line-soft); }
 .term-body.focus { outline:1px solid #69aef0 !important; outline-offset:-1px; }
 .merge-actions.current { border-left:2px solid var(--red) !important; }`
 }
@@ -421,13 +417,16 @@ func glassSurfaceCSS(id string) string {
 
 	return fmt.Sprintf(`
 .ctx-menu, .popup, .file-drawer, .browse-panel, .file-alert, .hist-tip, .hist-preview { background-color:%[1]s !important; background-image:%[2]s !important; backdrop-filter:blur(30px) saturate(1.3) refract(6px) !important; border-color:%[3]s !important; border-radius:10px !important; }
-.toast, .file-nav { background-color:%[1]s !important; background-image:%[2]s !important; backdrop-filter:blur(30px) saturate(1.3) refract(6px) !important; }
-.details, .activity, .terminal { background-color:%[4]s !important; background-image:%[5]s !important; backdrop-filter:blur(16px) saturate(1.3) refract(4px) !important; border-color:%[6]s !important; }
+.palette.search-panel, .toast { background-color:%[4]s !important; }
+.tab { background-color:var(--panel-2); }
+.toast, .file-nav { background-image:%[2]s !important; backdrop-filter:blur(30px) saturate(1.3) refract(6px) !important; }
+.file-nav { background-color:%[1]s !important; }
+.details, .activity, .terminal, .workspace-problems { background-color:%[4]s !important; background-image:%[5]s !important; backdrop-filter:blur(16px) saturate(1.3) refract(4px) !important; border-color:%[6]s !important; }
 .history, .term-head, .term-foot, .term-note { background-color:transparent !important; background-image:none !important; }
 .browse-backdrop { background-color:%[7]s !important; }
 .filter, .branch-input, .find-input, .explorer-input, .explorer-input-field, .commit-message, .cmdbar, .project-input, .browse-filter, .palette-input { background-color:%[8]s !important; }
-.crumb-btn:not(.on):not(.stage), .commit-btn, .confirm-btn:not(.primary):not(.danger), .button, .hist-btn, .replace-btn, .seg, .term-tab:not(.on), .quick-row, .welcome-card { background-color:%[9]s !important; background-image:%[10]s !important; border-color:%[11]s !important; }
-.popup-row.on, .ctx-item:hover { background-color:var(--accent-soft) !important; }
+.crumb-btn:not(.on):not(.stage):not(.save-btn), .commit-btn, .confirm-btn:not(.primary):not(.danger), .button, .hist-btn, .replace-btn:not(.danger), .seg, .term-tab:not(.on), .quick-row, .welcome-card { background-color:%[9]s !important; background-image:%[10]s !important; border-color:%[11]s !important; }
+.pbrow:hover, .pbrow:focus-visible, .popup-row.on, .ctx-item:hover, #palette-panel .palette-row.on, #search-panel .palette-row.on { background-color:var(--accent-soft) !important; }
 .popup-row:hover { background-color:var(--accent-soft) !important; }
 `, k.float, k.floatImg, k.edge, k.dock, k.dockImg, k.dockEdge, k.scrim, k.field, k.btn, k.btnImg, k.btnEdge)
 }

@@ -180,20 +180,22 @@ func lspSettingsEqual(a, b *lspSettings) bool { return reflect.DeepEqual(a, b) }
 func lspInstallHint(name string) string {
 	switch name {
 	case "gopls":
-		return "go install golang.org/x/tools/gopls@latest"
+		return "Run go install golang.org/x/tools/gopls@latest"
 	case "typescript-language-server":
-		return "npm i -g typescript-language-server typescript"
+		return "Run npm i -g typescript-language-server, then npm i -D typescript@5 in the workspace"
 	case "pyright":
-		return "npm i -g pyright"
+		return "Run npm i -g pyright"
 	case "rust-analyzer":
-		return "rustup component add rust-analyzer"
-	case "vscode-html-language-server", "vscode-css-language-server", "vscode-json-language-server", "yaml-language-server":
-		return "npm i -g typescript typescript-language-server vscode-langservers-extracted yaml-language-server"
+		return "Run rustup component add rust-analyzer"
+	case "vscode-html-language-server", "vscode-css-language-server", "vscode-json-language-server":
+		return "Run npm i -g vscode-langservers-extracted"
+	case "yaml-language-server":
+		return "Run npm i -g yaml-language-server"
 	case "marksman":
-		return "install marksman from https://github.com/artempyanykh/marksman"
+		return "Install marksman from https://github.com/artempyanykh/marksman"
 	case "clangd":
-		return "install clangd with your package manager"
+		return "Install clangd with your package manager"
 	}
 
-	return "install it and make sure it is on PATH"
+	return "Install it and make sure it is on PATH"
 }

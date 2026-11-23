@@ -89,6 +89,9 @@ func TestLSPHoverDwellShowsPopup(t *testing.T) {
 	r.move(t, 1, 12) // inside foo
 
 	pump(t, r.app, "hover popup", r.shown)
+	if _, ok := boxByID(r.app.Page().Boxes(), "popup"); !ok {
+		t.Fatal("hover reply did not paint a popup during the tick")
+	}
 
 	got := r.hovers()
 	if len(got) != 1 {

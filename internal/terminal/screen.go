@@ -10,7 +10,7 @@ import (
 const (
 	// DefaultColor is the palette index that means "terminal default" for
 	// Cell.FG and Cell.BG. Indices 0 through 15 are ANSI colors.
-	DefaultColor uint8 = 16
+	DefaultColor Color = 16
 
 	defaultCols       = 80
 	defaultRows       = 24
@@ -19,13 +19,28 @@ const (
 	maxCSILength      = 4096
 )
 
+// Color stores an ANSI palette index or an exact sRGB color.
+type Color uint32
+
+const rgbColorFlag Color = 1 << 24
+
+func rgbColor(r, g, b int) Color {
+	return rgbColorFlag | Color(r<<16|g<<8|b)
+}
+
+// RGB returns the packed 24-bit color for a direct color, or false for a
+// palette index that the selected app theme should resolve.
+func (c Color) RGB() (uint32, bool) {
+	return uint32(c & (rgbColorFlag - 1)), c&rgbColorFlag != 0
+}
+
 // Cell is one character cell of a terminal line. Rune is a space for an
 // untouched cell. FG and BG are ANSI palette indices; DefaultColor means the
 // terminal default.
 type Cell struct {
 	Rune      rune
-	FG        uint8
-	BG        uint8
+	FG        Color
+	BG        Color
 	Bold      bool
 	Dim       bool
 	Italic    bool
@@ -99,7 +114,7 @@ const (
 )
 
 type cellStyle struct {
-	fg, bg    uint8
+	fg, bg    Color
 	bold      bool
 	dim       bool
 	italic    bool
@@ -915,21 +930,21 @@ func (s *Screen) applySGR(params []int) {
 		case p == 27:
 			s.style.reverse = false
 		case p >= 30 && p <= 37:
-			s.style.fg = uint8(p - 30)
+			s.style.fg = Color(p - 30)
 		case p == 38:
 			i = s.applyExtendedColor(params, i, true)
 		case p == 39:
 			s.style.fg = DefaultColor
 		case p >= 40 && p <= 47:
-			s.style.bg = uint8(p - 40)
+			s.style.bg = Color(p - 40)
 		case p == 48:
 			i = s.applyExtendedColor(params, i, false)
 		case p == 49:
 			s.style.bg = DefaultColor
 		case p >= 90 && p <= 97:
-			s.style.fg = uint8(p - 90 + 8)
+			s.style.fg = Color(p - 90 + 8)
 		case p >= 100 && p <= 107:
-			s.style.bg = uint8(p - 100 + 8)
+			s.style.bg = Color(p - 100 + 8)
 		}
 	}
 }
@@ -946,13 +961,13 @@ func (s *Screen) applyExtendedColor(params []int, i int, foreground bool) int {
 		if i+2 >= len(params) {
 			return i + 1
 		}
-		setColor(&s.style, foreground, color256To16(params[i+2]))
+		setColor(&s.style, foreground, indexedColor(params[i+2]))
 		return i + 2
 	case 2:
 		if i+4 >= len(params) {
 			return len(params) - 1
 		}
-		setColor(&s.style, foreground, nearest16(
+		setColor(&s.style, foreground, rgbColor(
 			clamp(params[i+2], 0, 255),
 			clamp(params[i+3], 0, 255),
 			clamp(params[i+4], 0, 255),
@@ -962,7 +977,7 @@ func (s *Screen) applyExtendedColor(params []int, i int, foreground bool) int {
 	return i + 1
 }
 
-func setColor(style *cellStyle, foreground bool, color uint8) {
+func setColor(style *cellStyle, foreground bool, color Color) {
 	if foreground {
 		style.fg = color
 		return
@@ -970,7 +985,7 @@ func setColor(style *cellStyle, foreground bool, color uint8) {
 	style.bg = color
 }
 
-func color256To16(n int) uint8 {
+func indexedColor(n int) Color {
 	if n < 0 {
 		n = 0
 	}
@@ -978,7 +993,7 @@ func color256To16(n int) uint8 {
 		n = 255
 	}
 	if n < 16 {
-		return uint8(n)
+		return Color(n)
 	}
 
 	var r, g, b int
@@ -992,39 +1007,7 @@ func color256To16(n int) uint8 {
 		n -= 232
 		r, g, b = 8+10*n, 8+10*n, 8+10*n
 	}
-	return nearest16(r, g, b)
-}
-
-func nearest16(r, g, b int) uint8 {
-	palette := [16][3]int{
-		{0, 0, 0},
-		{205, 0, 0},
-		{0, 205, 0},
-		{205, 205, 0},
-		{0, 0, 238},
-		{205, 0, 205},
-		{0, 205, 205},
-		{229, 229, 229},
-		{127, 127, 127},
-		{255, 0, 0},
-		{0, 255, 0},
-		{255, 255, 0},
-		{92, 92, 255},
-		{255, 0, 255},
-		{0, 255, 255},
-		{255, 255, 255},
-	}
-
-	best := 0
-	bestDistance := int(^uint(0) >> 1)
-	for i, color := range palette {
-		dr, dg, db := color[0]-r, color[1]-g, color[2]-b
-		distance := dr*dr + dg*dg + db*db
-		if distance < bestDistance {
-			best, bestDistance = i, distance
-		}
-	}
-	return uint8(best)
+	return rgbColor(r, g, b)
 }
 
 func normalizeSize(cols, rows int) (int, int) {

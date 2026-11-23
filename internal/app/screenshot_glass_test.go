@@ -238,10 +238,10 @@ func TestScreenshotGlassPopup(t *testing.T) {
 		glassRedraw(t, app)
 		writeShot(t, app, "glass-"+theme+"-20-diagnostics")
 
-		app.toggleDetails()
+		clickID(t, app, "act-problems")
 		glassRedraw(t, app)
 		writeShot(t, app, "glass-"+theme+"-21-problems")
-		app.toggleDetails()
+		clickID(t, app, "act-problems")
 
 		if err := app.runPopupDemo(ctx, paletteCmdPopupList); err != nil {
 			t.Fatal(err)

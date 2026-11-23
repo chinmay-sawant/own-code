@@ -12,7 +12,7 @@ Closing own-code terminates every terminal session, whether the panel is visible
 
 ## Tabs and sessions
 
-Use the new terminal control to create a session. Each session has its own shell, working directory, scrollback, and running process. Switch sessions from the tab strip. Closing one tab terminates that session's shell and closes its terminal connection. The other tabs keep running.
+Click **+** to open a session with your default shell. Use the arrow beside **+** to choose another installed shell. Each session has its own shell, working directory, scrollback, and running process. Switch sessions from the tab strip. Switch to **Problems** to view diagnostics while your shell keeps running. Closing one tab terminates that session's shell and closes its terminal connection. The other tabs keep running.
 
 If a shell exits on its own, its tab reports the exit and stops accepting input. Close the tab or create a new session.
 
@@ -24,7 +24,7 @@ Click the terminal body or a tab to focus the terminal. While it has focus, keys
 
 The terminal renders ANSI colors, cursor movement, erasing, and the common control sequences used by shells and command-line programs. It keeps a scrollback buffer for earlier output.
 
-The panel follows live output while it is at the bottom. Mouse wheel and the scroll controls move through scrollback, and scrolling up keeps your place while new output arrives. Scroll back to the bottom to follow live output again.
+The panel follows live output while it is at the bottom. Mouse wheel and the scroll controls move through scrollback, and scrolling up keeps your place while new output arrives. Click **Jump to latest** to return to live output.
 
 Copy puts the visible terminal output on the clipboard. It copies the current screen or the visible scrollback window; it does not copy an arbitrary text selection. Use Paste to send clipboard text to the focused shell, then press Enter to run it. The terminal's Copy and Paste controls are separate from the app's editing and explorer shortcuts. While the terminal has focus, `Ctrl+Shift+C` copies and `Ctrl+Shift+V` pastes; `Ctrl+C` interrupts the running command rather than copying. Press Ctrl plus the backtick key to toggle the panel from anywhere.
 
@@ -32,7 +32,7 @@ Paths in terminal output that look like `path:line` or `path:line:col` are links
 
 ## Choose a shell
 
-Set `OWN_CODE_SHELL` before starting own-code to choose the shell executable. own-code reads only the executable name or path from the variable. It does not read arguments from the value, and it does not run a command from it automatically.
+Use the shell picker for a single session. It lists installed Unix shells on Linux, macOS, and WSL. On Windows, it can also list Command Prompt and PowerShell. Set `OWN_CODE_SHELL` before starting own-code to change the default executable. own-code reads only the executable name or path from the variable. It does not read arguments from the value, and it does not run a command from it automatically.
 
 The value can be an absolute path or a command on `PATH`.
 
@@ -71,7 +71,7 @@ Each session has its own working directory. Changing directory in one tab does n
 
 Unix systems, including Linux, macOS, and WSL, run the shell on a pseudo-terminal (PTY). Interactive programs such as `vim`, `less`, `top`, and prompts that read from `/dev/tty` work as they do in a normal terminal, including resize handling and signals.
 
-Windows uses a pipe-backed terminal fallback with no PTY. Line-oriented commands and ordinary prompts work. Full-screen programs have limited support, resize and signal fidelity are not available, and stderr goes to the app console instead of the terminal panel. Use the app's WSL handoff for a Linux workspace when you need full PTY behavior on Windows.
+Windows uses a pipe-backed terminal fallback with no PTY. Line-oriented commands and ordinary prompts work. The panel shows standard output and standard error. Full-screen programs, resizing, and signals have limited support. Use the app's WSL handoff for a Linux workspace when you need full PTY behavior on Windows.
 
 ## Security
 

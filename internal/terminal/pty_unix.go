@@ -39,3 +39,5 @@ func defaultShell() string {
 	}
 	return "/bin/sh"
 }
+
+func interactiveShellArgs(_ string) []string { return nil }

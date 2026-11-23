@@ -25,7 +25,7 @@ type editSnapshot struct {
 
 // onType inserts printable text at the edit caret.
 func (a *App) onType(ctx context.Context, text string) error {
-	if a.settingsOpen || text == "" {
+	if a.settingsOpen || a.menuOpen || text == "" {
 		return nil
 	}
 

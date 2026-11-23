@@ -379,6 +379,8 @@ type App struct {
 	cardStartTop  int
 
 	details       bool
+	problemsOpen  bool
+	problemScroll historyScroll
 	devOn         bool
 	windowControl bool
 	// fpsCLI/fpsCLISet carry the --fps override: CLI wins over settings,
@@ -601,7 +603,7 @@ type App struct {
 	termVersion        uint64
 	termRunning        bool
 	termNote           string
-	termShell          string
+	termProfiles       []terminal.ShellProfile
 	termCols           int
 	termRows           int
 	termAppCursor      bool
@@ -869,10 +871,6 @@ const (
 	fileFlyW       = 260
 	fileDrawerPad  = 6
 	fileItemH      = 30
-	filePickerH    = 76
-	locLabelH      = 22
-	locRowMax      = 6
-	locPad         = 8
 )
 
 // recentFlyoutX puts the recent flyout just right of the file drawer. The
@@ -882,32 +880,28 @@ func (a *App) recentFlyoutX() int {
 	return a.zx(fileDrawerW) + a.zx(fileFlyoutGap)
 }
 
-// recentFlyoutY lines the flyout top up with the recents toggle row,
-// relative to the drawer box. It mirrors the picker's stacked heights:
-// four 30px rows, the open picker's input block, and the capped
-// locations list.
+// recentFlyoutY aligns the flyout with the third File menu row.
 func (a *App) recentFlyoutY() int {
-	y := a.zx(fileDrawerPad) + a.zx(fileItemH)*4 - a.zx(fileDrawerPad)
-	if a.projectOpen {
-		rows := len(a.quickRootRows())
-		if rows > locRowMax {
-			rows = locRowMax
-		}
-
-		y += a.zx(filePickerH) + a.zx(locLabelH) + rows*a.zx(fileItemH) + a.zx(locPad)
-	}
-
-	return y
+	return a.zx(fileDrawerPad) + 2*a.zx(fileItemH)
 }
 
 // recentRootRows lists recently opened project roots with the active one marked.
 func (a *App) recentRootRows() []recentRootRow {
 	rows := make([]recentRootRow, 0, len(a.recentRoots))
+	labelWidth := fileFlyW - 2*fileDrawerPad - 2*10 - 2
+	fontSize := 11 * a.baseFontSize() / defaultFontSize
+	budget := max(3, int(float64(labelWidth)/fontSize))
 
 	for _, root := range a.recentRoots {
+		name := []rune(filepath.Base(root))
+		label := string(name)
+		if len(name) > budget {
+			tail := (budget - 1) / 2
+			label = string(name[:budget-1-tail]) + "…" + string(name[len(name)-tail:])
+		}
 		rows = append(rows, recentRootRow{
 			Path:   root,
-			Name:   baseName(root),
+			Name:   label,
 			Active: root == a.ws.Root || (root == "sample" && a.ws.Sample),
 		})
 	}
@@ -1202,78 +1196,82 @@ func (a *App) onScroll(offsetY, viewH int) bool {
 // buildView assembles one frame from the current state.
 func (a *App) buildView() View {
 	winW, _ := a.page.Size()
+	workspace := baseName(a.ws.Root)
 	v := View{
-		Mode:          a.mode,
-		Filter:        clipFilterDisplay(clampFieldLen(a.filter)),
-		Details:       a.details,
-		DevOn:         a.devOn,
-		MenuOpen:      a.menuOpen,
-		MenuX:         a.menuX,
-		MenuY:         a.menuY,
-		MenuRows:      append([]menuViewRow(nil), a.menuItems...),
-		Modal:         a.paletteOpen || a.branchOpen || a.searchOpen || a.settingsOpen || a.confirmOpen || a.commitDialogOpen || a.fileMenu || a.browseOpen || a.termFocus || a.popupTrapsFocus(),
-		SettingsOpen:  a.settingsOpen,
-		FileMenu:      a.fileMenu,
-		ProjectOpen:   a.projectOpen,
-		ProjectQuery:  clampFieldLen(a.projectQuery),
-		RecentOpen:    a.recentOpen,
-		RecentFlyX:    a.recentFlyoutX(),
-		RecentFlyY:    a.recentFlyoutY(),
-		RecentRoots:   a.recentRootRows(),
-		QuickRoots:    a.quickRootRows(),
-		BrowseOpen:    a.browseOpen,
-		BrowseRoot:    a.browseRoot,
-		BrowseName:    clipBrowsePath(winW, a.browseDisplayName()),
-		BrowseQuery:   clampFieldLen(a.browseFilter),
-		BrowseEntries: a.browseWindowedEntries(),
-		BrowseTotal:   len(a.browseFilteredEntries()),
-		IsWSL:         isWSL(),
-		IsWindows:     runtime.GOOS == "windows",
-		HasWSL:        wsl.Available(),
-		Alert:         a.fileAlert,
-		Themes:        a.themeRows(),
-		ThumbColor:    thumbColorFor(a.theme),
-		PanelColor:    panelColorFor(a.theme),
-		AutoSave:      validAutoSave(a.autoSave),
-		AutoSaveDelay: clampAutoSaveDelay(firstNonZero(a.autoSaveDelayMs, autoSaveDefaultDelay)),
-		MaxFPS:        a.EffectiveMaxFPS(),
-		FPSLabel:      FPSLabel(a.EffectiveMaxFPS()),
-		FPSOptions:    fpsRows(a.EffectiveMaxFPS()),
-		SettingsTab:   a.settingsTabName(),
-		FontLabel:     a.fontLabel(),
-		KeymapRows:    a.keymapRows(),
-		HelpRows:      a.helpRows(),
-		AppName:       appName,
-		AppVersion:    appVersion,
-		AppScope:      appScope,
-		ScanText:      a.scanDraftText(),
-		SearchText:    a.searchDraftText(),
-		ScanBad:       invalidGlobLines(a.scanDraftText()),
-		SearchBad:     invalidGlobLines(a.searchDraftText()),
-		UseGitignore:  a.scanFilterAllowsGitignore(),
-		SearchIgnored: a.scanFilterAllowsSearchIgnored(),
-		ScanMatch:     a.scanExcludeMatchCount(),
-		SearchSkip:    a.searchExcludeSkipCount(),
-		SettingsNote:  a.settingsNote,
-		Workspace:     baseName(a.ws.Root),
-		Branch:        a.changes.Branch,
-		Changed:       len(a.changes.Files) + len(a.changes.Conflicts),
-		DevNote:       a.changes.Note,
-		ScanBudget:    a.ws.ScanBudget(),
-		WatchNote:     a.watchNote,
-		FilterNote:    a.filterNote(),
-		DirLoadNote:   a.dirLoadNote,
-		HoverPath:     a.hoverPath,
-		Dirty:         a.dirtyCount(),
-		Toast:         a.toast,
-		LSP:           a.lspViewData(),
-		Wrap:          a.wrap,
-		ScrollX:       0,
-		FindQuery:     clampFieldLen(a.findQuery),
-		FindOpen:      a.findOpen,
-		FindCase:      a.findCase,
-		FindCurrent:   a.findCurrent(),
-		FindTotal:     len(a.findHits),
+		Mode:           a.mode,
+		Filter:         clipFilterDisplay(clampFieldLen(a.filter)),
+		Details:        a.details,
+		DevOn:          a.devOn,
+		MenuOpen:       a.menuOpen,
+		MenuX:          a.menuX,
+		MenuY:          a.menuY,
+		MenuRows:       append([]menuViewRow(nil), a.menuItems...),
+		Modal:          a.paletteOpen || a.branchOpen || a.searchOpen || a.settingsOpen || a.confirmOpen || a.commitDialogOpen || a.fileMenu || a.browseOpen || a.termFocus || a.popupTrapsFocus(),
+		SettingsOpen:   a.settingsOpen,
+		FileMenu:       a.fileMenu,
+		ProjectOpen:    a.projectOpen,
+		ProjectQuery:   clampFieldLen(a.projectQuery),
+		RecentOpen:     a.recentOpen,
+		RecentFlyX:     a.recentFlyoutX(),
+		RecentFlyY:     a.recentFlyoutY(),
+		RecentRoots:    a.recentRootRows(),
+		QuickRoots:     a.quickRootRows(),
+		BrowseOpen:     a.browseOpen,
+		BrowseRoot:     a.browseRoot,
+		BrowseName:     clipBrowsePath(winW, a.browseDisplayName()),
+		BrowseQuery:    clampFieldLen(a.browseFilter),
+		BrowseEntries:  a.browseWindowedEntries(),
+		BrowseTotal:    len(a.browseFilteredEntries()),
+		IsWSL:          isWSL(),
+		IsWindows:      runtime.GOOS == "windows",
+		HasWSL:         wsl.Available(),
+		Alert:          a.fileAlert,
+		Themes:         a.themeRows(),
+		ThumbColor:     thumbColorFor(a.theme),
+		PanelColor:     panelColorFor(a.theme),
+		AutoSave:       validAutoSave(a.autoSave),
+		AutoSaveDelay:  clampAutoSaveDelay(firstNonZero(a.autoSaveDelayMs, autoSaveDefaultDelay)),
+		MaxFPS:         a.EffectiveMaxFPS(),
+		FPSLabel:       FPSLabel(a.EffectiveMaxFPS()),
+		FPSOptions:     fpsRows(a.EffectiveMaxFPS()),
+		SettingsTab:    a.settingsTabName(),
+		FontLabel:      a.fontLabel(),
+		KeymapRows:     a.keymapRows(),
+		HelpRows:       a.helpRows(),
+		AppName:        appName,
+		AppVersion:     appVersion,
+		AppScope:       appScope,
+		ScanText:       a.scanDraftText(),
+		SearchText:     a.searchDraftText(),
+		ScanBad:        invalidGlobLines(a.scanDraftText()),
+		SearchBad:      invalidGlobLines(a.searchDraftText()),
+		UseGitignore:   a.scanFilterAllowsGitignore(),
+		SearchIgnored:  a.scanFilterAllowsSearchIgnored(),
+		ScanMatch:      a.scanExcludeMatchCount(),
+		SearchSkip:     a.searchExcludeSkipCount(),
+		SettingsNote:   a.settingsNote,
+		Workspace:      workspace,
+		WorkspaceLabel: clipRunes(workspace, 20),
+		GitRoot:        a.ws.Root,
+		Branch:         a.changes.Branch,
+		NoGit:          a.changes.Branch == "no git",
+		Changed:        len(a.changes.Files) + len(a.changes.Conflicts),
+		DevNote:        a.changes.Note,
+		ScanBudget:     a.ws.ScanBudget(),
+		WatchNote:      a.watchNote,
+		FilterNote:     a.filterNote(),
+		DirLoadNote:    a.dirLoadNote,
+		HoverPath:      a.hoverPath,
+		Dirty:          a.dirtyCount(),
+		Toast:          a.toast,
+		LSP:            a.lspViewData(),
+		Wrap:           a.wrap,
+		ScrollX:        0,
+		FindQuery:      clampFieldLen(a.findQuery),
+		FindOpen:       a.findOpen,
+		FindCase:       a.findCase,
+		FindCurrent:    a.findCurrent(),
+		FindTotal:      len(a.findHits),
 
 		ReplaceOpen:      a.replaceOpen,
 		ReplaceQuery:     clampFieldLen(a.replaceQuery),
@@ -1418,6 +1416,7 @@ func (a *App) buildView() View {
 	}
 	v.CommitTip = a.commitTip
 	v.InlineCard = a.inlineCard
+	v.BottomPanelLeft, v.BottomPanelWidth = a.windowControlLeftPx(), a.editorWidth()
 	v.Terminal = a.terminalView()
 	v.SpaceHeight = a.contentHeight()
 	a.fillDrawer(&v)
@@ -2106,7 +2105,7 @@ func (a *App) findCommit(hash string) *gitCommit {
 // bodyHeight is the editor body below the tab strip and breadcrumbs.
 func (a *App) bodyHeight() int {
 	h := a.viewportH - a.zx(editorBodyTop) - a.zx(windowControlBottom)
-	if a.termOpen {
+	if a.termOpen || a.problemsOpen {
 		h -= a.termPanelHeight()
 	}
 
@@ -2451,7 +2450,7 @@ func (a *App) contentHeight() int {
 	}
 
 	h := a.zx(editorBodyTop) + rows*a.zx(rowH) + a.zx(windowControlBottom)
-	if a.termOpen {
+	if a.termOpen || a.problemsOpen {
 		h += a.termPanelHeight()
 	}
 

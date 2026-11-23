@@ -1,6 +1,6 @@
 <footer class="statusbar" id="statusbar">
-  <button class="sb-item sb-branch" id="sb-branch" data-action="mode-changes" type="button" title="Source control" aria-label="Source control: {{.Branch}}"{{if .Modal}} tabindex="-1"{{end}}><svg width="10" height="11" viewBox="0 0 12 14" fill="none" stroke-width="1.4" stroke-linecap="round"><circle cx="2.6" cy="2.8" r="1.7"/><circle cx="2.6" cy="11.2" r="1.7"/><circle cx="9.4" cy="5" r="1.7"/><path d="M2.6 4.5v5M9.4 6.7c0 2.2-2.4 2.4-4.4 3"/></svg>{{.Branch}}</button>
-  <span class="sb-item"><span class="sb-dot"></span>{{.Workspace}}</span>
+  <button class="sb-item sb-branch" id="sb-branch" data-action="{{if .NoGit}}problems-open{{else}}mode-changes{{end}}" type="button" title="{{if .NoGit}}Show workspace problems{{else}}Source control{{end}}" aria-label="{{if .NoGit}}No Git. Show workspace problems{{else}}Source control: {{.Branch}}{{end}}"{{if .Modal}} tabindex="-1"{{end}}><svg width="10" height="11" viewBox="0 0 12 14" fill="none" stroke-width="1.4" stroke-linecap="round"><circle cx="2.6" cy="2.8" r="1.7"/><circle cx="2.6" cy="11.2" r="1.7"/><circle cx="9.4" cy="5" r="1.7"/><path d="M2.6 4.5v5M9.4 6.7c0 2.2-2.4 2.4-4.4 3"/></svg>{{if .NoGit}}No Git{{else}}{{.Branch}}{{end}}</button>
+  <span class="sb-item" title="{{.Workspace}}"><span class="sb-dot"></span>{{.WorkspaceLabel}}</span>
   {{if .ChangeLabel}}<span class="sb-item sb-changed" id="sb-change-summary">{{.ChangeLabel}}</span>{{else if .Changed}}<span class="sb-item sb-changed">{{.Changed}} changed</span>{{end}}
   <span class="sb-fill"></span>
   {{if .HoverPath}}<span class="sb-item sb-path mono" id="sb-hover-path">{{.HoverPath}}</span>{{end}}

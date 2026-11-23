@@ -93,7 +93,9 @@ func BenchmarkTerminalOutputRefresh(b *testing.B) {
 }
 
 func TestTerminalBlankCursorRendered(t *testing.T) {
-	s := terminal.NewScreen(20, 2).Snapshot()
+	screen := terminal.NewScreen(20, 2)
+	screen.Feed([]byte("\x1b[48;2;0;122;204mZsh\x1b[0m"))
+	s := screen.Snapshot()
 	s.Running = true
 	v := terminalViewState(true, true, 240, 1, nil, s, true, 2, 0)
 	source, err := owncode.Components.ReadFile("components/html/terminal.html")
@@ -106,10 +108,13 @@ func TestTerminalBlankCursorRendered(t *testing.T) {
 	}
 	v.Sessions = []terminalTabRow{{ID: 1}}
 	var output bytes.Buffer
-	if err := tpl.Execute(&output, struct{ Terminal terminalView }{Terminal: v}); err != nil {
+	if err := tpl.Execute(&output, View{Terminal: v}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(output.String(), `class="t-cursor"`) {
 		t.Fatal("template suppressed cursor on blank line")
+	}
+	if !strings.Contains(output.String(), `background-color:#007acc;`) {
+		t.Fatal("template did not paint the exact prompt color")
 	}
 }

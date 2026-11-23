@@ -150,6 +150,8 @@
   overflow: auto;
 }
 
+.recent-item { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .recent-empty { display: block; padding: 4px 10px; color: var(--dim); font-size: 10px; }
 
 /* Folder browser modal ------------------------------------------------------- */
@@ -580,14 +582,14 @@ button.sb-item:hover { background-color: var(--panel-3); color: var(--text); }
 }
 
 .toast {
-  width: 322px;
-  min-height: 52px;
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  min-height: 54px;
   display: flex;
   align-items: flex-start;
-  gap: 9px;
-  padding: 10px 10px 10px 11px;
+  gap: 10px;
+  padding: 12px;
   border: 1px solid var(--line);
-  border-left: 3px solid var(--accent);
   border-radius: 8px;
   background-color: var(--panel);
   opacity: 0;
@@ -595,9 +597,6 @@ button.sb-item:hover { background-color: var(--panel-3); color: var(--text); }
 }
 
 .toast.on { opacity: 1; transform: translateY(0); pointer-events: auto; }
-.toast.success { border-left-color: var(--green); }
-.toast.error { border-left-color: var(--red); }
-.toast.info { border-left-color: var(--accent); }
 
 .toast-icon {
   width: 20px;
@@ -616,10 +615,10 @@ button.sb-item:hover { background-color: var(--panel-3); color: var(--text); }
 .toast.success .toast-icon { background-color: var(--green-bg); color: var(--green); }
 .toast.error .toast-icon { background-color: var(--red-bg); color: var(--red); }
 .toast-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.toast-text b { font-size: 11.5px; font-weight: 700; }
-.toast-text span { color: var(--muted); font-size: 10.5px; line-height: 1.35; }
-.toast-x { color: var(--icon); font-size: 14px; line-height: 1; padding: 0 2px; }
-.toast-x:hover { color: var(--text); }
+.toast-text b { font-size: 12px; font-weight: 700; }
+.toast-text span { color: var(--muted); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.toast-x { width: 22px; height: 22px; flex: 0 0 22px; border-radius: 4px; color: var(--icon); font-size: 14px; line-height: 1; }
+.toast-x:hover, .toast-x:focus-visible { background-color: var(--accent-soft); color: var(--text); }
 
 @media (max-width: 800px) {
   .sb-extra { display: none; }

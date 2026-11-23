@@ -18,8 +18,8 @@ var (
 // may hold outside custom-property declarations (token definitions such as
 // base.css :root are exempt). Remaining literals are intentional: language
 // badges and theme swatches are fixed brand colors, shadows are removed
-// under glass, the close button red and the mid-gray SVG rail must stay
-// theme independent. Lowering a number is always fine; raising one needs a
+// under glass, and the close button red stays theme independent.
+// Lowering a number is always fine; raising one needs a
 // reason, so prefer a var(--...) token that glassTokenCSS can retint.
 var colorLiteralBudget = map[string]int{
 	"base.css":           24, // .lang-* file badges (themes.go overrides them for light themes)
@@ -31,7 +31,6 @@ var colorLiteralBudget = map[string]int{
 	"inline_card.css":    3,  // shadow + old/new line washes
 	"history.css":        1,  // shadow
 	"palette.css":        2,  // scrim (glass overrides) + search-match highlight
-	"scrollrails.css":    1,  // .drawer-resize default grip colour
 	"popup.css":          1,  // soft shadow (glass sets box-shadow none)
 	"file_nav.css":       1,  // soft shadow
 	"diff.css":           0,

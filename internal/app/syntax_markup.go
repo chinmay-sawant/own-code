@@ -346,7 +346,7 @@ func tokenizeJSON(lines []string) [][]segment {
 
 // scanLineHTML colours one line of HTML given the active tag and comment continuation state.
 func scanLineHTML(state lineState, line string) ([]segment, lineState) {
-	inComment := state.inComment
+	inComment := state.inComment && state.htmlRawTag == ""
 	inTag := state.inTag
 
 	r := []rune(line)
@@ -355,6 +355,26 @@ func scanLineHTML(state lineState, line string) ([]segment, lineState) {
 	i := 0
 htmlLoop:
 	for i < len(r) {
+		if state.htmlRawTag != "" && !inTag {
+			end := htmlRawEnd(r, i, state.htmlRawTag)
+			if end > i {
+				var embedded []segment
+				tag := state.htmlRawTag
+				if tag == "style" {
+					embedded, state = scanLineCSS(state, string(r[i:end]))
+				} else {
+					embedded, state = scanLineC(cSpecFor(langJS), state, string(r[i:end]))
+				}
+				state.htmlRawTag = tag
+				segs = append(segs, embedded...)
+			}
+			i = end
+			if i == len(r) {
+				break
+			}
+			state = lineState{}
+		}
+
 		if inComment {
 			end := indexRunes(r, i, "-->", false)
 			if end < 0 {
@@ -408,7 +428,14 @@ htmlLoop:
 					j++
 				}
 
-				segs = addSeg(segs, string(r[i:j]), classTag)
+				name := string(r[i:j])
+				segs = addSeg(segs, name, classTag)
+				if r[i-1] == '<' {
+					switch tag := strings.ToLower(name); tag {
+					case "script", "style":
+						state = lineState{htmlRawTag: tag}
+					}
+				}
 				i = j
 			}
 		case inTag:
@@ -419,6 +446,7 @@ htmlLoop:
 				i++
 			case c == '/' && i+1 < len(r) && r[i+1] == '>':
 				segs = addSeg(segs, "/>", classPunc)
+				state = lineState{}
 				inTag = false
 				i += 2
 			case c == '=':
@@ -465,7 +493,33 @@ htmlLoop:
 		}
 	}
 
-	return finishLine(segs), lineState{inComment: inComment, inTag: inTag}
+	if state.htmlRawTag == "" {
+		state.inComment = inComment
+	}
+	state.inTag = inTag
+
+	return finishLine(segs), state
+}
+
+// htmlRawEnd finds a closing script or style tag, or the end of this line.
+func htmlRawEnd(line []rune, start int, tag string) int {
+	prefix := "</" + tag
+	for i := start; i+len(prefix) <= len(line); i++ {
+		if line[i] != '<' || !strings.EqualFold(string(line[i:i+len(prefix)]), prefix) {
+			continue
+		}
+
+		if i+len(prefix) == len(line) {
+			return i
+		}
+
+		next := line[i+len(prefix)]
+		if next == '>' || next == '/' || unicode.IsSpace(next) {
+			return i
+		}
+	}
+
+	return len(line)
 }
 
 // tokenizeYAML colours mapping keys, comments, anchors, and scalars.

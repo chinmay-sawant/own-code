@@ -18,7 +18,7 @@ const (
 	popupPad        = 4   // list padding top and bottom
 	popupHeadH      = 20  // filter header line
 	popupLineH      = 16  // one content line
-	popupContentPad = 16  // content card vertical padding plus border
+	popupContentPad = 18  // content card vertical padding plus border
 	popupMaxRows    = 8   // list rows shown before the list scrolls
 	popupMaxH       = 280 // tallest content card
 	popupMinW       = 180

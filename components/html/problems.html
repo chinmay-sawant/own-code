@@ -1,0 +1,33 @@
+{{if .LSP.Open}}
+<section class="bottom-panel workspace-problems" id="workspace-problems" style="left:{{.BottomPanelLeft}}px;width:{{.BottomPanelWidth}}px;height:{{.Terminal.Height}}px" aria-label="Workspace problems">
+  {{template "bottom-panel-grip" .}}
+  <header class="term-head">
+    {{template "bottom-panel-tabs" .}}
+    <span class="problem-summary" aria-live="polite" title="{{.LSP.Total}} problems in {{.LSP.Files}} files">
+      <b>{{.LSP.Total}} problems in {{.LSP.Files}} files</b>
+      <span>{{.LSP.Errors}} errors · {{.LSP.Warnings}} warnings · {{.LSP.Info}} info</span>
+    </span>
+    <div class="term-tools">
+      <button class="term-tool" id="problems-hide" data-action="problems-toggle" type="button" title="Hide panel" aria-label="Hide Problems panel"{{if .Modal}} tabindex="-1"{{end}}>×</button>
+    </div>
+  </header>
+  <div class="problem-list" id="problems">
+    {{range .LSP.Problems}}
+    <button class="pbrow" id="problem-{{.Index}}" data-action="problem:{{.Index}}" type="button" title="{{.Full}}" aria-label="{{.Full}} in {{.Path}} at {{.Where}}"{{if $.Modal}} tabindex="-1"{{end}}>
+      <span class="pbmark {{.Class}}">{{.Mark}}</span>
+      <span class="pbbody">
+        <span class="pbtext">{{.Text}}</span>
+        <span class="pbloc mono">{{.Name}}:{{.Where}}</span>
+      </span>
+    </button>
+    {{else}}
+    <div class="problem-empty">{{if .LSP.Show}}No diagnostics reported.{{else}}Open a supported source file to start its language server.{{end}}</div>
+    {{end}}
+  </div>
+  <footer class="problem-pager">
+    <span>{{if .LSP.Total}}{{.LSP.First}}–{{.LSP.Last}} of {{.LSP.Total}}{{else}}0 reported{{end}}</span>
+    <button id="problems-prev" data-action="problems-prev" type="button" aria-label="Previous problems"{{if not .LSP.Prev}} disabled{{end}}{{if .Modal}} tabindex="-1"{{end}}>Prev</button>
+    <button id="problems-next" data-action="problems-next" type="button" aria-label="Next problems"{{if not .LSP.Next}} disabled{{end}}{{if .Modal}} tabindex="-1"{{end}}>Next</button>
+  </footer>
+</section>
+{{end}}

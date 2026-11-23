@@ -21,6 +21,7 @@ type popupLineView struct {
 	Segments []segment
 	Code     bool
 	Blank    bool
+	Divider  bool
 }
 
 // popupView is the template data for the popup.
@@ -131,6 +132,8 @@ func popupContentLines(content string) []popupLineView {
 		switch {
 		case fence:
 			lines = append(lines, popupLineView{Code: true, Segments: []segment{{Text: raw, Class: classPlain}}})
+		case strings.TrimSpace(raw) == "---":
+			lines = append(lines, popupLineView{Divider: true})
 		case strings.TrimSpace(raw) == "":
 			lines = append(lines, popupLineView{Blank: true})
 		default:

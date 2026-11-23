@@ -13,7 +13,7 @@
 <div class="popup popup-card{{if .Popup.Above}} above{{end}}" id="popup" role="dialog"{{if .Popup.Trap}} aria-modal="true"{{end}} aria-label="{{.Popup.Label}}" style="left:{{.Popup.Left}}px;top:{{.Popup.Top}}px;width:{{.Popup.Width}}px;max-height:{{.Popup.Height}}px">
   <button class="popup-x" id="popup-close" data-action="popup-close" type="button" title="Close" aria-label="Close {{.Popup.Label}}"{{if not .Popup.Trap}} tabindex="-1"{{end}}>×</button>
   <div class="popup-body" id="popup-body">
-    {{range .Popup.Lines}}{{if .Blank}}<div class="popup-gap"></div>{{else}}<div class="popup-line{{if .Code}} code{{end}}">{{range .Segments}}<span class="t-{{.Class}}">{{.Text}}</span>{{end}}</div>{{end}}{{end}}
+    {{range .Popup.Lines}}{{if .Blank}}<div class="popup-gap"></div>{{else if .Divider}}<div class="popup-divider"></div>{{else}}<div class="popup-line{{if .Code}} code{{end}}">{{range .Segments}}<span class="t-{{.Class}}">{{.Text}}</span>{{end}}</div>{{end}}{{end}}
   </div>
 </div>
 {{end}}

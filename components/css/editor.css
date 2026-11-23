@@ -99,8 +99,7 @@
    absolutely positioned at the tab's right edge and stays clear of the
    text through the tab-main right padding. */
 .tab-name { flex: 0 0 auto; overflow: hidden; font-family: var(--mono); font-size: 9.5px; line-height: 1.15; white-space: nowrap; }
-.tab-main .tab-dot, .tab-main .tab-status { position: relative; background-color: var(--panel-2); }
-.tab.on .tab-dot, .tab.on .tab-status { background-color: var(--bg); }
+.tab-main .tab-dot, .tab-main .tab-status { position: relative; }
 
 .tab-status {
   width: 16px;
@@ -115,8 +114,7 @@
   font-size: 8px;
   font-weight: 800;
 }
-.tab-x { position: absolute; right: 4px; top: 8px; width: 21px; height: 21px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; background-color: var(--panel-2); color: var(--dim); font-size: 13px; line-height: 1; }
-.tab.on .tab-x { background-color: var(--bg); }
+.tab-x { position: absolute; right: 4px; top: 8px; width: 21px; height: 21px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; color: var(--dim); font-size: 13px; line-height: 1; }
 .tab-x:hover { background-color: var(--panel-3); color: var(--text); }
 
 .tabs-fill { flex: 1; min-width: 4px; }
@@ -240,6 +238,18 @@
 
 .crumb-btn:hover { border-color: var(--muted); color: var(--text); background-color: var(--panel-2); }
 .crumb-btn.on { border-color: var(--accent-strong); background-color: var(--accent-soft); color: var(--accent); }
+.crumbs .save-btn {
+  min-width: 48px;
+  justify-content: center;
+  border-color: var(--accent);
+  background-color: var(--panel-3);
+  color: var(--text);
+  font-weight: 650;
+}
+.crumbs .save-btn:hover, .crumbs .save-btn:focus-visible {
+  border-color: var(--accent);
+  background-color: var(--accent-soft);
+}
 .crumb-btn.off { color: var(--dim); }
 .crumb-btn.off:hover { background-color: transparent; border-color: var(--line); color: var(--dim); }
 
@@ -778,7 +788,7 @@ button.blame:focus { outline: 0; }
 .empty-mark.ok { border-color: rgba(63, 185, 80, 0.3); background-color: var(--green-bg); color: var(--green); }
 .empty-mark.warn { border-color: rgba(248, 81, 73, 0.3); background-color: var(--red-bg); color: var(--red); }
 .empty h2 { margin: 2px 0 0; font-size: 15px; font-weight: 650; }
-.empty p { margin: 0; max-width: 430px; color: var(--muted); font-size: 10.5px; line-height: 1.5; }
+.empty p { margin: 0; width: 100%; max-width: 430px; overflow-wrap: anywhere; color: var(--muted); font-size: 10.5px; line-height: 1.5; }
 
 .button {
   height: 28px;

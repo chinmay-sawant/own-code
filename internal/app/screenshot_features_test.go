@@ -28,14 +28,14 @@ func TestScreenshotNewFeatures(t *testing.T) {
 
 	writeShot(t, app, "feat-diagnostics")
 
-	app.toggleDetails()
+	clickID(t, app, "act-problems")
 
 	if err := app.Page().Redraw(ctx); err != nil {
 		t.Fatal(err)
 	}
 
 	writeShot(t, app, "feat-problems-drawer")
-	app.toggleDetails()
+	clickID(t, app, "act-problems")
 
 	if err := app.runPopupDemo(ctx, paletteCmdPopupList); err != nil {
 		t.Fatal(err)

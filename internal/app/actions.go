@@ -103,10 +103,19 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 	switch {
 	case action == "terminal-toggle":
 		a.toggleTerminal(ctx)
+	case action == "terminal-show":
+		if !a.termOpen {
+			a.toggleTerminal(ctx)
+		}
+	case action == "term-scroll-end":
+		a.termScroll = 0
+		a.refresh()
 	case action == "term-focus":
 		a.focusTerminal(ctx)
 	case action == "term-new":
 		a.startTerminalSession(ctx)
+	case action == "term-profiles":
+		a.openTerminalProfiles(box)
 	case strings.HasPrefix(action, "term-pick:"):
 		if id, ok := actionIndex(action, "term-pick:"); ok {
 			a.pickTerminal(ctx, id)
@@ -973,8 +982,18 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 			a.diffExpandAll(idx)
 		}
 	case action == "problems-open":
-		a.details = true
-		a.refresh()
+		a.showProblems()
+	case action == "problems-toggle":
+		if a.problemsOpen {
+			a.problemsOpen = false
+			a.refresh()
+		} else {
+			a.showProblems()
+		}
+	case action == "problems-prev":
+		a.scrollProblems(-a.problemPageSize())
+	case action == "problems-next":
+		a.scrollProblems(a.problemPageSize())
 	case strings.HasPrefix(action, "problem:"):
 		if idx, ok := actionIndex(action, "problem:"); ok {
 			a.openProblem(idx)
@@ -1179,6 +1198,17 @@ func (a *App) onWheel(ctx context.Context, x, y, dx, dy float64) (bool, error) {
 	scrollX, scrollY := a.page.Scroll().ScrollOffset()
 	x -= float64(scrollX)
 	y -= float64(scrollY)
+
+	if a.problemsOpen {
+		box, ok := findBoxID(a.page.Boxes(), "workspace-problems")
+		if ok && x >= box.X && x < box.X+box.W && y >= box.Y && y < box.Y+box.H {
+			if rows := a.problemScroll.WheelRows(-dy * treeWheelRows); rows != 0 {
+				a.scrollProblems(rows)
+				return true, a.page.Redraw(ctx)
+			}
+			return true, nil
+		}
+	}
 
 	if a.termOpen && dy != 0 {
 		box, ok := findBoxID(a.page.Boxes(), "term-body")
@@ -1652,11 +1682,11 @@ func (a *App) onDragStart(ctx context.Context, box ownframe.Box) (bool, error) {
 		a.cardStartTop = a.inlineCard.Top
 		return true, nil
 	}
-	if box.ID == "term-resize" && a.termOpen {
+	if box.ID == "term-resize" && (a.termOpen || a.problemsOpen) {
 		a.termDrag = true
-		a.termDragStartH = a.termHeight
+		a.termDragStartH = int(float64(a.termPanelHeight()) / a.uiZoom())
 		a.termDragDy = 0
-		a.termFocus = true
+		a.termFocus = a.termOpen
 
 		return true, nil
 	}
@@ -2954,6 +2984,9 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 		switch {
 		case a.inlineCard.Show:
 			a.closeInlineCard()
+		case a.problemsOpen:
+			a.problemsOpen = false
+			a.refresh()
 		case a.details:
 			a.details = false
 			a.refresh()

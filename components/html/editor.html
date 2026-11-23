@@ -96,7 +96,7 @@
       <span class="tabs-fill"></span>
       {{if .EditDirty}}<span class="edit-flag" id="edit-flag">Changes made</span>{{end}}
       {{if .Previewable}}<button class="crumb-btn" id="preview-toggle" data-action="preview-toggle" type="button" title="Markdown preview (M or Ctrl+Shift+V)"{{if .Modal}} tabindex="-1"{{end}}>{{if .Preview}}Source{{else}}Preview{{end}}</button>{{end}}
-      <button class="crumb-btn on" id="edit-save" data-action="edit-save" type="button" title="Save (Ctrl+S)">Save</button>
+      <button class="crumb-btn save-btn" id="edit-save" data-action="edit-save" type="button" title="Save (Ctrl+S)">Save</button>
       <button class="crumb-btn" id="edit-toggle" data-action="edit-toggle" type="button" title="Back to the source view (Esc)">Done</button>
       <span class="crumb-meta">{{.LineCount}} lines · Ctrl+S saves</span>
       {{else if .FindOpen}}

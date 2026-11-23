@@ -1,8 +1,9 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/chinmay-sawant/own-code/internal/lsp"
@@ -17,11 +18,21 @@ type lspDiag struct {
 	Severity int
 	Message  string
 	Source   string
+	Unopened bool
 }
 
 // newLSPDiag converts a protocol diagnostic against the exact lines the
 // server saw. UTF-16 offsets become rune columns, then display columns.
 func newLSPDiag(lines []string, d lsp.Diagnostic) lspDiag {
+	// An unopened file has no synced text. Keep the reported source
+	// position for the list and jump. Editor squiggles use synced text.
+	if lines == nil {
+		return lspDiag{
+			Line: max(0, d.Range.Start.Line), From: max(0, d.Range.Start.Character),
+			Severity: diagnosticSeverity(d.Severity), Message: strings.TrimSpace(d.Message), Source: d.Source, Unopened: true,
+		}
+	}
+
 	line := max(0, min(d.Range.Start.Line, len(lines)-1))
 	raw := ""
 
@@ -54,15 +65,17 @@ func newLSPDiag(lines []string, d lsp.Diagnostic) lspDiag {
 		toD += to - len(runes)
 	}
 
-	sev := d.Severity
-	if sev < lsp.SeverityError || sev > lsp.SeverityHint {
-		sev = lsp.SeverityError
-	}
-
 	return lspDiag{
-		Line: line, From: fromD, To: toD, Severity: sev,
+		Line: line, From: fromD, To: toD, Severity: diagnosticSeverity(d.Severity),
 		Message: strings.TrimSpace(d.Message), Source: d.Source,
 	}
+}
+
+func diagnosticSeverity(sev int) int {
+	if sev < lsp.SeverityError || sev > lsp.SeverityHint {
+		return lsp.SeverityError
+	}
+	return sev
 }
 
 func diagClass(sev int) string {
@@ -90,7 +103,9 @@ func (a *App) decorateDiagnostics(doc *fileDoc, rows []codeRow) {
 
 	byLine := map[int][]lspDiag{}
 	for _, d := range diags {
-		byLine[d.Line] = append(byLine[d.Line], d)
+		if !d.Unopened {
+			byLine[d.Line] = append(byLine[d.Line], d)
+		}
 	}
 
 	for i := range rows {
@@ -143,26 +158,21 @@ type lspProblem struct {
 	Message  string
 }
 
-// problemRow is one Problems entry as the Details drawer prints it.
+// problemRow is one Problems entry shown in the bottom panel.
 type problemRow struct {
 	Index int
 	Name  string
 	Where string
 	Text  string // clipped for display
+	Path  string
 	Full  string // complete message, for the tooltip and aria-label
 	Class string
 	Mark  string
 }
 
-const problemRowsShown = 8
-
-// The Details drawer is about 280 px wide. The engine paints a long label
-// past its box, so Problems text is clipped in Go: about 36 characters of
-// the 9.5 px face fit on the message line, and the file name and position
-// sit on a second line.
 const (
-	problemTextMax = 36
-	problemNameMax = 24
+	problemRowHeight   = 32
+	problemPagerHeight = 34
 )
 
 // clipProblemText flattens a diagnostic message to one line of at most max
@@ -179,82 +189,134 @@ func clipProblemText(msg string, max int) string {
 	return string(runes[:max-1]) + "…"
 }
 
-// lspView is the diagnostics data for the status bar and Details drawer.
-type lspView struct {
-	Show     bool
-	Errors   int
-	Warnings int
-	Total    int
-	More     int
-	Problems []problemRow
+type problemCounts struct {
+	Errors, Warnings, Info, Files, Total int
 }
 
-// lspViewData builds the view and refreshes the click index.
-func (a *App) lspViewData() lspView {
-	m := a.lspm
-	if m == nil {
-		return lspView{}
+func (c *problemCounts) add(diags []lspDiag, delta int) {
+	total := 0
+	for _, d := range diags {
+		switch d.Severity {
+		case lsp.SeverityError:
+			c.Errors += delta
+		case lsp.SeverityWarning:
+			c.Warnings += delta
+		case lsp.SeverityInfo:
+			c.Info += delta
+		default:
+			continue
+		}
+		total++
+	}
+	if total > 0 {
+		c.Files += delta
+		c.Total += total * delta
+	}
+}
+
+// lspView is the diagnostics data for the status bar and bottom panel.
+type lspView struct {
+	problemCounts
+	Show, Open  bool
+	First, Last int
+	Prev, Next  bool
+	Problems    []problemRow
+}
+
+// rebuildProblems updates the ordered index once for each diagnostics batch.
+func (m *lspManager) rebuildProblems() {
+	if !m.problemsDirty {
+		return
 	}
 
-	var all []lspProblem
-
-	v := lspView{}
-
+	all := m.problems[:0]
 	for path, list := range m.diags {
 		for _, d := range list {
-			switch d.Severity {
-			case lsp.SeverityError:
-				v.Errors++
-			case lsp.SeverityWarning:
-				v.Warnings++
-			}
-
-			if d.Severity <= lsp.SeverityInfo {
+			if d.Severity >= lsp.SeverityError && d.Severity <= lsp.SeverityInfo {
 				all = append(all, lspProblem{Path: path, Line: d.Line, Col: d.From, Severity: d.Severity, Message: d.Message})
 			}
 		}
 	}
-
-	sort.Slice(all, func(i, j int) bool {
-		if all[i].Severity != all[j].Severity {
-			return all[i].Severity < all[j].Severity
+	slices.SortFunc(all, func(x, y lspProblem) int {
+		if x.Severity != y.Severity {
+			return cmp.Compare(x.Severity, y.Severity)
 		}
-
-		if all[i].Path != all[j].Path {
-			return all[i].Path < all[j].Path
+		if x.Path != y.Path {
+			return strings.Compare(x.Path, y.Path)
 		}
-
-		return all[i].Line < all[j].Line
+		if x.Line != y.Line {
+			return cmp.Compare(x.Line, y.Line)
+		}
+		if x.Col != y.Col {
+			return cmp.Compare(x.Col, y.Col)
+		}
+		return strings.Compare(x.Message, y.Message)
 	})
-
+	if len(all) < len(m.problems) {
+		clear(m.problems[len(all):])
+	}
 	m.problems = all
-	v.Total = len(all)
-	v.Show = len(m.servers) > 0 && len(m.docs) > 0 || len(all) > 0
+	m.problemsDirty = false
+}
 
-	for i, p := range all {
-		if i >= problemRowsShown {
-			v.More = len(all) - problemRowsShown
+func (a *App) problemPageSize() int {
+	h := a.termPanelHeight() - a.zx(termResizeH) - a.zx(termHeadH) - a.zx(problemPagerHeight) - 1
+	return max(1, h/a.zx(problemRowHeight))
+}
 
-			break
-		}
-
+func (a *App) lspViewData() lspView {
+	m := a.lspm
+	if m == nil {
+		return lspView{Open: a.problemsOpen}
+	}
+	v := lspView{problemCounts: m.problemSummary}
+	v.Open = a.problemsOpen
+	v.Show = len(m.servers) > 0 || v.Total > 0
+	if !v.Open {
+		return v
+	}
+	m.rebuildProblems()
+	start, end := a.problemScroll.Rows(v.Total, a.problemPageSize())
+	v.Prev, v.Next = start > 0, end < v.Total
+	if end > start {
+		v.First, v.Last = start+1, end
+	}
+	width := a.editorWidth()
+	pathLimit := max(8, min(54, width/a.zx(16)))
+	messageLimit := max(8, min(140, (width-a.zx(56))/a.zx(8)))
+	v.Problems = make([]problemRow, 0, end-start)
+	for i := start; i < end; i++ {
+		p := m.problems[i]
 		mark := "!"
-		if p.Severity >= lsp.SeverityInfo {
+		if p.Severity == lsp.SeverityInfo {
 			mark = "i"
 		}
-
 		v.Problems = append(v.Problems, problemRow{
 			Index: i,
-			Name:  clipProblemText(baseName(p.Path), problemNameMax),
+			Name:  clipProblemText(p.Path, pathLimit),
+			Path:  p.Path,
 			Where: fmt.Sprintf("%d:%d", p.Line+1, p.Col+1),
-			Text:  clipProblemText(p.Message, problemTextMax),
-			Full:  clipGutterHint(p.Message),
+			Text:  clipProblemText(p.Message, messageLimit),
+			Full:  p.Message,
 			Class: diagClass(p.Severity),
 			Mark:  mark,
 		})
 	}
 
 	return v
+}
+
+func (a *App) showProblems() {
+	if !a.problemsOpen {
+		a.problemScroll = historyScroll{}
+	}
+	a.termOpen, a.termFocus, a.problemsOpen = false, false, true
+	a.refresh()
+}
+
+func (a *App) scrollProblems(rows int) {
+	a.problemScroll.ScrollBy(rows, a.view.LSP.Total, a.problemPageSize())
+	a.refresh()
 }
 
 // openProblem jumps to one Problems entry.
@@ -265,10 +327,12 @@ func (a *App) openProblem(index int) {
 	}
 
 	p := m.problems[index]
-	if a.activeDocPath() != p.Path {
+	if a.activeDocPath() != p.Path || a.mode != "explorer" {
 		a.openFile(p.Path)
 	}
 
-	a.scrollToSourceLine(p.Line)
-	a.refresh()
+	if a.activeDocPath() == p.Path && a.mode == "explorer" {
+		a.scrollToSourceLine(p.Line)
+		a.refresh()
+	}
 }

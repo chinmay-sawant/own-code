@@ -203,6 +203,42 @@ func TestMarkupTokens(t *testing.T) {
 	}
 }
 
+func TestHTMLEmbeddedSyntax(t *testing.T) {
+	lines := []string{
+		`<style>body { color: red; }</STYLE>`,
+		`<script>`,
+		`  const ready = x < other;`,
+		`  /* incomplete comment`,
+		`</script><main>Ready</main>`,
+	}
+	got := tokenize(langHTML, lines)
+	for i, line := range lines {
+		if text := lineText(got[i]); text != line {
+			t.Fatalf("line %d = %q, want %q", i+1, text, line)
+		}
+	}
+	for _, want := range []struct {
+		line        int
+		text, class string
+	}{
+		{0, "color", classAttr},
+		{2, "const", classKw},
+		{3, "incomplete comment", classCom},
+		{4, "main", classTag},
+	} {
+		found := false
+		for _, seg := range got[want.line] {
+			if seg.Class == want.class && strings.Contains(seg.Text, want.text) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("line %d missing %q with class %s: %+v", want.line+1, want.text, want.class, got[want.line])
+		}
+	}
+}
+
 func TestHighlightLineAlwaysHasText(t *testing.T) {
 	t.Parallel()
 

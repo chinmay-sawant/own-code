@@ -481,6 +481,9 @@ func normalizeConfig(cfg Config) Config {
 	if strings.TrimSpace(cfg.Shell) == "" {
 		cfg.Shell = defaultShell()
 	}
+	if cfg.Args == nil {
+		cfg.Args = interactiveShellArgs(cfg.Shell)
+	}
 	cfg.Cols, cfg.Rows = normalizeSize(cfg.Cols, cfg.Rows)
 	cfg.Env = append(os.Environ(), cfg.Env...)
 	cfg.Env = terminalEnv(cfg.Env)

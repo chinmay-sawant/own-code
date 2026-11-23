@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -216,7 +217,7 @@ func TestLSPSyncLifecycleAndDiagnostics(t *testing.T) {
 	pump(t, app, "diagnostic", func() bool { return len(app.lspm.diags["main.go"]) == 1 })
 
 	v := app.View()
-	if v.LSP.Errors != 1 || !v.LSP.Show || len(v.LSP.Problems) != 1 {
+	if v.LSP.Errors != 1 || !v.LSP.Show || v.LSP.Total != 1 {
 		t.Fatalf("lsp view = %+v", v.LSP)
 	}
 
@@ -388,7 +389,7 @@ func TestLSPProblemJump(t *testing.T) {
 	app.openFile("a.go")
 	pump(t, app, "diagnostic", func() bool { return len(app.lspm.diags["a.go"]) == 1 })
 	app.openFile("b.go")
-	app.refresh()
+	app.showProblems()
 
 	if got := app.View().LSP.Problems; len(got) != 1 || got[0].Name != "a.go" || got[0].Where != "1:1" {
 		t.Fatalf("problems = %+v", got)
@@ -417,5 +418,101 @@ func TestLSPShowLogOpensFile(t *testing.T) {
 	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil || !strings.Contains(string(data), "hello from the trace") {
 		t.Fatalf("log file = %q, %v", data, err)
+	}
+}
+
+func TestWorkspaceProblemsFromUnopenedFiles(t *testing.T) {
+	ctx := context.Background()
+	app, fake, dir := lspTestApp(t, map[string]string{
+		"main.go":       "bad\n",
+		"sub/unseen.go": "package sub\n",
+	})
+	app.ReloadChanges(ctx, false)
+	app.openFile("main.go")
+	if err := app.Page().Redraw(ctx); err != nil {
+		t.Fatal(err)
+	}
+	pump(t, app, "first diagnostics", func() bool { return app.View().LSP.Errors == 1 })
+	m := app.lspm
+	server := m.docs["main.go"].server
+	report := func(path string, diags ...lsp.Diagnostic) {
+		t.Helper()
+		params, err := json.Marshal(lsp.PublishDiagnosticsParams{URI: lsp.URIFromPath(path), Diagnostics: diags})
+		if err != nil {
+			t.Fatal(err)
+		}
+		server.onNotify("textDocument/publishDiagnostics", params)
+	}
+
+	unseen := filepath.Join(dir, "sub", "unseen.go")
+	warning := lsp.Diagnostic{
+		Range:    lsp.Range{Start: lsp.Position{Line: 4, Character: 3}},
+		Severity: lsp.SeverityWarning, Message: "unopened",
+	}
+	info := lsp.Diagnostic{Severity: lsp.SeverityInfo, Message: "info"}
+	report(unseen, warning, info)
+	report(filepath.Join(dir, "..", "outside.go"), warning)
+	pump(t, app, "workspace counts", func() bool { return app.View().LSP.Total == 3 })
+
+	v := app.View().LSP
+	if v.Errors != 1 || v.Warnings != 1 || v.Info != 1 || v.Files != 2 ||
+		len(v.Problems) != 0 || len(m.problems) != 0 || fake.count("textDocument/didOpen") != 1 {
+		t.Fatalf("status = %+v, index rows = %d, opens = %d", v, len(m.problems), fake.count("textDocument/didOpen"))
+	}
+
+	clickID(t, app, "sb-branch")
+	v = app.View().LSP
+	if !v.Open || len(v.Problems) != 3 || v.Problems[1].Path != "sub/unseen.go" || v.Problems[1].Where != "5:4" {
+		t.Fatalf("workspace drawer = %+v", v)
+	}
+	clickID(t, app, "problem-1")
+	if app.activeDocPath() != "sub/unseen.go" {
+		t.Fatalf("jump opened %s", app.activeDocPath())
+	}
+
+	report(unseen)
+	pump(t, app, "cleared diagnostics", func() bool { return app.View().LSP.Total == 1 })
+	if v := app.View().LSP; v.Files != 1 || v.Warnings != 0 || v.Info != 0 {
+		t.Fatalf("after clear = %+v", v)
+	}
+}
+
+func TestWorkspaceProblemsCanReachLastRow(t *testing.T) {
+	app, _, dir := lspTestApp(t, map[string]string{"main.go": "package main\n"})
+	app.ReloadChanges(context.Background(), false)
+	if err := app.Page().Redraw(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	m := app.lspm
+	for i := 0; i < 80; i++ {
+		path := fmt.Sprintf("folder/%02d.go", i)
+		m.setDiagnostics(path, nil, []lspDiag{{Severity: lsp.SeverityError, Message: filepath.Join(dir, path)}})
+	}
+
+	clickID(t, app, "sb-branch")
+	first := app.View().LSP
+	if !first.Open || first.Total != 80 || first.First != 1 || first.Last >= first.Total || !first.Next {
+		t.Fatalf("first page = %+v", first)
+	}
+	for app.View().LSP.Next {
+		before := app.View().LSP.First
+		clickID(t, app, "problems-next")
+		if got := app.View().LSP.First; got <= before {
+			t.Fatalf("Next did not advance: %d -> %d", before, got)
+		}
+	}
+	last := app.View().LSP
+	if last.Last != 80 || last.Problems[len(last.Problems)-1].Path != "folder/79.go" || !last.Prev {
+		t.Fatalf("last page = %+v", last)
+	}
+	clickID(t, app, "problems-prev")
+	if got := app.View().LSP.First; got >= last.First {
+		t.Fatalf("Previous did not go back: %d", got)
+	}
+
+	m.shutdownAll(false)
+	app.refresh()
+	if v := app.View().LSP; v.Total != 0 || v.Prev || v.Next || len(v.Problems) != 0 {
+		t.Fatalf("after shutdown = %+v", v)
 	}
 }

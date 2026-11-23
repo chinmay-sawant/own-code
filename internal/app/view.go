@@ -14,14 +14,17 @@ type View struct {
 	MenuY        int
 	MenuRows     []menuViewRow
 
-	Workspace   string
-	Branch      string
-	BranchQuery string
-	Changed     int
-	DevNote     string
-	ScanBudget  string
-	WatchNote   string
-	HoverPath   string
+	Workspace      string
+	WorkspaceLabel string
+	GitRoot        string
+	Branch         string
+	NoGit          bool
+	BranchQuery    string
+	Changed        int
+	DevNote        string
+	ScanBudget     string
+	WatchNote      string
+	HoverPath      string
 
 	Tree         []treeRow
 	StickyTree   []treeRow
@@ -149,16 +152,18 @@ type View struct {
 	SplitDivH    int
 	Second       secondaryView
 
-	Diff         diffView
-	Merge        mergeView
-	History      historyView
-	Terminal     terminalView
-	Outline      []symbolRow
-	LSP          lspView
-	Toast        toastView
-	Confirm      confirmView
-	SettingsOpen bool
-	Themes       []themeRow
+	Diff             diffView
+	Merge            mergeView
+	History          historyView
+	BottomPanelLeft  int
+	BottomPanelWidth int
+	Terminal         terminalView
+	Outline          []symbolRow
+	LSP              lspView
+	Toast            toastView
+	Confirm          confirmView
+	SettingsOpen     bool
+	Themes           []themeRow
 	// ThumbColor and PanelColor carry theme colors into inline SVG paints;
 	// the SVG rasterizer does not resolve currentColor or var().
 	ThumbColor   string
@@ -419,7 +424,6 @@ type searchRow struct {
 	Index    int
 	Path     string
 	Name     string
-	Dir      string
 	Line     int
 	Col      int
 	Before   string

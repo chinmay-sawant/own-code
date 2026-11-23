@@ -141,6 +141,13 @@ func (a *App) dismissOpenMenu(id, action string) bool {
 func (a *App) runMenuItem(ctx context.Context, id string) error {
 	a.closeMenu()
 
+	if idx, ok := actionIndex(id, terminalProfileMenuPrefix); ok && strings.HasPrefix(id, terminalProfileMenuPrefix) && idx < len(a.termProfiles) {
+		shell := a.termProfiles[idx].Path
+		a.termProfiles = nil
+		a.startTerminalShell(ctx, shell)
+		return a.page.Redraw(ctx)
+	}
+
 	switch id {
 	case "cut":
 		text, ok, err := a.onCut(ctx)

@@ -12,7 +12,7 @@ func blankCell(r rune) terminal.Cell {
 	return terminal.Cell{Rune: r, FG: terminal.DefaultColor, BG: terminal.DefaultColor}
 }
 
-func styledCell(r rune, fg, bg uint8) terminal.Cell {
+func styledCell(r rune, fg, bg terminal.Color) terminal.Cell {
 	return terminal.Cell{Rune: r, FG: fg, BG: bg}
 }
 
@@ -727,5 +727,15 @@ func TestNativeModifierKeyNames(t *testing.T) {
 		if !ok || string(got) != want {
 			t.Fatalf("%s = %q, %v; want %q", key, got, ok, want)
 		}
+	}
+}
+
+func TestRenderRetainsZshPromptColor(t *testing.T) {
+	screen := terminal.NewScreen(20, 2)
+	screen.Feed([]byte("\x1b[38;2;255;255;255;48;2;0;122;204m workspace \x1b[0m"))
+	view := Render(screen.Snapshot(), 2, 0)
+	seg := view.Rows[0].Segments[0]
+	if seg.Background != "#007acc" || seg.Foreground != "#ffffff" {
+		t.Fatalf("prompt colors = %+v", seg)
 	}
 }
