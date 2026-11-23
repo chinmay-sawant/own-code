@@ -148,12 +148,36 @@ type problemRow struct {
 	Index int
 	Name  string
 	Where string
-	Text  string
+	Text  string // clipped for display
+	Full  string // complete message, for the tooltip and aria-label
 	Class string
 	Mark  string
 }
 
 const problemRowsShown = 8
+
+// The Details drawer is about 280 px wide. The engine paints a long label
+// past its box, so Problems text is clipped in Go: about 36 characters of
+// the 9.5 px face fit on the message line, and the file name and position
+// sit on a second line.
+const (
+	problemTextMax = 36
+	problemNameMax = 24
+)
+
+// clipProblemText flattens a diagnostic message to one line of at most max
+// runes, marking a cut with an ellipsis. The full text stays in the row's
+// title and aria-label.
+func clipProblemText(msg string, max int) string {
+	msg = strings.Join(strings.Fields(msg), " ")
+
+	runes := []rune(msg)
+	if len(runes) <= max {
+		return msg
+	}
+
+	return string(runes[:max-1]) + "…"
+}
 
 // lspView is the diagnostics data for the status bar and Details drawer.
 type lspView struct {
@@ -221,9 +245,10 @@ func (a *App) lspViewData() lspView {
 
 		v.Problems = append(v.Problems, problemRow{
 			Index: i,
-			Name:  baseName(p.Path),
+			Name:  clipProblemText(baseName(p.Path), problemNameMax),
 			Where: fmt.Sprintf("%d:%d", p.Line+1, p.Col+1),
-			Text:  clipGutterHint(p.Message),
+			Text:  clipProblemText(p.Message, problemTextMax),
+			Full:  clipGutterHint(p.Message),
 			Class: diagClass(p.Severity),
 			Mark:  mark,
 		})

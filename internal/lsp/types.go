@@ -101,6 +101,7 @@ type InitializeParams struct {
 	RootURI          string             `json:"rootUri"`
 	Capabilities     ClientCapabilities `json:"capabilities"`
 	WorkspaceFolders []WorkspaceFolder  `json:"workspaceFolders,omitempty"`
+	InitOptions      any                `json:"initializationOptions,omitempty"`
 }
 
 // WorkspaceFolder is a root folder.

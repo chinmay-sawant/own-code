@@ -53,6 +53,22 @@
   --term13: #d7b4ff;
   --term14: #b6f2ff;
   --term15: #f7f9ff;
+  --tint-red-08: rgba(248, 81, 73, 0.08);
+  --tint-red-10: rgba(248, 81, 73, 0.10);
+  --tint-red-11: rgba(248, 81, 73, 0.11);
+  --tint-red-16: rgba(248, 81, 73, 0.16);
+  --tint-red-18: rgba(248, 81, 73, 0.18);
+  --tint-red-20: rgba(248, 81, 73, 0.20);
+  --tint-red-25: rgba(248, 81, 73, 0.25);
+  --tint-red-40: rgba(248, 81, 73, 0.40);
+  --tint-red-65: rgba(248, 81, 73, 0.65);
+  --tint-green-35: rgba(63, 185, 80, 0.35);
+  --tint-amber-06: rgba(240, 183, 90, 0.06);
+  --tint-amber-07: rgba(240, 183, 90, 0.07);
+  --tint-amber-20: rgba(240, 183, 90, 0.2);
+  --find-hit: rgba(240, 183, 90, 0.28);
+  --find-cur: rgba(240, 183, 90, 0.62);
+  --find-cur-text: #0b0e14;
   --mono: "SF Mono", "JetBrains Mono", "Cascadia Mono", "DejaVu Sans Mono", "Roboto Mono", monospace;
   --sans: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --titlebar-h: 42px;
@@ -199,8 +215,8 @@ button.ln:focus-visible,
 .t-quote { color: var(--muted); }
 .t-hr { color: var(--dim); }
 
-.find-hit { background-color: rgba(240, 183, 90, 0.28); border-radius: 2px; }
-.find-cur { background-color: rgba(240, 183, 90, 0.62); color: #0b0e14; }
+.find-hit { background-color: var(--find-hit); border-radius: 2px; }
+.find-cur { background-color: var(--find-cur); color: var(--find-cur-text); }
 .bracket-flash { background-color: var(--accent-strong); border-radius: 2px; }
 
 /* Small shared pieces ------------------------------------------------------ */

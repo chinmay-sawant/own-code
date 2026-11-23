@@ -31,6 +31,7 @@ type Client struct {
 	cmd     *exec.Cmd
 	handler Handler
 	logf    func(format string, args ...any)
+	initOpt any
 
 	mu      sync.Mutex
 	nextID  int64
@@ -47,6 +48,8 @@ type Options struct {
 	Handler Handler
 	// Log receives protocol traces and server stderr lines. May be nil.
 	Log func(format string, args ...any)
+	// InitOptions is sent as initializationOptions. May be nil.
+	InitOptions any
 }
 
 // NewClient builds a client over an existing stream pair (used by tests and by Start).
@@ -56,6 +59,7 @@ func NewClient(r io.Reader, w io.WriteCloser, opt Options) *Client {
 		closer:  w,
 		handler: opt.Handler,
 		logf:    opt.Log,
+		initOpt: opt.InitOptions,
 		pending: map[int64]chan *Message{},
 		done:    make(chan struct{}),
 	}
@@ -236,10 +240,12 @@ func (c *Client) Initialize(ctx context.Context, rootDir string) error {
 		ClientInfo:       &Info{Name: "own-code"},
 		RootURI:          root,
 		WorkspaceFolders: []WorkspaceFolder{{URI: root, Name: filepath.Base(rootDir)}},
+		InitOptions:      c.initOpt,
 		Capabilities: ClientCapabilities{
 			TextDocument: map[string]any{
 				"synchronization":    map[string]any{"didSave": true},
 				"publishDiagnostics": map[string]any{},
+				"hover":              map[string]any{"contentFormat": []string{"markdown", "plaintext"}},
 			},
 			General: map[string]any{"positionEncodings": []string{"utf-16"}},
 		},

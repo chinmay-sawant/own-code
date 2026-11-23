@@ -63,8 +63,9 @@
 
 /* Problems list (language-server diagnostics) */
 .problems { flex: 0 0 auto; padding: 2px 0 6px; }
-.pbrow { width: 100%; height: 24px; display: flex; align-items: center; gap: 8px; padding: 0 16px; color: var(--muted); }
+.pbrow { width: 100%; height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 16px; color: var(--muted); }
 .pbrow:hover { background-color: var(--panel-2); }
 .pbmark { width: 12px; flex: 0 0 12px; font-family: var(--mono); font-size: 9px; font-weight: 800; text-align: center; }
-.pbtext { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; font-size: 9.5px; }
-.pbloc { flex: 0 0 auto; max-width: 110px; overflow: hidden; white-space: nowrap; color: var(--dim); font-size: 8.5px; }
+.pbbody { flex: 1; text-align: left; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.pbtext { display: block; overflow: hidden; white-space: nowrap; font-size: 9.5px; }
+.pbloc { display: block; overflow: hidden; white-space: nowrap; color: var(--dim); font-size: 8.5px; }

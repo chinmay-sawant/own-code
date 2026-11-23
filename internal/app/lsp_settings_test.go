@@ -100,3 +100,21 @@ func TestNewLSPDiagConvertsColumns(t *testing.T) {
 		t.Fatalf("zero-width diag = %+v", z)
 	}
 }
+
+func TestLSPInitOptionsOverride(t *testing.T) {
+	t.Setenv(lspEnvOff, "")
+
+	reg := lspRegistry(&lspSettings{Servers: map[string]lspServerSettings{
+		"css": {InitOptions: map[string]any{"provideFormatter": false}},
+	}})
+
+	cfg, ok := reg.ForPath("a.scss")
+	if !ok || cfg.InitOptions["provideFormatter"] != false {
+		t.Fatalf("css override = %+v %v", cfg, ok)
+	}
+
+	html, _ := lspRegistry(nil).ForPath("a.html")
+	if html.InitOptions["provideFormatter"] != true {
+		t.Fatalf("html default = %+v", html)
+	}
+}

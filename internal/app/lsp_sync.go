@@ -80,6 +80,7 @@ type lspManager struct {
 
 	timer *time.Timer
 	log   *lspLog
+	hv    hoverState
 
 	inboxMu sync.Mutex
 	inbox   []lspEvent
@@ -92,6 +93,7 @@ const (
 	lspEvDiag lspEventKind = iota
 	lspEvFailed
 	lspEvExited
+	lspEvHover
 )
 
 // lspEvent travels from server goroutines to the loop.
@@ -103,6 +105,8 @@ type lspEvent struct {
 	hasVersion bool
 	diags      []lspDiag
 	err        error
+	hoverID    int
+	text       string
 }
 
 // lspManager returns the app's manager, creating it on first use.
@@ -199,6 +203,7 @@ func (a *App) pollLSP(_ context.Context) {
 	}
 
 	m.stopIdle()
+	m.pollHover()
 
 	if changed {
 		a.refresh()
@@ -487,6 +492,10 @@ func (m *lspManager) drain() bool {
 			if m.applyDiag(ev) {
 				changed = true
 			}
+		case lspEvHover:
+			if m.applyHover(ev) {
+				changed = true
+			}
 		case lspEvFailed:
 			if m.servers[ev.server.key] == ev.server && !m.failed[ev.server.cfg.Name] {
 				m.reportFailure(ev)
@@ -627,6 +636,7 @@ const (
 	lspOpSave
 	lspOpClose
 	lspOpStop
+	lspOpHover
 )
 
 type lspOp struct {
@@ -637,6 +647,9 @@ type lspOp struct {
 	version  int
 	text     string
 	fromDisk bool
+	hoverID  int
+	line     int // hover: zero-based source line
+	col      int // hover: rune column in the raw line
 }
 
 // lspSent is what the server was last told about one document, so
@@ -699,6 +712,10 @@ func (s *lspServer) run() {
 	opt := lsp.Options{
 		Handler: s.onNotify,
 		Log:     func(f string, a ...any) { log("["+s.cfg.Name+"] "+f, a...) },
+	}
+
+	if len(s.cfg.InitOptions) > 0 {
+		opt.InitOptions = s.cfg.InitOptions
 	}
 
 	log("[%s] starting %s in %s", s.cfg.Name, s.cfg.Command, s.root)
@@ -802,6 +819,8 @@ func (s *lspServer) apply(c *lsp.Client, op lspOp) {
 		if err != nil {
 			logf("[%s] notify: %v", s.cfg.Name, err)
 		}
+	case lspOpHover:
+		s.startHover(c, op)
 	case lspOpSave:
 		if err := c.Notify("textDocument/didSave", lsp.DidSaveParams{TextDocument: lsp.TextDocumentIdentifier{URI: op.uri}}); err != nil {
 			logf("[%s] didSave: %v", s.cfg.Name, err)

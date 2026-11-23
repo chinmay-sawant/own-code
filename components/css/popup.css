@@ -8,7 +8,9 @@
   border: 1px solid var(--line);
   border-radius: 6px;
   background-color: var(--panel-2);
-  box-shadow: 0 4px 12px rgba(1, 4, 9, 0.35);
+  /* A soft, small shadow reads cleanly on light and dark themes; the
+     larger dark one rendered as a heavy grey ring on light themes. */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
 }
 
 .popup-list { padding: 4px 0; }

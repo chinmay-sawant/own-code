@@ -15,6 +15,8 @@ type ServerConfig struct {
 	Extensions  []string `json:"extensions"` // with leading dot, lower case
 	RootMarkers []string `json:"rootMarkers,omitempty"`
 	Disabled    bool     `json:"disabled,omitempty"`
+	// InitOptions is sent as initializationOptions in the initialize request.
+	InitOptions map[string]any `json:"initializationOptions,omitempty"`
 }
 
 // DefaultServers returns the built-in server table.
@@ -29,6 +31,19 @@ func DefaultServers() []ServerConfig {
 		{Name: "rust-analyzer", Command: "rust-analyzer", LanguageIDs: []string{"rust"}, Extensions: []string{".rs"}, RootMarkers: []string{"Cargo.toml"}},
 		{Name: "clangd", Command: "clangd", LanguageIDs: []string{"c", "cpp"},
 			Extensions: []string{".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh"}, RootMarkers: []string{"compile_commands.json", ".clangd"}},
+		{Name: "vscode-html-language-server", Command: "vscode-html-language-server", Args: []string{"--stdio"},
+			LanguageIDs: []string{"html"}, Extensions: []string{".html", ".htm"}, RootMarkers: []string{"package.json"},
+			InitOptions: map[string]any{"provideFormatter": true}},
+		{Name: "vscode-css-language-server", Command: "vscode-css-language-server", Args: []string{"--stdio"},
+			LanguageIDs: []string{"css", "scss", "less"}, Extensions: []string{".css", ".scss", ".less"}, RootMarkers: []string{"package.json"},
+			InitOptions: map[string]any{"provideFormatter": true}},
+		{Name: "vscode-json-language-server", Command: "vscode-json-language-server", Args: []string{"--stdio"},
+			LanguageIDs: []string{"json", "jsonc"}, Extensions: []string{".json", ".jsonc"}, RootMarkers: []string{"package.json", "tsconfig.json", ".git"},
+			InitOptions: map[string]any{"provideFormatter": true}},
+		{Name: "marksman", Command: "marksman", Args: []string{"server"}, LanguageIDs: []string{"markdown"},
+			Extensions: []string{".md", ".markdown"}, RootMarkers: []string{".marksman.toml", ".git"}},
+		{Name: "yaml-language-server", Command: "yaml-language-server", Args: []string{"--stdio"}, LanguageIDs: []string{"yaml"},
+			Extensions: []string{".yaml", ".yml"}, RootMarkers: []string{".git"}},
 	}
 }
 
@@ -112,6 +127,22 @@ func (s ServerConfig) LanguageID(path string) string {
 		}
 	case ".cc", ".cpp", ".cxx", ".hpp", ".hh":
 		return "cpp"
+	case ".html", ".htm":
+		return "html"
+	case ".css":
+		return "css"
+	case ".scss":
+		return "scss"
+	case ".less":
+		return "less"
+	case ".json":
+		return "json"
+	case ".jsonc":
+		return "jsonc"
+	case ".md", ".markdown":
+		return "markdown"
+	case ".yaml", ".yml":
+		return "yaml"
 	}
 	if len(s.LanguageIDs) > 0 {
 		return s.LanguageIDs[0]

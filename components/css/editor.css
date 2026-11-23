@@ -195,7 +195,10 @@
 .file-path { flex: 1 1 auto; min-width: 0; max-width: 100%; overflow: hidden; display: flex; align-items: center; font-family: var(--mono); font-size: 9.5px; line-height: 20px; white-space: nowrap; }
 .file-path b { flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .file-path b, .file-dir { white-space: nowrap; }
-.file-dir { flex: 0 0 auto; position: relative; background-color: var(--bg); color: var(--dim); margin-right: 5px; white-space: nowrap; }
+.file-dir { flex: 0 0 auto; position: relative; background-color: var(--bg); color: var(--dim); white-space: nowrap; }
+/* The file name shares the directory's text run, so a directory the engine
+   paints wider than it measures cannot run into the name. */
+.file-dir b { flex: none; display: inline; overflow: visible; }
 .crumb-stats { display: flex; gap: 6px; font-family: var(--mono); font-size: 9px; font-weight: 700; }
 /* A long path paints past its measured box, so the trailing controls carry
    the crumbs background and paint above the text. The buttons stay visible

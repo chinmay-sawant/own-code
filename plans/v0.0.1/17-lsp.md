@@ -24,7 +24,8 @@
 
 **Phase 2: read-only intelligence**
 - [x] Diagnostics: squiggle spans in the editor, gutter marker, status-bar counts, and a Problems list in the Details drawer (click to jump). Clear on close. Evidence: `internal/app/lsp_diag.go`, `lsp_sync_test.go`. Problems list shows the first 8 entries.
-- [ ] Hover popup (mouse dwell + `Ctrl+K Ctrl+I` equivalent). Render Markdown via existing `markdown_html.go`.
+- [x] Hover popup on mouse dwell (about 400 ms), rendered with the popup widget's Markdown card. Evidence: `internal/lsp/hover.go`, `internal/app/lsp_hover.go`, `lsp_hover_test.go` (fake server, UTF-16 position with a non-BMP rune, stale drop, dismissal rules, gopls-gated test). Not done: the `Ctrl+K Ctrl+I` keyboard chord.
+- [x] Server registry defaults for web languages: HTML, CSS/SCSS/Less, JSON/JSONC (`initializationOptions: {provideFormatter: true}`), Markdown (`marksman server`), YAML; per-server `initializationOptions` in settings. Evidence: `internal/lsp/registry.go`, `registry_test.go`, `internal/app/lsp_settings.go`.
 - [ ] Go to Definition / Declaration / Type Definition via LSP; **fall back to the current text-index path** when no server or no result (keep `goto_definition.go` as the fallback; do not delete).
 - [ ] Find References as a results panel (reuse the workspace-search result list UI).
 - [ ] Document symbols replace `outline.go` when a server is running; regex outline remains the fallback.

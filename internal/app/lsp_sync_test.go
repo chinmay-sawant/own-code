@@ -25,6 +25,10 @@ type fakeLSP struct {
 	silent     bool
 	connects   int
 	exited     bool
+	// hoverResult is the raw JSON result for textDocument/hover ("" = null).
+	hoverResult string
+	hoverDelay  time.Duration
+	hovers      []lsp.HoverParams
 }
 
 func (f *fakeLSP) count(method string) int {
@@ -67,6 +71,22 @@ func (f *fakeLSP) connect(_ lsp.ServerConfig, _ string, opt lsp.Options) (*lsp.C
 			switch m.Method {
 			case "initialize":
 				_ = conn.Write(&lsp.Message{ID: m.ID, Result: json.RawMessage(`{"capabilities":{"textDocumentSync":1}}`)})
+			case "textDocument/hover":
+				var p lsp.HoverParams
+				_ = json.Unmarshal(m.Params, &p)
+
+				f.mu.Lock()
+				f.hovers = append(f.hovers, p)
+				res, delay := f.hoverResult, f.hoverDelay
+				f.mu.Unlock()
+
+				time.Sleep(delay)
+
+				if res == "" {
+					res = "null"
+				}
+
+				_ = conn.Write(&lsp.Message{ID: m.ID, Result: json.RawMessage(res)})
 			case "shutdown":
 				_ = conn.Write(&lsp.Message{ID: m.ID, Result: json.RawMessage("null")})
 			case "exit":

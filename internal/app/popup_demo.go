@@ -11,8 +11,8 @@ const (
 // popupDemoCatalog lists the debug commands for the `>` palette.
 func popupDemoCatalog() []paletteRow {
 	return []paletteRow{
-		{Cmd: paletteCmdPopupList, Name: "Debug: Show Completion Popup", Dir: "Show a keyboard-navigable popup list"},
-		{Cmd: paletteCmdPopupCard, Name: "Debug: Show Hover Popup", Dir: "Show a read-only Markdown popup card"},
+		{Cmd: paletteCmdPopupList, Name: "Debug: Show Completion Popup (demo)", Dir: "Show a keyboard-navigable popup list"},
+		{Cmd: paletteCmdPopupCard, Name: "Debug: Show Hover Popup (demo)", Dir: "Show a read-only Markdown popup card"},
 	}
 }
 

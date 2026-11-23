@@ -113,7 +113,7 @@ cells, leaving the divider and number gutters available to this button. */
 .drow.split .dmid { flex: 0 0 0; min-width: 0; position: relative; }
 .drow.split .line-revert.divider { left: -4px; }
 
-.drow.meta { background-color: rgba(240, 183, 90, 0.06); }
+.drow.meta { background-color: var(--tint-amber-06); }
 .dmeta { padding-left: 12px; color: var(--amber); font-size: 9.5px; }
 
 .drow.split { display: flex; }

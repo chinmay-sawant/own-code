@@ -91,7 +91,7 @@
     {{else if .Active}}
       <span class="cstat {{.StatusClass}}">{{.Status}}</span>
       <span class="lang-pill lang-{{.Lang}}">{{.LangLabel}}</span>
-      <span class="crumb-path file-path" id="crumb-path" title="{{.Active}}">{{if .ActiveDirShort}}<span class="file-dir">{{.ActiveDirShort}}/</span>{{end}}<b>{{.ActiveNameShort}}</b></span>
+      <span class="crumb-path file-path" id="crumb-path" title="{{.Active}}">{{if .ActiveDirShort}}<span class="file-dir">{{.ActiveDirShort}}/<b>{{.ActiveNameShort}}</b></span>{{else}}<b>{{.ActiveNameShort}}</b>{{end}}</span>
       {{if .Editing}}
       <span class="tabs-fill"></span>
       {{if .EditDirty}}<span class="edit-flag" id="edit-flag">Changes made</span>{{end}}
@@ -362,7 +362,7 @@
     {{if .Second.Active}}
     <span class="cstat {{.Second.StatusClass}}">{{.Second.Status}}</span>
     <span class="lang-pill lang-{{.Second.Lang}}">{{.Second.LangLabel}}</span>
-    <span class="crumb-path file-path" id="crumb-path-2" title="{{.Second.Active}}">{{if .Second.ActiveDirShort}}<span class="file-dir">{{.Second.ActiveDirShort}}/</span>{{end}}<b>{{.Second.ActiveNameShort}}</b></span>
+    <span class="crumb-path file-path" id="crumb-path-2" title="{{.Second.Active}}">{{if .Second.ActiveDirShort}}<span class="file-dir">{{.Second.ActiveDirShort}}/<b>{{.Second.ActiveNameShort}}</b></span>{{else}}<b>{{.Second.ActiveNameShort}}</b>{{end}}</span>
     <span class="tabs-fill"></span>
     {{if not .Second.Image.On}}{{if .Second.BlameNote}}<span class="crumb-meta blame-note" title="{{.Second.BlameNote}}">{{.Second.BlameNote}}</span>{{end}}{{end}}
     {{if .Second.Image.On}}<span class="crumb-meta">{{.Second.Image.Format}} · {{.Second.Image.NaturalW}} × {{.Second.Image.NaturalH}} · {{.Second.Image.Scale}}% · {{.Second.ByteSize}}</span>{{else}}<span class="crumb-meta">{{.Second.LineCount}} lines · {{.Second.ByteSize}}</span>{{end}}

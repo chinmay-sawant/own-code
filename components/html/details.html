@@ -23,10 +23,12 @@
   <div class="det-sub"><span>Problems</span><span class="mono dim">{{.LSP.Total}}</span></div>
   <div class="problems" id="problems">
     {{range .LSP.Problems}}
-    <button class="pbrow" id="problem-{{.Index}}" data-action="problem:{{.Index}}" type="button" title="{{.Text}}" aria-label="{{.Text}} at {{.Where}}"{{if $.Modal}} tabindex="-1"{{end}}>
+    <button class="pbrow" id="problem-{{.Index}}" data-action="problem:{{.Index}}" type="button" title="{{.Full}}" aria-label="{{.Full}} at {{.Where}}"{{if $.Modal}} tabindex="-1"{{end}}>
       <span class="pbmark {{.Class}}">{{.Mark}}</span>
-      <span class="pbtext">{{.Text}}</span>
-      <span class="pbloc mono">{{.Name}} {{.Where}}</span>
+      <span class="pbbody">
+        <span class="pbtext">{{.Text}}</span>
+        <span class="pbloc mono">{{.Name}} {{.Where}}</span>
+      </span>
     </button>
     {{else}}
     <div class="det-empty">No problems found.</div>

@@ -134,9 +134,21 @@ func popupContentLines(content string) []popupLineView {
 		case strings.TrimSpace(raw) == "":
 			lines = append(lines, popupLineView{Blank: true})
 		default:
-			lines = append(lines, popupLineView{Segments: markdownLine(raw)})
+			lines = append(lines, popupLineView{Segments: popupMarkdownSegments(raw)})
 		}
 	}
 
 	return lines
+}
+
+// popupMarkdownSegments styles one Markdown line for the hover card. A heading
+// shows its text in the heading style without the leading "#" markers, which
+// read as noise in a card; every other line uses the editor's highlighter.
+func popupMarkdownSegments(raw string) []segment {
+	r := []rune(raw)
+	if level, marker := headingLevel(r); level > 0 {
+		return []segment{{Text: strings.TrimSpace(string(r[marker:])), Class: headingClass(level)}}
+	}
+
+	return markdownLine(raw)
 }

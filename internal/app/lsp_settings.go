@@ -32,6 +32,8 @@ type lspServerSettings struct {
 	Disabled   bool     `json:"disabled,omitempty"`
 	Extensions []string `json:"extensions,omitempty"`
 	Languages  []string `json:"languages,omitempty"`
+	// InitOptions replaces the server's initializationOptions.
+	InitOptions map[string]any `json:"initializationOptions,omitempty"`
 }
 
 const (
@@ -135,6 +137,10 @@ func lspRegistry(s *lspSettings) *lsp.Registry {
 				cfg.Args = over.Args
 			}
 
+			if over.InitOptions != nil {
+				cfg.InitOptions = over.InitOptions
+			}
+
 			cfg.Disabled = over.Disabled
 			reg.Set(cfg)
 		}
@@ -146,6 +152,7 @@ func lspRegistry(s *lspSettings) *lsp.Registry {
 				Args:        over.Args,
 				LanguageIDs: over.Languages,
 				Extensions:  append([]string(nil), over.Extensions...),
+				InitOptions: over.InitOptions,
 			})
 		}
 	}
@@ -180,6 +187,10 @@ func lspInstallHint(name string) string {
 		return "npm i -g pyright"
 	case "rust-analyzer":
 		return "rustup component add rust-analyzer"
+	case "vscode-html-language-server", "vscode-css-language-server", "vscode-json-language-server", "yaml-language-server":
+		return "npm i -g typescript typescript-language-server vscode-langservers-extracted yaml-language-server"
+	case "marksman":
+		return "install marksman from https://github.com/artempyanykh/marksman"
 	case "clangd":
 		return "install clangd with your package manager"
 	}
