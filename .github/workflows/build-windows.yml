@@ -15,9 +15,6 @@ jobs:
           cache: true
 
       # Versions come from go.mod, so this workflow cannot drift from it.
-      - name: Check out ownframe and blinkless siblings
-        shell: bash
-        run: .github/scripts/checkout-siblings.sh
 
       - name: Build Windows binary
         shell: pwsh

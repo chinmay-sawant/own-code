@@ -61,6 +61,10 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		return nil
 	}
 
+	if a.popupClick(box) {
+		return nil
+	}
+
 	if a.confirmOpen {
 		switch box.Action {
 		case "confirm-ok", "confirm-cancel", "confirm-save", "confirm-dont-save":
@@ -967,6 +971,13 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 	case strings.HasPrefix(action, "diff-expand-all:"):
 		if idx, ok := actionIndex(action, "diff-expand-all:"); ok {
 			a.diffExpandAll(idx)
+		}
+	case action == "problems-open":
+		a.details = true
+		a.refresh()
+	case strings.HasPrefix(action, "problem:"):
+		if idx, ok := actionIndex(action, "problem:"); ok {
+			a.openProblem(idx)
 		}
 	case strings.HasPrefix(action, "outline:"):
 		if line, ok := actionIndex(action, "outline:"); ok {
@@ -2054,6 +2065,10 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 		a.shift = true
 
 		return nil
+	}
+
+	if a.popupKeyDown(key) {
+		return a.page.Redraw(ctx)
 	}
 
 	// Layout zoom owns Ctrl+=, Ctrl+-, and Ctrl+0 everywhere, including

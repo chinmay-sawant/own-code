@@ -190,6 +190,7 @@ func (a *App) commitEditBuffer() {
 	doc.PreviewLine = nil
 	doc.Wrap = nil
 	a.setDirty(doc.Path, a.edit.Dirty)
+	a.lspTouch(doc.Path)
 }
 
 // saveEdit writes the live buffer to the workspace.

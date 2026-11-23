@@ -13,6 +13,9 @@ import (
 // their own directory keep using t.Setenv, which overrides this default
 // for the duration of the test.
 func TestMain(m *testing.M) {
+	// Never spawn a real language server from the suite.
+	_ = os.Setenv(lspEnvOff, "off")
+
 	if os.Getenv("XDG_CONFIG_HOME") == "" {
 		dir, err := os.MkdirTemp("", "own-code-test-config")
 		if err == nil {

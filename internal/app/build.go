@@ -17,7 +17,7 @@ func buildHTML() string {
 
 	for _, name := range []string{
 		"base.css", "window-control.css", "sidebar.css",
-		"settings.css", "editor.css", "diff.css", "history.css", "scrollrails.css", "details.css", "palette.css", "preview.css", "file_nav.css", "inline_card.css", "merge.css", "terminal.css", "motion.css",
+		"settings.css", "editor.css", "diff.css", "history.css", "scrollrails.css", "details.css", "palette.css", "preview.css", "file_nav.css", "inline_card.css", "popup.css", "merge.css", "terminal.css", "motion.css",
 	} {
 		b.WriteString(file("components/css/" + name))
 	}
@@ -36,6 +36,7 @@ func buildHTML() string {
 	b.WriteString(file("components/html/settings.html"))
 	b.WriteString(file("components/html/context_menu.html"))
 	b.WriteString(file("components/html/confirm.html"))
+	b.WriteString(file("components/html/popup.html"))
 	b.WriteString(file("components/html/commit_dialog.html"))
 	b.WriteString(file("components/html/file_menu.html"))
 	b.WriteString(file("components/html/terminal.html"))

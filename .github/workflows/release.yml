@@ -34,9 +34,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libgl1-mesa-dev xorg-dev libasound2-dev
 
-      - name: Check out ownframe and blinkless siblings (versions from go.mod)
-        shell: bash
-        run: .github/scripts/checkout-siblings.sh
 
       - name: Build
         shell: bash

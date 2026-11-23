@@ -37,7 +37,17 @@ First tagged release. The feature set below is what already exists on
   off).
 
 ### Known gaps
-- Prebuilt binaries are still committed under `linux-release/`,
-  `macos-release/`, and `windows-release/`, and the install scripts still
-  download from them. Moving to release assets is pending.
-- No `LICENSE` file yet.
+- The committed release binaries are removed and the install scripts download
+  from GitHub Release assets with SHA-256 verification. **No release exists
+  until `v0.0.1` is tagged**, so the installers fail until then. 32-bit
+  builds are no longer published. Old binaries remain in git history.
+- Added the MIT `LICENSE`.
+
+### Also in this release
+- Removed the `ownframe` `replace` in `go.mod` and `go.work`; the module now
+  builds from a clean clone with no sibling checkouts.
+- LSP groundwork: `internal/lsp` client, document sync, diagnostics
+  (squiggles, gutter marks, status counts, Problems list), `lsp` settings
+  block, and "LSP: Show log". Hover, completion and other features are not
+  wired yet.
+- Reusable popup widget for completion lists and hover cards.

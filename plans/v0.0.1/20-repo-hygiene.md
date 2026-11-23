@@ -3,8 +3,8 @@
 Small, high leverage. Do before the first real release.
 
 ## Release artifacts
-- [ ] Stop committing binaries (`linux-release/`, `macos-release/`, `windows-release/`, about 350 MB; `.git` is 487 MB). Publish them as GitHub Release assets instead, built by CI on tag.
-- [ ] Update `install.sh` / `install.bat` to download from `releases/latest/download/...` and verify a published SHA-256 checksum file.
+- [x] Stop committing binaries (`linux-release/`, `macos-release/`, `windows-release/`, about 350 MB; `.git` is 487 MB). Publish them as GitHub Release assets instead, built by CI on tag.
+- [x] Update `install.sh` / `install.bat` to download from `releases/latest/download/...` and verify a published SHA-256 checksum file.
 - [ ] Decide whether to rewrite history to drop the old binaries (`git filter-repo`). It is optional, destructive, and needs a force-push, so only do it deliberately.
 - [x] Tag `v0.0.1`; add a `CHANGELOG.md` (the master checklist's "release notes stub").  (Partial: `CHANGELOG.md` added; the tag itself is left for the maintainer.)
 
@@ -15,7 +15,7 @@ Small, high leverage. Do before the first real release.
 - [x] Add `golangci-lint` (start with a small linter set so it passes on day one).  (Added as an advisory, `continue-on-error` CI job with default linters; no `.golangci.yml` yet. Tighten once a baseline run is clean.)
 
 ## Build
-- [ ] Document or remove the need for sibling checkouts (`go.work`, `../blinkless`). Once `ownframe` is consumed purely as a tagged module, `go build ./cmd/own-code` should work from a clean clone. Add a "clean clone builds" CI job to guard that.
+- [x] Document or remove the need for sibling checkouts (removed `replace` and `go.work`; builds from the module proxy) (`go.work`, `../blinkless`). Once `ownframe` is consumed purely as a tagged module, `go build ./cmd/own-code` should work from a clean clone. Add a "clean clone builds" CI job to guard that.
 - [x] `Makefile`: `make test`, `make lint`, `make release`.
 - [ ] Remove the stray `own-code` binary and `tmp/` from the working tree root (both ignored, but easy to confuse).
 
@@ -27,4 +27,4 @@ Small, high leverage. Do before the first real release.
 - [x] Reconcile README and plans: theme count (README says ten, master checklist says six), "no horizontal scroll" claim, Limits section (some limits will change with `19`).  (Done for theme count (ten, per `themeCatalog`) and the horizontal-scroll claim (`hscroll.go`). The Limits section will still need a pass after plan 19 lands.)
 - [ ] Tick the boxes in `00-master-checklist.md` for shipped phases, or mark that file as historical and point to `CHANGELOG.md`.
 - [x] Add `CONTRIBUTING.md` and `docs/architecture.md` (data flow: tick, input, view, async workers).
-- [ ] Add a `LICENSE` if one is missing (none is in the tracked file list).
+- [x] Add a `LICENSE` (MIT) if one is missing (none is in the tracked file list).

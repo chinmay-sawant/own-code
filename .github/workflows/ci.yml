@@ -29,8 +29,6 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libgl1-mesa-dev xorg-dev libasound2-dev xvfb
 
-      - name: Check out ownframe and blinkless siblings (versions from go.mod)
-        run: .github/scripts/checkout-siblings.sh
 
       - name: gofmt
         run: |
@@ -56,7 +54,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libgl1-mesa-dev xorg-dev libasound2-dev
-      - run: .github/scripts/checkout-siblings.sh
       - uses: golangci/golangci-lint-action@v8
         with:
           version: latest
@@ -74,8 +71,5 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Check out ownframe and blinkless siblings (versions from go.mod)
-        shell: bash
-        run: .github/scripts/checkout-siblings.sh
       - name: Build
         run: go build ./cmd/own-code

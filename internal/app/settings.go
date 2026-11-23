@@ -90,6 +90,8 @@ type globalSettings struct {
 	// MaxFPS is the desktop present cap: 0 missing (default uncapped),
 	// -1 explicit uncapped, else 60/120/144/240. Invalid falls back to 0.
 	MaxFPS int `json:"maxFps,omitempty"`
+	// LSP configures language servers; see lsp_settings.go.
+	LSP *lspSettings `json:"lsp,omitempty"`
 }
 
 // defaultSettingsPath returns the global file beside the per-workspace
@@ -145,6 +147,11 @@ func loadSettings(path string) (globalSettings, error) {
 			_ = json.Unmarshal(value, &s.Excludes)
 		case "maxFps":
 			_ = json.Unmarshal(value, &s.MaxFPS)
+		case "lsp":
+			var l lspSettings
+			if json.Unmarshal(value, &l) == nil {
+				s.LSP = &l
+			}
 		}
 	}
 	s = s.sanitize()
@@ -219,6 +226,7 @@ func (s globalSettings) sanitize() globalSettings {
 		// fields; unknown fields were already ignored at decode.
 	}
 	s.Theme = validTheme(s.Theme)
+	s.LSP = s.LSP.sanitize()
 	if s.FontSize == 0 {
 		s.FontSize = defaultFontSize
 	} else {

@@ -5,14 +5,10 @@
 *.test
 *.out
 /dist/
-# Prebuilt release binaries are committed deliberately.
-!/windows-release/*.exe
-!/linux-release/*
-!/macos-release/*
 /bin/
 
-# Dependencies resolve through the module proxy plus the ../ownframe
-# sibling checkout. vendor/ stays local-only and is never committed.
+# Dependencies resolve through the module proxy. vendor/ stays local-only
+# and is never committed.
 /vendor/
 
 # Go cache and coverage

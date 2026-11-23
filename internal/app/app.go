@@ -280,6 +280,7 @@ type App struct {
 	mergeNote        string
 	mergeRows        []mergeRow
 
+	popup        popupState
 	confirmOpen  bool
 	confirmKind  string
 	confirmPaths []string
@@ -605,6 +606,8 @@ type App struct {
 	termRows           int
 	termAppCursor      bool
 	termBracketedPaste bool
+
+	lspm *lspManager
 
 	sessionPath     string
 	sessionLast     string
@@ -1023,6 +1026,7 @@ func (a *App) switchProject(ctx context.Context, root string) error {
 
 	a.StopWatcher()
 	a.stopDirLoader()
+	a.lspReset()
 	a.closeTerminalSessions()
 	a.ws = ws
 	a.docs = map[string]*fileDoc{}
@@ -1165,6 +1169,7 @@ func (a *App) onScroll(offsetY, viewH int) bool {
 		}
 	}
 
+	a.popupScrolled(offsetY)
 	a.lastScroll = offsetY
 
 	cols := 0
@@ -1206,7 +1211,7 @@ func (a *App) buildView() View {
 		MenuX:         a.menuX,
 		MenuY:         a.menuY,
 		MenuRows:      append([]menuViewRow(nil), a.menuItems...),
-		Modal:         a.paletteOpen || a.branchOpen || a.searchOpen || a.settingsOpen || a.confirmOpen || a.commitDialogOpen || a.fileMenu || a.browseOpen || a.termFocus,
+		Modal:         a.paletteOpen || a.branchOpen || a.searchOpen || a.settingsOpen || a.confirmOpen || a.commitDialogOpen || a.fileMenu || a.browseOpen || a.termFocus || a.popupTrapsFocus(),
 		SettingsOpen:  a.settingsOpen,
 		FileMenu:      a.fileMenu,
 		ProjectOpen:   a.projectOpen,
@@ -1261,6 +1266,7 @@ func (a *App) buildView() View {
 		HoverPath:     a.hoverPath,
 		Dirty:         a.dirtyCount(),
 		Toast:         a.toast,
+		LSP:           a.lspViewData(),
 		Wrap:          a.wrap,
 		ScrollX:       0,
 		FindQuery:     clampFieldLen(a.findQuery),
@@ -1313,6 +1319,7 @@ func (a *App) buildView() View {
 	v.FileNav = a.fileNavViewState()
 	v.ChangeLabel = a.fileNavSummary()
 	v.Confirm = a.confirmViewState()
+	v.Popup = a.popupView()
 	v.CommitMessage = a.commitDialogMsg
 	v.CommitDialog = a.commitDialogViewState()
 
@@ -1503,6 +1510,7 @@ func (a *App) fillCode(v *View) {
 		v.Rows = a.copyFindRows(cloneCodeRows(plan.Rows[start:end]))
 		v.Rows = a.markBracketRows(v.Rows)
 		a.decorateCodeRows(doc, v.Rows, 0)
+		a.decorateDiagnostics(doc, v.Rows)
 		a.decorateEditRows(v.Rows)
 		a.decorateBlame(doc, v.Rows, 0)
 
@@ -1522,6 +1530,7 @@ func (a *App) fillCode(v *View) {
 	v.Rows = a.copyFindRows(v.Rows)
 	v.Rows = a.markBracketRows(v.Rows)
 	a.decorateCodeRows(doc, v.Rows, 0)
+	a.decorateDiagnostics(doc, v.Rows)
 	a.decorateEditRows(v.Rows)
 	a.decorateBlame(doc, v.Rows, 0)
 

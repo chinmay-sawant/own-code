@@ -872,3 +872,14 @@ button.blame:focus { outline: 0; }
   .tab { flex: 0 0 auto; }
   .tab.on { order: -1; }
 }
+
+/* Language-server diagnostics: squiggles and gutter markers */
+.diag-err { text-decoration-line: underline; text-decoration-style: wavy; text-decoration-color: var(--red); }
+.diag-warn { text-decoration-line: underline; text-decoration-style: wavy; text-decoration-color: var(--amber); }
+.diag-info { text-decoration-line: underline; text-decoration-style: wavy; text-decoration-color: var(--accent); }
+.gutter-diag-err, .pbmark.diag-err { color: var(--red); text-decoration-line: none; }
+.gutter-diag-warn, .pbmark.diag-warn { color: var(--amber); text-decoration-line: none; }
+.gutter-diag-info, .pbmark.diag-info { color: var(--accent); text-decoration-line: none; }
+.sb-diag { gap: 8px; }
+.sb-diag-err { color: var(--red); }
+.sb-diag-warn { color: var(--amber); }

@@ -154,6 +154,7 @@ type View struct {
 	History      historyView
 	Terminal     terminalView
 	Outline      []symbolRow
+	LSP          lspView
 	Toast        toastView
 	Confirm      confirmView
 	SettingsOpen bool
@@ -176,6 +177,7 @@ type View struct {
 	CommitDialog   commitDialogView
 	CommitTip      commitFloatView
 	InlineCard     inlineCard
+	Popup          popupView
 	FileMenu       bool
 	ProjectOpen    bool
 	ProjectQuery   string
@@ -518,6 +520,10 @@ type codeRow struct {
 	// RelNo is the gutter display number (relative or absolute). Zero
 	// blanks the number cell on wrapped continuation rows.
 	RelNo int
+	// DiagClass/DiagMark/DiagHint paint the language-server gutter marker.
+	DiagClass string
+	DiagMark  string
+	DiagHint  string
 }
 
 // recentRow is one quick-open entry on the welcome panel.

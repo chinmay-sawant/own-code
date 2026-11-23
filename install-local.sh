@@ -1,8 +1,8 @@
 #!/bin/sh
 # Build own-code from this checkout and install it into $PREFIX/bin.
 # Unlike install.sh, which downloads a prebuilt binary from the release
-# folders, this compiles the working tree (including uncommitted changes),
-# so it needs Go and the ../ownframe and ../blinkless sibling checkouts.
+# assets, this compiles the working tree (including uncommitted changes),
+# so it needs Go.
 # Works on Linux, WSL2, and macOS.
 set -eu
 
@@ -88,13 +88,6 @@ else
 		echo "own-code: Go is not installed; install Go 1.26+ or use ./install.sh" >&2
 		exit 1
 	fi
-
-	for dep in ../ownframe ../blinkless; do
-		if [ ! -d "$dep" ]; then
-			echo "own-code: missing $dep; go.mod and go.work need the sibling checkouts" >&2
-			exit 1
-		fi
-	done
 
 	os=$(uname -s)
 	case "$os" in

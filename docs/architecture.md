@@ -16,11 +16,8 @@ event to pixels. File names are accurate as of v0.0.1; grep them for detail.
 | `internal/terminal/`, `internal/termui/` | PTY manager, screen model, link detection and rendering for the embedded terminal. |
 | `internal/wsl/` | WSL detection, distro list, path translation, and re-exec handoff on Windows. |
 
-The UI toolkit is the sibling module `ownframe` (and its dependency
-`blinkless`). `go.mod` replaces `ownframe` with `../ownframe`, and `go.work`
-also uses `../blinkless`, so both must be checked out next to this repo.
-`.github/scripts/checkout-siblings.sh` does that in CI at the versions
-`go.mod` records.
+The UI toolkit is the module `ownframe` (and its dependency `blinkless`),
+fetched through the Go module proxy at the versions `go.mod` records.
 
 ## The `App` object
 

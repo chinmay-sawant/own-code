@@ -8,10 +8,9 @@ A quick tour: explorer, editor, Source Control diff, and history.
 
 ## Run
 
-The entry point is `cmd/own-code/main.go`. App code lives in `internal/app/` (app core), `internal/edit/` (text buffer + selection model), and `internal/wsl/` (WSL path/handoff helpers). The embedded `components/`, `fixtures/`, and `testdata/` trees live at the repo root and are served via the root `owncode` package (`assets.go`). `go.mod`, `docs/`, `install.sh`, `install-local.sh`, and this file stay at the root. Builds resolve `ownframe` through the `../ownframe` sibling checkout in `go.mod`; `vendor/` is local-only and never committed.
+The entry point is `cmd/own-code/main.go`. App code lives in `internal/app/` (app core), `internal/edit/` (text buffer + selection model), and `internal/wsl/` (WSL path/handoff helpers). The embedded `components/`, `fixtures/`, and `testdata/` trees live at the repo root and are served via the root `owncode` package (`assets.go`). `go.mod`, `docs/`, `install.sh`, `install-local.sh`, and this file stay at the root. Dependencies, including `ownframe`, resolve through the Go module proxy; `vendor/` is local-only and never committed.
 
-You need Go 1.26 plus sibling `ownframe` and `blinkless` checkouts for the
-local `replace` and workspace.
+You need Go 1.26 or newer. Dependencies download automatically.
 
 ```sh
 cd /home/chinmay/ChinmayPersonalProjects/own-code
@@ -55,14 +54,16 @@ On Windows, a workspace under a WSL network path (`\\wsl$\...`) hands off into W
 ## Install
 
 One command installs the matching prebuilt binary (Linux, WSL2, Ubuntu, or
-macOS; amd64, arm64, or 386, detected automatically) to
+macOS; amd64 or arm64, detected automatically) to
 `$HOME/.local/bin/own-code`:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/chinmay-sawant/own-code/master/install.sh | sh
 ```
 
-Binaries live in `linux-release/` and `macos-release/`. To choose another
+The installer downloads the latest GitHub Release asset and verifies its
+SHA-256 against the release's `SHA256SUMS`. Set `OWN_CODE_VERSION=v0.0.1` to
+pin a version. To choose another
 prefix (the binary goes to `$PREFIX/bin`):
 
 ```sh
@@ -82,14 +83,15 @@ PREFIX=/usr/local ./install-local.sh    # -> /usr/local/bin/own-code
 make install                            # same as the first command
 ```
 
-It needs Go 1.26+ and the sibling `ownframe` and `blinkless` checkouts. To
+It needs Go 1.26+. To
 install an already-built binary instead of compiling:
 
 ```sh
-./install-local.sh --binary linux-release/own-code-linux-amd64
+./install-local.sh --binary ./own-code-linux-amd64
 ```
 
-Manual alternative: grab your OS/arch file from the release folders above,
+Manual alternative: grab your OS/arch file from the
+[latest release](https://github.com/chinmay-sawant/own-code/releases/latest),
 save it as `own-code` somewhere on your `PATH`, and `chmod +x` it.
 
 Build from source instead (run it next to `ownframe` and `blinkless`
@@ -111,8 +113,8 @@ cd own-code
 
 ### Windows
 
-One command installs the matching prebuilt binary from `windows-release/`
-(amd64, arm64, or 386, detected automatically) into
+One command installs the matching prebuilt binary from the latest GitHub Release
+(amd64 or arm64, detected automatically, checksum verified) into
 `%USERPROFILE%\.local\bin` and adds it to your user `PATH`, so `own-code`
 runs from anywhere. From CMD:
 
@@ -121,7 +123,7 @@ curl -fSL -o "%TEMP%\own-code-install.bat" https://raw.githubusercontent.com/chi
 ```
 
 Prefer a manual download instead? Grab your architecture's exe from the
-`windows-release/` folder above, save it as `own-code.exe` somewhere on
+[latest release](https://github.com/chinmay-sawant/own-code/releases/latest), save it as `own-code.exe` somewhere on
 your `PATH`, and run `own-code`.
 
 ## Features

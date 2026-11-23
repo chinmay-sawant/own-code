@@ -623,6 +623,7 @@ func (a *App) tickWatch(ctx context.Context) error {
 	a.receiveSearch(ctx)
 	a.receiveHistoryLoad(ctx)
 	a.pollAutoSave(ctx)
+	a.pollLSP(ctx)
 	a.scheduleOpenFoldersLoaded()
 	a.receiveDirLoads(ctx)
 

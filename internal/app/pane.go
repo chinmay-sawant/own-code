@@ -377,6 +377,7 @@ func (a *App) secondView() secondaryView {
 		}
 		s.Rows = cloneCodeRows(plan.Rows[start:end])
 		a.decorateCodeRows(doc, s.Rows, 1)
+		a.decorateDiagnostics(doc, s.Rows)
 		a.decorateBlame(doc, s.Rows, 1)
 
 		return s
@@ -396,6 +397,7 @@ func (a *App) secondView() secondaryView {
 	}
 
 	a.decorateCodeRows(doc, s.Rows, 1)
+	a.decorateDiagnostics(doc, s.Rows)
 	a.decorateBlame(doc, s.Rows, 1)
 	a.sliceUnwrappedCodeRowsFor(s.Rows, cols, 1)
 

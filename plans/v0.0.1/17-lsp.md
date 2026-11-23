@@ -19,11 +19,11 @@
 **Phase 1: plumbing (no UI)**
 - [x] Transport + client + fake-server tests (in-process pipe server). Evidence: `internal/lsp/{transport,client,registry}.go`, `client_test.go`; `go test -race ./internal/lsp/...` passes.
 - [x] UTF-16 conversion with fuzz/property tests, including emoji and CRLF. Evidence: `internal/lsp/position.go`, `position_test.go` (round-trip property test, `FuzzPosition` ran 5s clean).
-- [ ] `didOpen` / `didChange` (full sync first) / `didSave` / `didClose` from tabs. Debounce changes (about 150 ms).
-- [ ] Settings schema, registry, "LSP: Show log" palette command.
+- [x] `didOpen` / `didChange` (full sync first) / `didSave` / `didClose` from tabs. Debounce changes (about 150 ms). Evidence: `internal/app/lsp_sync.go`, `lsp_sync_test.go` (fake server over `io.Pipe`).
+- [x] Settings schema, registry, "LSP: Show log" palette command. Evidence: `internal/app/lsp_settings.go`, `lsp_log.go`, `lsp_settings_test.go`. Not done: a toggle in the Settings panel UI (edit `settings.json` `lsp` block).
 
 **Phase 2: read-only intelligence**
-- [ ] Diagnostics: squiggle spans in the editor, gutter marker, status-bar counts, and a Problems list in the Details drawer (click to jump). Clear on close.
+- [x] Diagnostics: squiggle spans in the editor, gutter marker, status-bar counts, and a Problems list in the Details drawer (click to jump). Clear on close. Evidence: `internal/app/lsp_diag.go`, `lsp_sync_test.go`. Problems list shows the first 8 entries.
 - [ ] Hover popup (mouse dwell + `Ctrl+K Ctrl+I` equivalent). Render Markdown via existing `markdown_html.go`.
 - [ ] Go to Definition / Declaration / Type Definition via LSP; **fall back to the current text-index path** when no server or no result (keep `goto_definition.go` as the fallback; do not delete).
 - [ ] Find References as a results panel (reuse the workspace-search result list UI).

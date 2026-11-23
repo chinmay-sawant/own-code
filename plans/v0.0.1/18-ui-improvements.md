@@ -3,7 +3,7 @@
 Grouped by effort. Items marked (LSP) are prerequisites for `17-lsp.md`.
 
 ## Foundations (do first)
-- [ ] **Popup/overlay widget**: anchored to the caret, keyboard navigable, clipped to the window. Needed by completion, hover, signature help, code actions (LSP).
+- [x] **Popup/overlay widget**: anchored to the caret, keyboard navigable, clipped to the window. Needed by completion, hover, signature help, code actions (LSP).
 - [ ] **Command palette**: show keybindings next to commands, recent commands on top, fuzzy match with highlighted characters.
 - [ ] **Problems panel** and status-bar diagnostic counts (LSP).
 - [ ] **Toast/notification center**: keep history; long-running tasks (indexing, search, replace) show progress with cancel.

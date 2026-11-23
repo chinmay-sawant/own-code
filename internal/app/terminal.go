@@ -35,6 +35,7 @@ func (a *App) Close() {
 	}
 
 	a.stopDirLoader()
+	a.lspShutdown()
 
 	if a.patchLoader != nil {
 		a.patchLoader.Close()

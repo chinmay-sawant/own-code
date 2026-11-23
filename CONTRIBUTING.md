@@ -2,20 +2,8 @@
 
 ## Setup
 
-You need Go 1.26 (see `go.mod`) and sibling checkouts of two repos next to
-this one:
-
-```
-parent/
-  own-code/
-  ownframe/    github.com/chinmay-sawant/ownframe, at the tag go.mod requires
-  blinkless/   github.com/chinmay-sawant/blinkless, at the commit go.mod lists
-```
-
-`go.mod` has `replace github.com/chinmay-sawant/ownframe => ../ownframe` and
-`go.work` uses `../ownframe` and `../blinkless`. To fetch both at the right
-versions, run `.github/scripts/checkout-siblings.sh` from the repo root (CI
-does the same).
+You need Go 1.26 (see `go.mod`). Dependencies, including `ownframe`, download
+from the Go module proxy; no sibling checkouts or `go.work` are needed.
 
 On Linux you also need the ebiten dependencies (`libgl1-mesa-dev`,
 `xorg-dev`, `libasound2-dev`) and `xvfb` for tests on a headless machine.

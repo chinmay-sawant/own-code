@@ -1,0 +1,20 @@
+{{if .Popup.Show}}
+{{if .Popup.List}}
+<div class="popup popup-list{{if .Popup.Above}} above{{end}}" id="popup" role="listbox" aria-label="{{.Popup.Label}}" aria-activedescendant="{{.Popup.ActiveID}}" style="left:{{.Popup.Left}}px;top:{{.Popup.Top}}px;width:{{.Popup.Width}}px;height:{{.Popup.Height}}px">
+  {{if .Popup.Filter}}<div class="popup-head" id="popup-filter" aria-live="polite">{{.Popup.Filter}} · {{.Popup.Count}}</div>{{end}}
+  {{if .Popup.Empty}}<div class="popup-empty" id="popup-empty" role="status">No suggestions</div>{{end}}
+  {{range .Popup.Rows}}
+  <button class="popup-row{{if .Selected}} on{{end}}" id="popup-item-{{.Index}}" data-action="popup-item:{{.Index}}" type="button" role="option" aria-selected="{{if .Selected}}true{{else}}false{{end}}" aria-label="{{.Name}}" tabindex="-1">
+    {{if .Kind}}<span class="popup-kind">{{.Kind}}</span>{{end}}<b class="popup-label">{{.Label}}</b>{{if .Detail}}<span class="popup-detail">{{.Detail}}</span>{{end}}
+  </button>
+  {{end}}
+</div>
+{{else}}
+<div class="popup popup-card{{if .Popup.Above}} above{{end}}" id="popup" role="dialog"{{if .Popup.Trap}} aria-modal="true"{{end}} aria-label="{{.Popup.Label}}" style="left:{{.Popup.Left}}px;top:{{.Popup.Top}}px;width:{{.Popup.Width}}px;max-height:{{.Popup.Height}}px">
+  <button class="popup-x" id="popup-close" data-action="popup-close" type="button" title="Close" aria-label="Close {{.Popup.Label}}"{{if not .Popup.Trap}} tabindex="-1"{{end}}>×</button>
+  <div class="popup-body" id="popup-body">
+    {{range .Popup.Lines}}{{if .Blank}}<div class="popup-gap"></div>{{else}}<div class="popup-line{{if .Code}} code{{end}}">{{range .Segments}}<span class="t-{{.Class}}">{{.Text}}</span>{{end}}</div>{{end}}{{end}}
+  </div>
+</div>
+{{end}}
+{{end}}
