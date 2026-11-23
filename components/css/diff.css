@@ -57,7 +57,7 @@
 .drow.current.add { background-color: var(--green-active); }
 .drow.current.del { background-color: var(--red-active); }
 
-.drow.hunk { background-color: rgba(122, 162, 247, 0.075); }
+.drow.hunk { background-color: var(--accent-soft); }
 .drow.current .dnum:first-child { border-left: 2px solid var(--accent); }
 .dhunk { padding-left: 12px; color: var(--accent); font-size: 9.5px; overflow: hidden; }
 
@@ -91,19 +91,13 @@ keeps the 20px row grid intact. */
    documentation/compatibility-matrix.md), so a .drow:hover rule could never
    fire for a hover on a row child. */
 .line-revert:hover {
-  background: rgba(240, 113, 120, 0.15);
-  border-color: rgba(240, 113, 120, 0.4);
-  color: #f07178;
-}
-
-.line-revert:hover {
-  background: rgba(240, 113, 120, 0.15);
-  border-color: rgba(240, 113, 120, 0.4);
-  color: #f07178;
+  background: var(--red-bg);
+  border-color: var(--red-active);
+  color: var(--red);
 }
 
 .line-revert:focus { outline: 0; }
-.line-revert:focus-visible { outline: 0; background: rgba(240, 113, 120, 0.15); border-color: rgba(240, 113, 120, 0.4); }
+.line-revert:focus-visible { outline: 0; background: var(--red-bg); border-color: var(--red-active); }
 
 .drow.add .line-revert,
 .drow.del .line-revert { left: 2px; }
@@ -153,9 +147,9 @@ cells, leaving the divider and number gutters available to this button. */
 
 /* Diff expander accordion rows */
 .drow.expand {
-  background-color: rgba(122, 162, 247, 0.08);
-  border-top: 1px solid rgba(122, 162, 247, 0.15);
-  border-bottom: 1px solid rgba(122, 162, 247, 0.15);
+  background-color: var(--accent-soft);
+  border-top: 1px solid var(--accent-soft);
+  border-bottom: 1px solid var(--accent-soft);
   height: var(--row-h);
   line-height: var(--row-h);
   display: flex;
@@ -180,10 +174,10 @@ cells, leaving the divider and number gutters available to this button. */
 }
 
 .expand-btn {
-  background: rgba(122, 162, 247, 0.12);
-  border: 1px solid rgba(122, 162, 247, 0.25);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-strong);
   border-radius: 3px;
-  color: #7aa2f7;
+  color: var(--accent);
   font-family: var(--mono);
   font-size: 10px;
   line-height: 14px;
@@ -196,9 +190,9 @@ cells, leaving the divider and number gutters available to this button. */
 }
 
 .expand-btn:hover {
-  background: rgba(122, 162, 247, 0.22);
-  color: #9ab8ff;
-  border-color: rgba(122, 162, 247, 0.4);
+  background: var(--accent-strong);
+  color: var(--accent);
+  border-color: var(--accent-strong);
 }
 
 .expand-btn.expand-all {

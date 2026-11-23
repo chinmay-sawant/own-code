@@ -1,6 +1,6 @@
 # own-code
 
-own-code is a desktop app for reading code and reviewing diffs: explorer, in-place editor, unified and split diffs, git history, Markdown preview, and six color themes.
+own-code is a desktop app for reading code and reviewing diffs: explorer, in-place editor, unified and split diffs, git history, Markdown preview, and ten color themes.
 
 ![own-code demo](docs/demo.webp)
 

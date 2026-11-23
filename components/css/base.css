@@ -12,6 +12,8 @@
   --icon-strong: #9aa4b7;
   --accent: #7aa2f7;
   --accent-soft: rgba(122, 162, 247, 0.12);
+  --accent-strong: rgba(122, 162, 247, 0.4);
+  --thumb: #c5c9d1;
   --green: #3ddc84;
   --green-bg: rgba(63, 185, 80, 0.13);
   --green-word: rgba(63, 185, 80, 0.30);
@@ -199,7 +201,7 @@ button.ln:focus-visible,
 
 .find-hit { background-color: rgba(240, 183, 90, 0.28); border-radius: 2px; }
 .find-cur { background-color: rgba(240, 183, 90, 0.62); color: #0b0e14; }
-.bracket-flash { background-color: rgba(120, 170, 255, 0.35); border-radius: 2px; }
+.bracket-flash { background-color: var(--accent-strong); border-radius: 2px; }
 
 /* Small shared pieces ------------------------------------------------------ */
 

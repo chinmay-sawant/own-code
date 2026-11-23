@@ -111,7 +111,7 @@
 </div>
 {{if and .SettingsOpen .SettingsScroll}}
 <button class="settings-rail" id="settings-rail" type="button" title="Scroll settings" aria-label="Scroll settings" tabindex="-1" style="left:{{.SettingsRailLeft}}px;top:{{.SettingsRailTop}}px;height:{{.SettingsTrackH}}px">
-  <span class="settings-thumb" id="settings-thumb" style="top:{{.SettingsThumbTop}}px;height:{{.SettingsThumbH}}px"><svg width="6" height="{{.SettingsThumbH}}" aria-hidden="true"><rect width="6" height="{{.SettingsThumbH}}" fill="currentColor"/></svg></span>
+  <span class="settings-thumb" id="settings-thumb" style="top:{{.SettingsThumbTop}}px;height:{{.SettingsThumbH}}px"><svg width="6" height="{{.SettingsThumbH}}" aria-hidden="true"><rect width="6" height="{{.SettingsThumbH}}" fill="{{.ThumbColor}}"/></svg></span>
 </button>
 {{end}}
 {{end}}

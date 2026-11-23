@@ -47,7 +47,7 @@
       <div class="palette-empty">{{if .Search.Busy}}Searching the workspace…{{else if .Search.Query}}No content matches this search.{{else}}Type to search every text file in the workspace.{{end}}</div>
       {{end}}
     </div>
-    {{if .Search.Scroll}}<div class="search-scroll-track" id="search-scroll-track"><button class="search-thumb" id="search-thumb" type="button" tabindex="-1" title="Drag to scroll search results" aria-label="Scroll search results" style="margin-top:{{.Search.ScrollTop}}px;height:{{.Search.ScrollHeight}}px"><svg width="8" height="{{.Search.ScrollHeight}}" aria-hidden="true"><rect width="8" height="{{.Search.ScrollHeight}}" fill="#c5c9d1"/></svg></button></div>{{end}}
+    {{if .Search.Scroll}}<div class="search-scroll-track" id="search-scroll-track"><button class="search-thumb" id="search-thumb" type="button" tabindex="-1" title="Drag to scroll search results" aria-label="Scroll search results" style="margin-top:{{.Search.ScrollTop}}px;height:{{.Search.ScrollHeight}}px"><svg width="8" height="{{.Search.ScrollHeight}}" aria-hidden="true"><rect width="8" height="{{.Search.ScrollHeight}}" fill="{{.ThumbColor}}"/></svg></button></div>{{end}}
     </div>
     {{if .Palette.Busy}}<div class="palette-note">Searching disk…</div>{{else if .Palette.Note}}<div class="palette-note">{{.Palette.Note}}</div>{{end}}
     <div class="palette-foot"><span>↑↓ choose · Enter open · Ctrl+Enter replace · Space toggles file · Esc close</span><span>Ctrl+Shift+F · Ctrl+Shift+H</span></div>

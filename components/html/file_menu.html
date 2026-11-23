@@ -48,7 +48,7 @@
       </div>
       {{if .BrowseScroll}}
       <button class="browse-scroll" id="browse-scroll" type="button" title="Drag to scroll folders" aria-label="Scroll folders" tabindex="-1" style="height:{{.BrowseTrackH}}px">
-        <span class="browse-thumb" id="browse-thumb" style="top:{{.BrowseThumbTop}}px;height:{{.BrowseThumbH}}px"></span>
+        <span class="browse-thumb" id="browse-thumb" style="top:{{.BrowseThumbTop}}px;height:{{.BrowseThumbH}}px"><svg width="6" height="{{.BrowseThumbH}}" aria-hidden="true"><rect width="6" height="{{.BrowseThumbH}}" fill="{{.ThumbColor}}"/></svg></span>
       </button>
       {{end}}
     </div>

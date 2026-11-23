@@ -36,8 +36,8 @@
   cursor: ns-resize;
 }
 
-.term-resize:hover { background-color: rgba(122, 162, 247, 0.10); }
-.term-grip { width: 42px; height: 2px; display: block; border-radius: 1px; background-color: #4a5466; pointer-events: none; }
+.term-resize:hover { background-color: var(--accent-soft); }
+.term-grip { width: 42px; height: 2px; display: block; border-radius: 1px; background-color: var(--dim); pointer-events: none; }
 .term-resize:hover .term-grip { background-color: var(--accent); }
 .terminal .term-resize:focus,
 .terminal .term-resize:focus-visible { outline: 0; background-color: transparent; }
@@ -209,7 +209,7 @@
 
 .terminal .term-body:focus,
 .terminal .term-body:focus-visible { outline: 0; background-color: var(--term-bg); }
-.term-body.focus { box-shadow: inset 0 0 0 1px rgba(122, 162, 247, 0.45); }
+.term-body.focus { box-shadow: inset 0 0 0 1px var(--accent-strong); }
 
 .term-row {
   height: 16px;

@@ -41,7 +41,7 @@
   border: 1px solid rgba(248, 81, 73, 0.4);
   border-radius: 4px;
   background: rgba(248, 81, 73, 0.1);
-  color: #ff9b94;
+  color: var(--red);
   font-family: var(--mono);
   font-size: 8px;
   font-weight: 700;
@@ -127,7 +127,7 @@
   border-top: 1px solid rgba(248, 81, 73, 0.25);
   border-bottom: 1px solid rgba(248, 81, 73, 0.18);
   background: rgba(248, 81, 73, 0.11);
-  color: #ffb4ae;
+  color: var(--red);
   font-size: 9.5px;
 }
 
@@ -148,10 +148,10 @@
 
 .merge-line { padding: 0 10px; }
 .merge-line.ours { background: var(--green-bg); }
-.merge-line.theirs { background: rgba(122, 162, 247, 0.12); }
+.merge-line.theirs { background: var(--accent-soft); }
 .merge-line.base { background: var(--amber-soft); }
 .merge-line.current.ours { background: var(--green-active); }
-.merge-line.current.theirs { background: rgba(122, 162, 247, 0.24); }
+.merge-line.current.theirs { background: var(--accent-strong); }
 .merge-line.current.base { background: rgba(240, 183, 90, 0.2); }
 
 .merge-side {
@@ -224,15 +224,15 @@
   white-space: nowrap;
   cursor: pointer;
 }
-.merge-btn:hover { border-color: #2b3240; background: var(--panel-3); }
+.merge-btn:hover { border-color: var(--muted); background: var(--panel-3); }
 .merge-btn.ours { border-color: rgba(63, 185, 80, 0.35); color: var(--green); }
-.merge-btn.theirs { border-color: rgba(122, 162, 247, 0.4); color: var(--accent); }
+.merge-btn.theirs { border-color: var(--accent-strong); color: var(--accent); }
 .merge-btn.both { border-color: rgba(192, 132, 252, 0.4); color: var(--purple); }
 .merge-btn.stage { border-color: rgba(63, 185, 80, 0.45); color: var(--green); }
 .merge-btn.compare.on { border-color: rgba(240, 183, 90, 0.6); background: var(--amber-soft); color: var(--amber); }
 .merge-btn:disabled { opacity: 0.45; cursor: default; }
 .merge-btn:focus { outline: 0; }
-.merge-btn:focus-visible { outline: 0; border-color: #2b3240; background-color: var(--panel-3); }
+.merge-btn:focus-visible { outline: 0; border-color: var(--muted); background-color: var(--panel-3); }
 
 @media (max-width: 1120px) {
   .merge-note { display: none; }
