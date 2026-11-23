@@ -1,14 +1,14 @@
 module github.com/chinmay-sawant/own-code
 
-go 1.26.10
+go 1.26.11
 
 // Standalone copy of ownframe/examples/code-view. This pins ownframe at the
-// fix/replay-fixed-chunk-scroll merge abb99008f1dc (pseudo-version v0.0.3-0.20261102133043-abb99008f1dc).
+// v0.0.5 release.
 // The local replace below points at the sibling checkout because the
 // upstream module zip at that commit is too large to download; keep an
 // ownframe checkout next to this repo.
 require (
-	github.com/chinmay-sawant/ownframe v0.0.3-0.20261102133043-abb99008f1dc
+	github.com/chinmay-sawant/ownframe v0.0.5
 	github.com/creack/pty v1.1.24
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/hajimehoshi/ebiten/v2 v2.10.4

@@ -17,6 +17,10 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
+// shellViewportPinZ is the lowest z-index pinned to the viewport. It sits on
+// the editor's z band so the fixed shell stays put while the page scrolls.
+const shellViewportPinZ = 10
+
 const (
 	defaultWidth  = 1500
 	defaultHeight = 900
@@ -755,7 +759,7 @@ func NewWithLimit(root string, limit int) (*App, error) {
 	// shell chrome (titlebar, activity rails, sidebar, statusbar) must stay
 	// on the viewport. Pin every layer at the editor's z band (10) and above;
 	// scrolling content stays below it.
-	page.Scroll().SetViewportPinZ(10)
+	page.Scroll().SetViewportPinZ(shellViewportPinZ)
 	page.SetScrollWindow(a.onScroll)
 	page.SetTick(a.tickWatch)
 
