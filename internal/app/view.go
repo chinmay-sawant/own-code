@@ -1,5 +1,7 @@
 package app
 
+import "time"
+
 // View is the data the code view template prints. Every field is a plain
 // value or a prebuilt row, so one SetData call publishes one frame.
 type View struct {
@@ -782,6 +784,9 @@ type toastView struct {
 	Kind    string
 	Title   string
 	Message string
+
+	// until is when the card auto-dismisses; zero means it stays.
+	until time.Time
 }
 
 // confirmView is the destructive-action dialog, such as Discard. OkLabel

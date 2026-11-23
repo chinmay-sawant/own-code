@@ -625,6 +625,7 @@ func (a *App) tickWatch(ctx context.Context) error {
 	a.receiveSearch(ctx)
 	a.receiveHistoryLoad(ctx)
 	a.pollAutoSave(ctx)
+	a.pollToast()
 	if err := a.pollLSP(ctx); err != nil {
 		return err
 	}

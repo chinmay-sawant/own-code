@@ -80,6 +80,12 @@ func (a *App) onPress(ctx context.Context, box ownframe.Box, x, y float64) (bool
 	a.editCaret = sel.Caret
 	a.clearBracket()
 	a.dragSelect = true
+
+	// Double-click selects the word, triple-click the line. A multi-click
+	// is a finished selection, so a following drag must not replace it.
+	if a.selectByClicks(text, sel.Caret) {
+		a.dragSelect = false
+	}
 	a.refresh()
 
 	return true, a.page.Redraw(ctx)

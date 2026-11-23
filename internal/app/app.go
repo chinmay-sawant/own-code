@@ -213,12 +213,19 @@ type App struct {
 	revertUndo []revertUndoEntry
 	revertRedo []revertUndoEntry
 	dragSelect bool
-	selX       float64
-	selY       float64
-	menuOpen   bool
-	menuX      int
-	menuY      int
-	menuItems  []menuViewRow
+
+	// pressAt/pressOffset/pressCountN track double and triple clicks in the
+	// edit body.
+	pressAt     time.Time
+	toastTimer  *time.Timer
+	pressOffset int
+	pressCountN int
+	selX        float64
+	selY        float64
+	menuOpen    bool
+	menuX       int
+	menuY       int
+	menuItems   []menuViewRow
 	// pendingFocus is a control id the next tick focuses once the panel that
 	// owns it has been laid out. Click handlers run inside the window's
 	// redraw batch, so a panel they open is not in the form state yet when
@@ -4172,7 +4179,30 @@ func (a *App) jumpHunk(delta int) {
 
 // showToast publishes one message card.
 func (a *App) showToast(kind, title, message string) {
-	a.toast = toastView{Show: true, Kind: kind, Title: title, Message: message}
+	a.toast = toastView{Show: true, Kind: kind, Title: title, Message: message, until: time.Now().Add(toastLifetime)}
+
+	// Wake the loop just after expiry so the card leaves without input. A
+	// wake requested from inside the current frame is dropped when that
+	// frame ends, so the timer fires it off-loop, as autosave does.
+	if a.toastTimer != nil {
+		a.toastTimer.Stop()
+	}
+
+	a.toastTimer = time.AfterFunc(toastLifetime+50*time.Millisecond, func() {
+		if a.page != nil {
+			a.page.WantFrameIn(0)
+		}
+	})
+}
+
+// toastLifetime is how long a message card stays before it dismisses itself.
+const toastLifetime = 5 * time.Second
+
+// pollToast hides the message card once its lifetime has elapsed.
+func (a *App) pollToast() {
+	if a.toast.Show && !a.toast.until.IsZero() && !time.Now().Before(a.toast.until) {
+		a.clearToast()
+	}
 }
 
 // clearToast hides the message card.
