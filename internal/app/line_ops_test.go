@@ -83,12 +83,17 @@ func TestLineOpsUndoAndKeymap(t *testing.T) {
 	}
 
 	// The default chord reaches the action through editKey.
-	if err := app.editKey(ctx, "alt+arrowup"); err != nil {
+	// The window reports Up/Down without an alt prefix and tracks Ctrl and
+	// Shift separately, so the default is Ctrl+Shift+ArrowUp/Down.
+	app.ctrl, app.shift = true, true
+	if err := app.editKey(ctx, "arrowup"); err != nil {
 		t.Fatal(err)
 	}
 
+	app.ctrl, app.shift = false, false
+
 	if got := app.edit.Text(); got != "one\ntwo\nthree\n" {
-		t.Fatalf("after Alt+Up text = %q", got)
+		t.Fatalf("after Ctrl+Shift+Up text = %q", got)
 	}
 
 	app.ctrl, app.shift = true, true

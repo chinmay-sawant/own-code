@@ -184,7 +184,7 @@ Chrome's browser and GPU processes alone, 347 MB PSS, are larger than the entire
 | **`Ctrl+Shift+O`** | Go to symbol in the active file |
 | **`Ctrl+M`** | Jump to the matching bracket (`Ctrl+Shift+M` selects to it) |
 | **`Ctrl+/`** | Toggle line comment while editing |
-| **`Alt+Up` `Alt+Down`** | Move the line or selected lines up or down while editing |
+| **`Ctrl+Shift+Up` `Ctrl+Shift+Down`** | Move the line or selected lines up or down while editing |
 | **`Ctrl+Shift+D`** | Duplicate the line or selected lines |
 | **`Ctrl+Shift+K`** | Delete the line or selected lines |
 | **`Ctrl+J`** | Join the line with the next (or the selected lines) |
