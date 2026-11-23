@@ -319,6 +319,8 @@ func (a *App) lspKeyDown(ctx context.Context, key string) (bool, error) {
 		return true, a.completionAtCaret(ctx)
 	case a.ctrl && !a.shift && key == "t":
 		return true, a.openWorkspaceSymbols(ctx)
+	case a.ctrl && !a.shift && (key == "period" || key == ".") && a.editing && a.mode == "explorer":
+		return true, a.codeActionsAtCaret(ctx)
 	case !a.ctrl && key == "f2" && a.editing && a.mode == "explorer" && !a.shift:
 		return true, a.renameSymbolAtCaret(ctx)
 	case !a.ctrl && key == "f12" && a.shift && a.mode == "explorer":
@@ -342,6 +344,8 @@ func lspCommandCatalog() []paletteRow {
 		{Cmd: paletteCmdLSPCompletion, Name: "LSP: Trigger Completion", Dir: "Complete at the caret (Ctrl+Space)"},
 		{Cmd: paletteCmdLSPReferences, Name: "LSP: Find References", Dir: "List references of the symbol at the caret (Shift+F12)"},
 		{Cmd: paletteCmdLSPRename, Name: "LSP: Rename Symbol", Dir: "Rename the symbol at the caret in every file (F2)"},
+		{Cmd: paletteCmdLSPCodeAction, Name: "LSP: Code Actions (Quick Fix)", Dir: "List fixes and refactors at the caret (Ctrl+.)"},
+		{Cmd: paletteCmdLSPSignature, Name: "LSP: Signature Help", Dir: "Show the parameters of the call at the caret"},
 		{Cmd: paletteCmdLSPWorkspace, Name: "LSP: Go to Symbol in Workspace", Dir: "Search symbols across the workspace (Ctrl+T)"},
 		{Cmd: paletteCmdLSPDocSymbols, Name: "LSP: Go to Symbol in File", Dir: "Search symbols in this file (Ctrl+Shift+O)"},
 	}
@@ -374,6 +378,14 @@ func (a *App) runLSPPaletteCommand(ctx context.Context, id string) (bool, error)
 		closeIt()
 
 		return true, a.renameSymbolAtCaret(ctx)
+	case paletteCmdLSPCodeAction:
+		closeIt()
+
+		return true, a.codeActionsAtCaret(ctx)
+	case paletteCmdLSPSignature:
+		closeIt()
+
+		return true, a.signatureHelpAtCaret(ctx)
 	case paletteCmdLSPWorkspace:
 		closeIt()
 

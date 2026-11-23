@@ -126,14 +126,12 @@ func (a *App) editPointAt(x, y float64) (int, int, bool) {
 	// them before resolving the visual row.
 	y -= float64(a.stickyTopPx(0))
 
-	cols := a.codeColsForGroup(0)
 	visual := visualRowAt(int(y), int(box.Y), a.scrollY, a.zx(rowH))
 	line := visual
 
 	rowStart := 0
-	if a.wrap {
-		plan := doc.wrapped(cols)
-		line = sourceLineAt(doc, cols, visual)
+	if plan := a.rowPlan(doc, 0); plan != nil {
+		line = plan.lineAt(visual)
 		if visual >= 0 && visual < len(plan.Rows) {
 			line = plan.Rows[visual].Line
 			rowStart = plan.Rows[visual].Start

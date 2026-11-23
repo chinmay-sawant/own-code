@@ -1069,7 +1069,7 @@ func paletteCommandCatalog() []paletteRow {
 		{Cmd: paletteCmdBlame, Name: "View: Toggle Blame", Dir: "Show the last commit for every line (B)"},
 		{Cmd: paletteCmdLSPLog, Name: "LSP: Show log", Dir: "Open the language server trace"},
 		{Cmd: paletteCmdStickyScroll, Name: "View: Toggle Sticky Scroll", Dir: "Pin the enclosing symbols above the editor (T)"},
-	}, append(lspCommandCatalog(), popupDemoCatalog()...)...)
+	}, append(append(lspCommandCatalog(), popupDemoCatalog()...), foldCatalog()...)...)
 }
 
 // paletteCommandRows filters the command catalog by the text after `>`.
@@ -1198,6 +1198,11 @@ func (a *App) runPaletteCommand(ctx context.Context, id string) error {
 	case paletteCmdLSPLog:
 		closePalette()
 		a.showLSPLog(ctx)
+
+		return redraw()
+	case paletteCmdFold, paletteCmdUnfold, paletteCmdFoldAll, paletteCmdUnfoldAll:
+		closePalette()
+		a.runFoldCommand(id)
 
 		return redraw()
 	case paletteCmdStickyScroll:

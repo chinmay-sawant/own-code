@@ -456,7 +456,7 @@ func TestPaletteCommandMode(t *testing.T) {
 		}
 	}
 
-	app.paletteQuery = ">fold"
+	app.paletteQuery = ">folder"
 	rows = app.paletteRows()
 	if len(rows) == 0 || rows[0].Cmd != "new-folder" {
 		t.Fatalf("filtered rows = %+v, want the new-folder command", rows)

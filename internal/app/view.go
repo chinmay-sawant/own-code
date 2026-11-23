@@ -530,6 +530,8 @@ type codeRow struct {
 	DiagClass string
 	DiagMark  string
 	DiagHint  string
+	// Fold is "open" or "closed" on a row that opens a foldable region.
+	Fold string
 }
 
 // recentRow is one quick-open entry on the welcome panel.

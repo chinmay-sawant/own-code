@@ -273,8 +273,8 @@ func TestLSPCompletionTriggerCharAndTextEditSnippet(t *testing.T) {
 		t.Fatalf("line = %q", line)
 	}
 
-	// Caret goes to the first tab stop: before "ctx".
-	_, col := offsetLineCol(app.edit.Text(), app.editCaret)
+	// The first tab stop ("ctx") is selected; the selection starts before it.
+	_, col := offsetLineCol(app.edit.Text(), min(app.editAnchor, app.editCaret))
 	if want := utf8.RuneCountInString("func run() { \"😀\"+x.Run("); col != want {
 		t.Fatalf("caret col = %d, want %d", col, want)
 	}

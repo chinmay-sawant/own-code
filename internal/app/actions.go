@@ -200,6 +200,14 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		if line, ok := actionIndex(action, "inline-card-line:"); ok {
 			a.showInlineCard(line + 1)
 		}
+	case strings.HasPrefix(action, "fold-toggle2:"):
+		if line, ok := actionIndex(action, "fold-toggle2:"); ok {
+			a.toggleFoldLine(1, line)
+		}
+	case strings.HasPrefix(action, "fold-toggle:"):
+		if line, ok := actionIndex(action, "fold-toggle:"); ok {
+			a.toggleFoldLine(0, line)
+		}
 	case strings.HasPrefix(action, "blame-commit:"):
 		a.openBlameCommit(ctx, strings.TrimPrefix(action, "blame-commit:"))
 	case action == "toast-close":

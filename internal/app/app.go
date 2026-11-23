@@ -205,8 +205,8 @@ type App struct {
 	bracketLine  int
 	bracketFrom  int
 	bracketTo    int
-	editUndo     []editSnapshot
-	editRedo     []editSnapshot
+	editUndo     []editRecord
+	editRedo     []editRecord
 	// revertUndo/revertRedo store forward hunk patches for Ctrl+Z restore
 	// after a mistaken discard. Separate from editUndo so text and hunk
 	// histories never clobber each other.
@@ -1500,8 +1500,7 @@ func (a *App) fillCode(v *View) {
 	v.TrackTop = reserve * a.zx(rowH)
 
 	start, end, _ := a.windowSliceReserve(0, len(doc.Lines), reserve)
-	if a.wrap {
-		plan := doc.wrapped(cols)
+	if plan := a.rowPlan(doc, 0); plan != nil {
 		start, end, _ = a.windowSliceReserve(0, len(plan.Rows), reserve)
 		// Never start mid-line: a scroll offset landing inside a wrapped
 		// source line would fill the viewport with No==0 continuations and
@@ -1524,6 +1523,8 @@ func (a *App) fillCode(v *View) {
 		a.decorateEditRows(v.Rows)
 		a.decorateGuides(doc, v.Rows, 0)
 		a.decorateBlame(doc, v.Rows, 0)
+		a.decorateFolds(doc, v.Rows)
+		a.sliceUnwrappedCodeRowsFor(v.Rows, cols, 0)
 
 		return
 	}
@@ -1545,6 +1546,7 @@ func (a *App) fillCode(v *View) {
 	a.decorateEditRows(v.Rows)
 	a.decorateGuides(doc, v.Rows, 0)
 	a.decorateBlame(doc, v.Rows, 0)
+	a.decorateFolds(doc, v.Rows)
 
 	a.sliceUnwrappedCodeRowsFor(v.Rows, cols, 0)
 }
@@ -2518,8 +2520,8 @@ func (a *App) codeCols() int {
 
 // topSourceLine is the source line at the top of the code view.
 func (a *App) topSourceLine() int {
-	if doc := a.activeDoc(); a.wrap && doc != nil {
-		return doc.wrapped(a.codeCols()).lineAt(a.scrollY / a.zx(rowH))
+	if doc := a.activeDoc(); doc != nil {
+		return a.lineOfRow(doc, a.activeGroup(), a.scrollY/a.zx(rowH))
 	}
 
 	return a.scrollY / a.zx(rowH)
@@ -2547,8 +2549,8 @@ func (a *App) toggleWrap() {
 	}
 	a.viewportCols = 0
 
-	if doc := a.activeDoc(); doc != nil && a.wrap {
-		a.scrollTo(doc.wrapped(a.codeCols()).firstRow(line) * a.zx(rowH))
+	if doc := a.activeDoc(); doc != nil {
+		a.scrollTo(a.rowOfLine(doc, a.activeGroup(), line) * a.zx(rowH))
 
 		return
 	}
@@ -4218,7 +4220,7 @@ func (a *App) scrollToSourceLine(line int) {
 		if line >= 0 && line < len(doc.PreviewLine) && doc.PreviewLine[line] >= 0 {
 			target = doc.PreviewLine[line]
 		}
-	} else if doc := a.activeDoc(); a.wrap && doc != nil {
+	} else if doc := a.activeDoc(); doc != nil {
 		if line < 0 {
 			line = 0
 		}
@@ -4227,7 +4229,8 @@ func (a *App) scrollToSourceLine(line int) {
 			line = len(doc.Lines) - 1
 		}
 
-		target = doc.wrapped(a.codeCols()).firstRow(line)
+		doc.revealLine(line)
+		target = a.rowOfLine(doc, a.activeGroup(), line)
 	}
 
 	a.scrollTo(target * a.zx(rowH))

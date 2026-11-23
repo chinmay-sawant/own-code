@@ -648,6 +648,27 @@ button.ln:focus { outline: 0; }
 
 .ln.cont { color: var(--dim); font-size: 9px; }
 
+/* Fold chevron: sits in the number cell's right padding, so the code text
+   offset (editTextLeft) never moves. A folded row keeps it highlighted. */
+.fold-mark {
+  position: absolute;
+  left: 50px;
+  top: 0;
+  width: 10px;
+  height: var(--row-h);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 9px;
+  line-height: var(--row-h);
+  cursor: pointer;
+}
+.fold-mark:hover, .fold-mark.closed { color: var(--accent); }
+.fold-mark:focus { outline: 0; }
+.t-fold { color: var(--dim); }
+
 /* Blame gutter: one short hash per first visual row. The column paints only
    while .BlameShow holds, and the code hit areas shift right with it (see
    the .code-body.blame rule below and the zoom override). Uncommitted lines

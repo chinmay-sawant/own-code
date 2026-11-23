@@ -250,8 +250,15 @@ func (c *Client) Initialize(ctx context.Context, rootDir string) error {
 				"declaration":        map[string]any{"linkSupport": true},
 				"typeDefinition":     map[string]any{"linkSupport": true},
 				"references":         map[string]any{},
-				"rename":             map[string]any{"prepareSupport": false},
-				"documentSymbol":     map[string]any{"hierarchicalDocumentSymbolSupport": true},
+				"rename":             map[string]any{"prepareSupport": true},
+				"signatureHelp": map[string]any{
+					"signatureInformation": map[string]any{"documentationFormat": []string{"plaintext"}, "parameterInformation": map[string]any{"labelOffsetSupport": true}},
+				},
+				"codeAction": map[string]any{
+					"codeActionLiteralSupport": map[string]any{"codeActionKind": map[string]any{"valueSet": []string{"quickfix", "refactor", "source"}}},
+					"resolveSupport":           map[string]any{"properties": []string{"edit"}},
+				},
+				"documentSymbol": map[string]any{"hierarchicalDocumentSymbolSupport": true},
 				"completion": map[string]any{
 					"completionItem": map[string]any{
 						"snippetSupport":      true,

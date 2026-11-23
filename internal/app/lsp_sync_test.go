@@ -18,9 +18,12 @@ import (
 // fakeLSP is an in-process language server over io.Pipe.
 type fakeLSP struct {
 	mu      sync.Mutex
-	calls   []string // method names in order
-	changes []string // texts from didChange
-	opens   []lsp.TextDocumentItem
+	calls   []string     // method names in order
+	changes []string     // texts from didChange
+	ranges  []*lsp.Range // range of the first content change (nil = full)
+	// syncKind is the advertised textDocumentSync (0 means 1, full).
+	syncKind int
+	opens    []lsp.TextDocumentItem
 	// versionLag makes diagnostics carry version-lag, to model stale replies.
 	versionLag int
 	silent     bool
@@ -76,7 +79,15 @@ func (f *fakeLSP) connect(_ lsp.ServerConfig, _ string, opt lsp.Options) (*lsp.C
 
 			switch m.Method {
 			case "initialize":
-				_ = conn.Write(&lsp.Message{ID: m.ID, Result: json.RawMessage(`{"capabilities":{"textDocumentSync":1}}`)})
+				f.mu.Lock()
+				kind := f.syncKind
+				f.mu.Unlock()
+
+				if kind == 0 {
+					kind = 1
+				}
+
+				_ = conn.Write(&lsp.Message{ID: m.ID, Result: json.RawMessage(fmt.Sprintf(`{"capabilities":{"textDocumentSync":%d}}`, kind))})
 			case "textDocument/hover":
 				var p lsp.HoverParams
 				_ = json.Unmarshal(m.Params, &p)
@@ -136,6 +147,7 @@ func (f *fakeLSP) connect(_ lsp.ServerConfig, _ string, opt lsp.Options) (*lsp.C
 
 				f.mu.Lock()
 				f.changes = append(f.changes, text)
+				f.ranges = append(f.ranges, p.ContentChanges[0].Range)
 				f.mu.Unlock()
 				f.publish(conn, p.TextDocument.URI, p.TextDocument.Version, text)
 			}
@@ -536,5 +548,48 @@ func TestWorkspaceProblemsCanReachLastRow(t *testing.T) {
 	app.refresh()
 	if v := app.View().LSP; v.Total != 0 || v.Prev || v.Next || len(v.Problems) != 0 {
 		t.Fatalf("after shutdown = %+v", v)
+	}
+}
+
+// TestLSPIncrementalDidChange checks that a server advertising incremental
+// sync receives range edits (UTF-16) that reproduce the buffer when applied.
+func TestLSPIncrementalDidChange(t *testing.T) {
+	app, fake, _ := lspTestApp(t, map[string]string{"a.go": "package a\n\nvar s = \"😀x\"\n"})
+	fake.syncKind = 2
+	ctx := context.Background()
+
+	app.openFile("a.go")
+	pump(t, app, "didOpen", func() bool { return fake.count("textDocument/didOpen") == 1 })
+
+	app.toggleEdit()
+
+	if err := app.Page().Edit().Type(ctx, "Q"); err != nil {
+		t.Fatal(err)
+	}
+
+	// The first sync after a disk-backed open is the full text; the next
+	// one is incremental.
+	pump(t, app, "didChange", func() bool { return fake.count("textDocument/didChange") >= 1 })
+	time.Sleep(60 * time.Millisecond)
+
+	if err := app.Page().Edit().Type(ctx, "R"); err != nil {
+		t.Fatal(err)
+	}
+
+	pump(t, app, "didChange 2", func() bool { return fake.count("textDocument/didChange") >= 2 })
+
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+
+	if len(fake.ranges) < 2 || fake.ranges[1] == nil {
+		t.Fatalf("no incremental range sent: %+v", fake.ranges)
+	}
+
+	if fake.ranges[0] != nil {
+		t.Fatalf("first change after disk open should be full text")
+	}
+
+	if got := fake.ranges[1].Start; got.Line != 0 || got.Character != 1 {
+		t.Fatalf("range start %+v, want 0:1 (typed after Q)", got)
 	}
 }

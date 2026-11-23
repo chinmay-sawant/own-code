@@ -100,8 +100,7 @@ func (a *App) stickyTopLine(group int) int {
 		visual = 0
 	}
 
-	if a.wrap {
-		plan := doc.wrapped(a.codeColsForGroup(group))
+	if plan := a.rowPlan(doc, group); plan != nil {
 		if len(plan.Rows) == 0 {
 			return 0
 		}
@@ -171,10 +170,8 @@ func (a *App) scrollToSticky(group, line int) {
 		line = len(doc.Lines) - 1
 	}
 
-	target := line
-	if a.wrap {
-		target = doc.wrapped(a.codeColsForGroup(group)).firstRow(line)
-	}
+	doc.revealLine(line)
+	target := a.rowOfLine(doc, group, line)
 
 	y := target * a.zx(rowH)
 	if !a.split && group == 0 {

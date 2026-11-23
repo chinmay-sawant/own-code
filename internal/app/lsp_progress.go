@@ -14,6 +14,9 @@ import (
 // needs only one field.
 type lspExt struct {
 	cmp  completionState
+	snip snippetSession
+	sig  signatureState
+	acts codeActionState
 	sym  symbolState
 	refs refsState
 	// prog is the live $/progress work per server, keyed by token.

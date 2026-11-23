@@ -55,6 +55,10 @@ type lspDoc struct {
 	pendingAt time.Time // last edit not yet sent; zero when in sync
 	wasDirty  bool
 	skipped   bool // over the size cap; never synced
+	// lastText is the text the server last received, valid when lastKnown.
+	// It anchors incremental didChange ranges; a disk-backed sync clears it.
+	lastText  string
+	lastKnown bool
 }
 
 // lspManager owns the servers and documents. All fields except those behind
@@ -382,6 +386,9 @@ func (m *lspManager) openDoc(path string, cfg lsp.ServerConfig) bool {
 		version:  1,
 		wasDirty: a.isDirty(path),
 	}
+	if !fromDisk {
+		doc.lastText, doc.lastKnown = text, true
+	}
 	m.docs[path] = doc
 	m.byURI[doc.uri] = doc
 	srv.docCount++
@@ -483,7 +490,22 @@ func (m *lspManager) flush() bool {
 		}
 
 		doc.version++
-		doc.server.enqueue(lspOp{kind: lspOpChange, uri: doc.uri, abs: doc.abs, version: doc.version, text: text, fromDisk: fromDisk})
+		op := lspOp{kind: lspOpChange, uri: doc.uri, abs: doc.abs, version: doc.version, text: text, fromDisk: fromDisk}
+
+		if fromDisk {
+			doc.lastText, doc.lastKnown = "", false
+		} else {
+			if doc.lastKnown {
+				if e, ok := edit.Diff(doc.lastText, text); ok {
+					ch := lsp.ChangeFor(doc.lastText, e)
+					op.change = &ch
+				}
+			}
+
+			doc.lastText, doc.lastKnown = text, true
+		}
+
+		doc.server.enqueue(op)
 
 		if saved {
 			doc.server.enqueue(lspOp{kind: lspOpSave, uri: doc.uri})
@@ -751,6 +773,10 @@ type lspOp struct {
 	line     int // hover/definition: zero-based source line
 	col      int // hover/definition: rune column in the raw line
 	call     func(c *lsp.Client, sent *lspSent)
+	// change is an incremental edit against the previously sent text. It is
+	// used only when the server advertises incremental sync; otherwise the
+	// full text goes out.
+	change *lsp.ContentChange
 }
 
 // lspSent is what the server was last told about one document, so
@@ -913,7 +939,7 @@ func (s *lspServer) apply(c *lsp.Client, op lspOp) {
 		} else {
 			err = c.Notify("textDocument/didChange", lsp.DidChangeParams{
 				TextDocument:   lsp.VersionedTextDocumentIdentifier{URI: op.uri, Version: op.version},
-				ContentChanges: []lsp.ContentChange{{Text: text}},
+				ContentChanges: s.contentChanges(c, op, text),
 			})
 		}
 
@@ -945,6 +971,16 @@ func (s *lspServer) apply(c *lsp.Client, op lspOp) {
 			logf("[%s] didClose: %v", s.cfg.Name, err)
 		}
 	}
+}
+
+// contentChanges picks the didChange payload: the incremental range edit when
+// the server accepts it, else the whole text.
+func (s *lspServer) contentChanges(c *lsp.Client, op lspOp, text string) []lsp.ContentChange {
+	if op.change != nil && !op.fromDisk && c.SyncKind() == lsp.SyncIncremental {
+		return []lsp.ContentChange{*op.change}
+	}
+
+	return []lsp.ContentChange{{Text: text}}
 }
 
 // onNotify runs on the client's read goroutine and must not block.

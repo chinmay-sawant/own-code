@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"sort"
-	"strconv"
 	"unicode/utf8"
 
 	"github.com/chinmay-sawant/own-code/internal/lsp"
@@ -52,6 +51,8 @@ func (a *App) completionAtCaret(ctx context.Context) error {
 // lspTyped is called after typed text lands in the edit buffer. A trigger
 // character requests completion; the open list re-filters on the next tick.
 func (a *App) lspTyped(text string) {
+	a.signatureTyped(text)
+
 	m := a.lspm
 	if m == nil || !m.enabled || a.edit == nil {
 		return
@@ -74,6 +75,49 @@ func (a *App) lspTyped(text string) {
 	}
 
 	a.requestCompletion(string(r))
+}
+
+// lspCommitBefore runs before typed text lands in the buffer: when the
+// completion list is open and text is a commit character of the selected item
+// (its own, else the server's allCommitCharacters), the item is accepted
+// first and the character then types normally after it.
+func (a *App) lspCommitBefore(text string) {
+	m := a.lspm
+	if m == nil || !m.ext.cmp.shown || !a.popup.open || a.popup.spec.Caret != cmpCaretTag || a.edit == nil {
+		return
+	}
+
+	r, size := utf8.DecodeRuneInString(text)
+	if size != len(text) || isIdentRune(r) || a.popup.index < 0 || a.popup.index >= len(a.popup.matches) {
+		return
+	}
+
+	it, ok := a.popup.spec.Items[a.popup.matches[a.popup.index]].Data.(lsp.CompletionItem)
+	if !ok {
+		return
+	}
+
+	chars := it.CommitCharacters
+
+	if len(chars) == 0 {
+		if ld := m.docs[a.edit.Path]; ld != nil && ld.server != nil {
+			ld.server.smu.Lock()
+			c := ld.server.client
+			ld.server.smu.Unlock()
+
+			if c != nil {
+				chars = c.CompletionCommitChars()
+			}
+		}
+	}
+
+	for _, ch := range chars {
+		if ch == text {
+			a.popupAccept()
+
+			return
+		}
+	}
 }
 
 // serverTriggers reports whether trigger starts completion for srv.
@@ -310,19 +354,27 @@ func (a *App) acceptCompletion(item popupItem) {
 		}
 	}
 
+	var stops []snippetStop
+
 	if it.InsertTextFormat == lsp.InsertSnippet {
-		var stop int
-		insert, stop = expandSnippet(insert)
-		defer func(base int) { a.setCaretAfterCompletion(base + stop) }(start)
+		insert, stops = parseSnippet(insert)
 	}
 
 	if len(it.AdditionalTextEdits) > 0 {
 		a.applyCompletionWithExtras(text, start, end, insert, it.AdditionalTextEdits)
 
+		if len(stops) > 0 {
+			a.setCaretAfterCompletion(start + stops[0].start)
+		}
+
 		return
 	}
 
 	_ = a.replaceEditRange(context.Background(), text, start, end, insert)
+
+	if len(stops) > 0 {
+		a.beginSnippet(start, stops)
+	}
 }
 
 func (a *App) setCaretAfterCompletion(pos int) {
@@ -414,97 +466,6 @@ func runeOffsetPos(runes []rune, off int) lsp.Position {
 	return lsp.Position{Line: line, Character: lsp.UTF16Len(string(runes[ls:off]))}
 }
 
-// expandSnippet reduces a basic LSP snippet ($1, ${1:name}, $0) to plain
-// text and returns the rune offset where the caret goes: the first tab stop
-// (lowest number above 0), else $0, else the end.
-func expandSnippet(s string) (string, int) {
-	var (
-		out      []rune
-		best     = -1
-		bestN    = 1 << 30
-		zeroAt   = -1
-		runes    = []rune(s)
-		recordAt = func(n int) {
-			switch {
-			case n == 0:
-				zeroAt = len(out)
-			case n < bestN:
-				best, bestN = len(out), n
-			}
-		}
-	)
-
-	for i := 0; i < len(runes); i++ {
-		r := runes[i]
-
-		switch {
-		case r == '\\' && i+1 < len(runes):
-			i++
-			out = append(out, runes[i])
-		case r == '$' && i+1 < len(runes) && runes[i+1] >= '0' && runes[i+1] <= '9':
-			j := i + 1
-			for j < len(runes) && runes[j] >= '0' && runes[j] <= '9' {
-				j++
-			}
-
-			n, _ := strconv.Atoi(string(runes[i+1 : j]))
-			recordAt(n)
-
-			i = j - 1
-		case r == '$' && i+1 < len(runes) && runes[i+1] == '{':
-			j := i + 2
-			for j < len(runes) && runes[j] >= '0' && runes[j] <= '9' {
-				j++
-			}
-
-			n, err := strconv.Atoi(string(runes[i+2 : j]))
-			if err != nil || j >= len(runes) {
-				out = append(out, r)
-
-				continue
-			}
-
-			recordAt(n)
-
-			// ${1:default} keeps the default; ${1} is empty. Nested
-			// placeholders are flattened by dropping their markers.
-			depth, k := 1, j
-			if runes[j] == ':' {
-				k = j + 1
-			}
-
-			for ; k < len(runes); k++ {
-				if runes[k] == '{' {
-					depth++
-				} else if runes[k] == '}' {
-					depth--
-					if depth == 0 {
-						break
-					}
-				} else if runes[k] == '\\' && k+1 < len(runes) {
-					k++
-					out = append(out, runes[k])
-				} else if j < len(runes) && runes[j] == ':' {
-					out = append(out, runes[k])
-				}
-			}
-
-			i = k
-		default:
-			out = append(out, r)
-		}
-	}
-
-	switch {
-	case best >= 0:
-		return string(out), best
-	case zeroAt >= 0:
-		return string(out), zeroAt
-	}
-
-	return string(out), len(out)
-}
-
 // completionKind names an LSP CompletionItemKind for the popup badge.
 func completionKind(k int) string {
 	switch k {
@@ -557,9 +518,7 @@ func (a *App) editCaretAnchor() (int, int, int) {
 	line, col := a.editDisplayLineCol()
 	row, rowStart := line, 0
 
-	if a.wrap {
-		plan := doc.wrapped(a.codeColsForGroup(group))
-
+	if plan := a.rowPlan(doc, group); plan != nil {
 		row = caretVisualRow(plan.Rows, line, col)
 		if row >= 0 && row < len(plan.Rows) {
 			rowStart = plan.Rows[row].Start

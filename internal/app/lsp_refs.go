@@ -283,14 +283,78 @@ func (a *App) renameSymbolAtCaret(ctx context.Context) error {
 	}
 
 	line, col := a.editCaretLineCol()
-	m.ext.refs.target = renameTarget{path: ld.path, line: line, col: col, word: word}
+	target := renameTarget{path: ld.path, line: line, col: col, word: word}
+
+	if !m.supportsPrepareRename(ld) {
+		return a.openRenamePrompt(ctx, m, target)
+	}
+
+	// Ask textDocument/prepareRename first: a null answer means the caret is
+	// not on something renamable; the placeholder pre-fills the name.
+	st := &m.ext.refs
+	st.nextID++
+	id := st.nextID
+	st.pending = id
+
+	m.callDoc(ld, line, col, func(ctx context.Context, c *lsp.Client, uri string, pos lsp.Position) (any, error) {
+		res, ok, err := c.PrepareRename(ctx, uri, pos)
+
+		return prepareOutcome{res: res, ok: ok}, err
+	}, func(ctx context.Context, res any, err error, fresh bool) bool {
+		if id != st.pending {
+			return false
+		}
+
+		st.pending = 0
+		out, _ := res.(prepareOutcome)
+
+		switch {
+		case err == nil && !out.ok:
+			a.showToast("info", "Rename symbol", fmt.Sprintf("%q cannot be renamed here.", word))
+		case !fresh:
+			a.showToast("info", "Rename symbol", "The file changed while renaming. Try again.")
+		default:
+			// On an error the server may simply not implement prepare: carry on.
+			t := target
+			if err == nil && out.res.Placeholder != "" {
+				t.word = out.res.Placeholder
+			}
+
+			_ = a.openRenamePrompt(ctx, m, t)
+		}
+
+		return true
+	})
+
+	return nil
+}
+
+// prepareOutcome is the result of a prepareRename call.
+type prepareOutcome struct {
+	res lsp.PrepareRenameResult
+	ok  bool
+}
+
+// supportsPrepareRename reports whether the document's server advertises
+// renameProvider.prepareProvider.
+func (m *lspManager) supportsPrepareRename(ld *lspDoc) bool {
+	ld.server.smu.Lock()
+	c := ld.server.client
+	ld.server.smu.Unlock()
+
+	return c != nil && c.SupportsPrepareRename()
+}
+
+// openRenamePrompt opens the symbol overlay as the rename prompt for t.
+func (a *App) openRenamePrompt(ctx context.Context, m *lspManager, t renameTarget) error {
+	m.ext.refs.target = t
 
 	a.paletteOpen = true
 	a.paletteMode = paletteModeSymbols
 	a.symbolScope = lspRenameScope
 	a.paletteIndex = 0
-	a.paletteQuery = word
-	a.symbolQuery = word
+	a.paletteQuery = t.word
+	a.symbolQuery = t.word
 	a.refresh()
 
 	if err := a.page.Redraw(ctx); err != nil {
@@ -560,11 +624,15 @@ func (a *App) applyLSPRename(ctx context.Context) error {
 		a.replaceJournalMsg = ""
 	}
 
-	msg := fmt.Sprintf("%s to %s in %d files", plan.word, plan.name, written)
+	msg, title, done := fmt.Sprintf("%s to %s in %d files", plan.word, plan.name, written), "Rename symbol", "Renamed"
+	if plan.word == "" {
+		msg, title, done = fmt.Sprintf("Applied in %d files", written), "Code actions", "Applied"
+	}
+
 	if len(failed) > 0 {
-		a.showToast("error", "Rename symbol", msg+"; skipped (changed meanwhile): "+strings.Join(failed, ", "))
+		a.showToast("error", title, msg+"; skipped (changed meanwhile): "+strings.Join(failed, ", "))
 	} else {
-		a.showToast("success", "Renamed", msg)
+		a.showToast("success", done, msg)
 	}
 
 	a.refresh()

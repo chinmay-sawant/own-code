@@ -46,10 +46,7 @@ func (a *App) decorateCodeRows(doc *fileDoc, rows []codeRow, group int) {
 		if i > 0 && line == lines[i-1]+1 {
 			continue
 		}
-		visual := line - 1
-		if a.wrap {
-			visual = doc.wrapped(a.codeColsForGroup(group)).firstRow(visual)
-		}
+		visual := a.rowOfLine(doc, group, line-1)
 		if visual > current {
 			break
 		}
@@ -142,10 +139,7 @@ func (a *App) showInlineCard(line int) {
 	hasPrev, hasNext := inlineCardBounds(lines, line, index)
 
 	visual := line - 1
-	if a.wrap {
-		plan := doc.wrapped(a.codeColsForGroup(0))
-		visual = plan.firstRow(line - 1)
-	}
+	visual = a.rowOfLine(doc, 0, line-1)
 
 	rowTop := a.zx(editorBodyTop) + a.stickyTopPx(0) + (visual-a.scrollY/a.zx(rowH))*a.zx(rowH)
 	newText := ""
@@ -201,10 +195,7 @@ func (a *App) showSelectionCard(doc *fileDoc, start, end int) {
 		return
 	}
 	visual := start - 1
-	if a.wrap {
-		plan := doc.wrapped(a.codeColsForGroup(0))
-		visual = plan.firstRow(start - 1)
-	}
+	visual = a.rowOfLine(doc, 0, start-1)
 	rowTop := a.zx(editorBodyTop) + a.stickyTopPx(0) + (visual-a.scrollY/a.zx(rowH))*a.zx(rowH)
 	lines := append([]string(nil), doc.Lines[start-1:end]...)
 	card := inlineCardForSelection(rowTop, a.pageWidth(), a.viewportH, start, end, doc.Path, lines)
@@ -241,10 +232,7 @@ func (a *App) refreshInlineCardSelection() bool {
 	left, top := a.inlineCard.Left, a.inlineCard.Top
 	offX, offY := a.inlineCard.OffX, a.inlineCard.OffY
 	visual := start - 1
-	if a.wrap {
-		plan := doc.wrapped(a.codeColsForGroup(0))
-		visual = plan.firstRow(start - 1)
-	}
+	visual = a.rowOfLine(doc, 0, start-1)
 	_ = visual
 	rowTop := a.zx(editorBodyTop) + a.stickyTopPx(0) + (visual-a.scrollY/a.zx(rowH))*a.zx(rowH)
 	lines := append([]string(nil), doc.Lines[start-1:end]...)
@@ -289,10 +277,7 @@ func (a *App) cardAnchor() (int, int, bool) {
 	}
 	left := a.windowControlLeftPx() + inlineCardLeft
 	visual := line - 1
-	if a.wrap {
-		plan := doc.wrapped(a.codeColsForGroup(0))
-		visual = plan.firstRow(line - 1)
-	}
+	visual = a.rowOfLine(doc, 0, line-1)
 	rowTop := a.zx(editorBodyTop) + a.stickyTopPx(0) + (visual-a.scrollY/a.zx(rowH))*a.zx(rowH)
 	return left, inlineCardTop(rowTop, a.viewportH), true
 }
@@ -408,8 +393,7 @@ func (a *App) currentSourceLine() int {
 
 	visual := scroll / a.zx(rowH)
 
-	if a.wrap {
-		plan := doc.wrapped(a.codeColsForGroup(0))
+	if plan := a.rowPlan(doc, 0); plan != nil {
 		if len(plan.Rows) == 0 {
 			return 0
 		}

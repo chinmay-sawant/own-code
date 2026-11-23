@@ -32,11 +32,11 @@
 - [x] Workspace symbols behind `Ctrl+T`. Evidence: `lsp_symbols.go` (`workspace/symbol`, debounced; falls back to the local symbol index with no server).
 
 **Phase 3: editing intelligence**
-- [x] Completion popup: trigger chars + `Ctrl+Space`, client-side filtering while typing, basic snippets (`$1`/`${1:x}`/`$0`, caret at first stop), `textEdit`/`additionalTextEdits`. Evidence: `internal/lsp/features.go`, `internal/app/lsp_completion.go`, `lsp_features_test.go`, gated screenshot `TestScreenshotLSPFeatures`. Not done: commit characters, placeholder selection/tab-stop cycling, `completionItem/resolve`.
-- [ ] Signature help.
-- [x] Rename symbol with a preview of `WorkspaceEdit` (shared confirm dialog). Evidence: `lsp_refs.go`, `internal/lsp/edits.go`, tests. `F2` or palette. The open buffer changes in place (one `Ctrl+Z`); other files are written to disk and undone with the existing Undo replace. Refuses dirty files, files outside the workspace, and resource operations. No `prepareRename`.
+- [x] Completion popup: trigger chars + `Ctrl+Space`, client-side filtering while typing, basic snippets (`$1`/`${1:x}`/`$0`, caret at first stop), `textEdit`/`additionalTextEdits`. Evidence: `internal/lsp/features.go`, `internal/app/lsp_completion.go`, `lsp_features_test.go`, gated screenshot `TestScreenshotLSPFeatures`. Commit characters (item `commitCharacters`, else server `allCommitCharacters`) accept the selected item as you type; the first placeholder is selected and `Tab` cycles the remaining stops (`lsp_snippet.go`, `lsp_extras_test.go`). `completionItem/resolve` has a client method (`Client.ResolveCompletion`) but is not wired into accept.
+- [x] Signature help: popup card on `(`, `,` and server trigger characters, closed by `)`/`Esc`; palette `LSP: Signature Help`. Evidence: `internal/app/lsp_signature.go`, `internal/lsp/extras.go`, `lsp_extras_test.go`.
+- [x] Rename symbol with a preview of `WorkspaceEdit` (shared confirm dialog). Evidence: `lsp_refs.go`, `internal/lsp/edits.go`, tests. `F2` or palette. The open buffer changes in place (one `Ctrl+Z`); other files are written to disk and undone with the existing Undo replace. Refuses dirty files, files outside the workspace, and resource operations. `textDocument/prepareRename` runs first when the server advertises it: a refusal shows a toast, a placeholder pre-fills the name.
 - [ ] Format document / selection; format on save (opt-in).
-- [ ] Code actions (quick fix lightbulb): apply `WorkspaceEdit`, run commands.
+- [x] Code actions: `Ctrl+.` or palette `LSP: Code Actions (Quick Fix)` lists `textDocument/codeAction` results (with the caret line's diagnostics); the edit goes through the rename confirm dialog, commands run via `workspace/executeCommand`, lazy edits via `codeAction/resolve`. Evidence: `internal/app/lsp_codeaction.go`, `lsp_extras_test.go`. Not done: the gutter lightbulb; no `workspace/applyEdit` server requests.
 
 **Phase 4: polish**
 - [ ] Incremental sync (needs range-based edits from the buffer; see `19`).

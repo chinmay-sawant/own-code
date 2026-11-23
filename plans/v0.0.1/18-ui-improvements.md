@@ -10,7 +10,7 @@ Grouped by effort. Items marked (LSP) are prerequisites for `17-lsp.md`.
 
 ## Editor surface
 - [ ] Minimap (optional toggle, off by default for the memory story). Render from cached line density, not full tokens.
-- [ ] Code folding with gutter chevrons (indent-based first, LSP ranges later). Not started: the code view windows rows by source line index (`windowSlice*`, `visualRowAt`, `sourceLineAt`, wrap plan, sticky scroll, hover, caret visibility), so hiding rows needs a visible-line map threaded through all of them first. Plan: add a `foldMap` (visible row -> source line) on `fileDoc`, route those helpers through it, then add chevrons and fold/unfold commands.
+- [x] Code folding with gutter chevrons (indent-based). Evidence: `internal/app/fold.go`, `fold_ops.go`, `fold_test.go`. One row<->line mapping layer (`rowPlan`, `rowOfLine`, `lineOfRow`) now backs the window slice, click/hover/goto hit testing, sticky scroll, caret visibility, vertical caret movement, and scroll-to-line; folded lines are skipped by the wrap plan (rows equal lines again when nothing is folded). Click a chevron or use palette Fold/Unfold/Fold All/Unfold All or Ctrl+Shift+[ / ]. The caret moves to the fold's first line when a fold hides it, and landing in a hidden line unfolds it. Fold state follows edits (kept when the header is unchanged, shifted by the line-count delta, dropped otherwise). Left: brace-based and LSP ranges, persisting folds in the session, folding the Markdown preview/diff views.
 - [x] Indent guides (one per indent level on leading spaces, both editor groups) and matching-bracket highlight at the caret while editing (`bracket_match.go`, `.indent-guide` / `.bracket-match` in `base.css`). Bracket-pair colorization and current-line highlight remain open.
 - [ ] Whitespace rendering toggle (Phase 5 of the master checklist lists it; verify it shipped).
 - [ ] Sticky scroll exists (`15-sticky-scroll.md`); extend it to Markdown headings.
@@ -21,7 +21,7 @@ Grouped by effort. Items marked (LSP) are prerequisites for `17-lsp.md`.
 ## Explorer and Source Control
 - [ ] Drag and drop move/copy in the explorer; multi-select; inline rename (F2) and new file/folder inline row.
 - [ ] Outline and Timeline (file history) sections in the sidebar.
-- [ ] SCM (partial: stage/unstage hunk and stash list/apply/push shipped via the palette; lines, amend, branch create/delete, discard confirm, graph filter remain): stage/unstage hunks and lines (stage_commit exists at file level), stash, amend, branch create/delete, discard confirmation, and a graph filter by author/path.
+- [ ] SCM (partial: stage/unstage hunk (also in the diff hunk context menu) and stash list/apply/push shipped; lines, amend, branch create/delete, discard confirm, graph filter remain): stage/unstage hunks and lines (stage_commit exists at file level), stash, amend, branch create/delete, discard confirmation, and a graph filter by author/path.
 - [ ] Inline blame text at end of line (gutter blame exists).
 - [ ] Open the diff of any two files / any two commits / HEAD vs working tree from the palette. (Two commits/branches shipped as `>compare a b`; files and HEAD vs worktree remain.)
 
@@ -30,7 +30,7 @@ Grouped by effort. Items marked (LSP) are prerequisites for `17-lsp.md`.
 - [ ] Screen-reader labels already have a test (`accessibility_labels_test.go`); extend it to new popups.
 - [ ] Focus rings on all interactive rows; verify every dialog traps Tab (the README says overlays do; add a test per new overlay).
 - [ ] Keymap import (VS Code `keybindings.json`) to lower switching cost.
-- [ ] First-run welcome: show 6 core shortcuts and the "Open Folder" flow; link the in-app Settings.
+- [x] First-run welcome: the empty-editor card lists 6 core shortcuts (`welcome-core-keys`), recent files and a Settings link. Not done: a dedicated Open Folder step.
 - [ ] Themes: ten exist; add a "match OS light/dark" mode and a theme preview in Settings.
 
 ## Visual polish

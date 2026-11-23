@@ -37,6 +37,10 @@ type CompletionItem struct {
 	// range is used.
 	TextEdit            *TextEdit  `json:"-"`
 	AdditionalTextEdits []TextEdit `json:"additionalTextEdits,omitempty"`
+	// CommitCharacters accept the item when typed; Data round-trips through
+	// completionItem/resolve.
+	CommitCharacters []string        `json:"commitCharacters,omitempty"`
+	Data             json.RawMessage `json:"data,omitempty"`
 }
 
 // UnmarshalJSON accepts both TextEdit and InsertReplaceEdit in textEdit.

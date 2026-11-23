@@ -266,18 +266,16 @@ func (m *lspManager) hoverTargetIn(group int, boxX, boxY, x, y float64) (hoverTa
 	}
 
 	scrollY := a.hoverScrollY(group)
-	cols := a.codeColsForGroup(group)
 	rh := a.zx(rowH)
 	visual := visualRowAt(int(y)-sticky, int(boxY), scrollY, rh)
 	line, rowStart := visual, 0
 
-	if a.wrap {
-		plan := doc.wrapped(cols)
+	if plan := a.rowPlan(doc, group); plan != nil {
 		if visual < 0 || visual >= len(plan.Rows) {
 			return hoverTarget{}, false
 		}
 
-		line, rowStart = sourceLineAt(doc, cols, visual), plan.Rows[visual].Start
+		line, rowStart = plan.Rows[visual].Line, plan.Rows[visual].Start
 	}
 
 	raw := ""

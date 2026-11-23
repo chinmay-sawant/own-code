@@ -26,6 +26,7 @@ type wrapPlanArena struct {
 // on the document and rebuilt only when the available column count changes.
 type wrapPlan struct {
 	Cols  int
+	fold  *foldHidden
 	Rows  []codeRow
 	First []int
 	arena wrapPlanArena
@@ -43,7 +44,8 @@ func (d *fileDoc) wrapped(cols int) *wrapPlan {
 		cols = 1
 	}
 
-	if d.Wrap != nil && d.Wrap.Cols == cols {
+	fold := d.foldMask()
+	if d.Wrap != nil && d.Wrap.Cols == cols && d.Wrap.fold == fold {
 		return d.Wrap
 	}
 
@@ -54,6 +56,7 @@ func (d *fileDoc) wrapped(cols int) *wrapPlan {
 	}
 
 	plan.Cols = cols
+	plan.fold = fold
 	plan.Rows = plan.Rows[:0]
 	plan.arena.offsets = plan.arena.offsets[:0]
 	plan.arena.lengths = plan.arena.lengths[:0]
@@ -66,6 +69,10 @@ func (d *fileDoc) wrapped(cols int) *wrapPlan {
 
 	for line, tokens := range d.Tokens {
 		plan.First[line] = len(plan.Rows)
+		if fold != nil && fold.mask[line] {
+			continue
+		}
+
 		plan.wrapLine(line, tokens, cols)
 	}
 

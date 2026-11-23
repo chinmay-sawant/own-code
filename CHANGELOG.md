@@ -10,6 +10,11 @@ First tagged release. The feature set below is what already exists on
 (`plans/v0.0.1/`).
 
 ### Added
+- LSP: completion commit characters, snippet placeholder selection with
+  `Tab` cycling, `prepareRename`, signature help, and code actions
+  (`Ctrl+.`) applied through the rename confirm dialog.
+- Diff hunk context menu: Unstage Hunk. Welcome card lists six core
+  shortcuts.
 - Command palette: fuzzy matching with highlighted characters, right-aligned
   keybindings, recently used commands pinned first, `Task: Run Task…`
   (Makefile, package.json, go, cargo) running in the integrated terminal.

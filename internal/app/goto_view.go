@@ -99,17 +99,15 @@ func (a *App) pointerLineColIn(group int, boxX, boxY, x, y float64) (int, int, b
 	}
 
 	scrollY := a.hoverScrollY(group)
-	cols := a.codeColsForGroup(group)
 	visual := visualRowAt(int(y)-sticky, int(boxY), scrollY, a.zx(rowH))
 	line, rowStart := visual, 0
 
-	if a.wrap {
-		plan := doc.wrapped(cols)
+	if plan := a.rowPlan(doc, group); plan != nil {
 		if visual < 0 || visual >= len(plan.Rows) {
 			return 0, 0, false
 		}
 
-		line, rowStart = sourceLineAt(doc, cols, visual), plan.Rows[visual].Start
+		line, rowStart = plan.Rows[visual].Line, plan.Rows[visual].Start
 	}
 
 	if line < 0 || line >= len(doc.Lines) {

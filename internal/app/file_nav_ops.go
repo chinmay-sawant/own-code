@@ -93,10 +93,7 @@ func (a *App) fileNavChangeRows(path string) []int {
 	previous := -1
 	for _, line := range inlineChangeLines(a.changedLinesFor(path)) {
 		if line != previous+1 {
-			row := line - 1
-			if a.wrap {
-				row = doc.wrapped(a.codeColsForGroup(a.activeGroup())).firstRow(row)
-			}
+			row := a.rowOfLine(doc, a.activeGroup(), line-1)
 			rows = append(rows, row)
 		}
 		previous = line

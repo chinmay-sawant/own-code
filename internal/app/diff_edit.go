@@ -116,9 +116,10 @@ func (a *App) centerCaretInView() {
 
 	line, col := a.editDisplayLineCol()
 	row := line
-	if a.wrap {
-		if doc := a.groupDoc(0); doc != nil {
-			row = caretVisualRow(doc.wrapped(a.codeColsForGroup(0)).Rows, line, col)
+	if doc := a.groupDoc(0); doc != nil {
+		doc.revealLine(line)
+		if plan := a.rowPlan(doc, 0); plan != nil {
+			row = caretVisualRow(plan.Rows, line, col)
 		}
 	}
 
