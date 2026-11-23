@@ -41,9 +41,11 @@ const (
 	paletteCmdCloseLeft    = "close-left"
 	paletteCmdCloseRight   = "close-right"
 	paletteCmdCloseAllTabs = "close-all-tabs"
-	// Go command id: jumps to the definition of the symbol at the caret.
-	paletteCmdGotoDefinition = "goto-definition"
-	paletteCmdBlame          = "blame-toggle"
+	// Go command ids: jump to definition, declaration, or type definition.
+	paletteCmdGotoDefinition     = "goto-definition"
+	paletteCmdGotoDeclaration    = "goto-declaration"
+	paletteCmdGotoTypeDefinition = "goto-type-definition"
+	paletteCmdBlame              = "blame-toggle"
 	// View command id for the sticky-scroll toggle.
 	paletteCmdStickyScroll = "toggle-sticky"
 	// LSP command id: opens the language-server trace.
@@ -1062,27 +1064,19 @@ func paletteCommandCatalog() []paletteRow {
 		{Cmd: paletteCmdCloseRight, Name: "Tab: Close to the Right", Dir: "Close tabs right of the active one"},
 		{Cmd: paletteCmdCloseAllTabs, Name: "Tab: Close All", Dir: "Close every tab in the focused group"},
 		{Cmd: paletteCmdGotoDefinition, Name: "Go: Go to Definition", Dir: "Jump to the definition at the caret (Ctrl+D)"},
+		{Cmd: paletteCmdGotoDeclaration, Name: "Go: Go to Declaration", Dir: "Jump to the declaration via language server"},
+		{Cmd: paletteCmdGotoTypeDefinition, Name: "Go: Go to Type Definition", Dir: "Jump to the type definition via language server"},
 		{Cmd: paletteCmdBlame, Name: "View: Toggle Blame", Dir: "Show the last commit for every line (B)"},
 		{Cmd: paletteCmdLSPLog, Name: "LSP: Show log", Dir: "Open the language server trace"},
 		{Cmd: paletteCmdStickyScroll, Name: "View: Toggle Sticky Scroll", Dir: "Pin the enclosing symbols above the editor (T)"},
-	}, popupDemoCatalog()...)
+	}, append(lspCommandCatalog(), popupDemoCatalog()...)...)
 }
 
 // paletteCommandRows filters the command catalog by the text after `>`.
 func (a *App) paletteCommandRows() []paletteRow {
-	query := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.paletteQuery), ">")))
+	query := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.paletteQuery), ">"))
 
-	rows := make([]paletteRow, 0, len(paletteCommandCatalog()))
-
-	for _, row := range paletteCommandCatalog() {
-		if query != "" && !strings.Contains(strings.ToLower(row.Name), query) {
-			continue
-		}
-
-		rows = append(rows, row)
-	}
-
-	return rows
+	return a.rankedCommandRows(query)
 }
 
 // isPaletteCommandMode reports whether the palette query opens command mode.
@@ -1094,6 +1088,16 @@ func (a *App) isPaletteCommandMode() bool {
 // the paste precedence: the focused tree row, else the active document's
 // directory, else the root.
 func (a *App) runPaletteCommand(ctx context.Context, id string) error {
+	a.notePaletteCommand(id)
+
+	if handled, err := a.runLSPPaletteCommand(ctx, id); handled {
+		return err
+	}
+
+	if handled, err := a.runExtraPaletteCommand(ctx, id); handled {
+		return err
+	}
+
 	closePalette := func() {
 		a.paletteOpen = false
 		a.paletteQuery = ""
@@ -1176,6 +1180,14 @@ func (a *App) runPaletteCommand(ctx context.Context, id string) error {
 		closePalette()
 
 		return a.gotoDefinitionAtCaret(ctx)
+	case paletteCmdGotoDeclaration:
+		closePalette()
+
+		return a.gotoDeclarationAtCaret(ctx)
+	case paletteCmdGotoTypeDefinition:
+		closePalette()
+
+		return a.gotoTypeDefinitionAtCaret(ctx)
 	case paletteCmdBlame:
 		closePalette()
 		a.toggleBlame()

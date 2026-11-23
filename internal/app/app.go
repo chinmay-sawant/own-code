@@ -191,19 +191,22 @@ type App struct {
 	// ratio at grab time and dx accumulates the pointer delta in page px.
 	splitDrag splitDividerDrag
 
-	editing    bool
-	edit       *edit.Buffer
-	dirty      map[string]bool
-	editCaret  int
-	editAnchor int
+	editing   bool
+	edit      *edit.Buffer
+	dirty     map[string]bool
+	editCaret int
+	// viewPointerHook is a test seam for the pointer position (line, col) used by read-only Go to Definition.
+	viewPointerHook func() (int, int, bool)
+	editAnchor      int
 	// bracketOn flashes the match of the bracket at the caret; BracketLine
 	// and BracketFrom/To locate it in source coordinates.
-	bracketOn   bool
-	bracketLine int
-	bracketFrom int
-	bracketTo   int
-	editUndo    []editSnapshot
-	editRedo    []editSnapshot
+	bracketOn    bool
+	bracketCache bracketMatchCache
+	bracketLine  int
+	bracketFrom  int
+	bracketTo    int
+	editUndo     []editSnapshot
+	editRedo     []editSnapshot
 	// revertUndo/revertRedo store forward hunk patches for Ctrl+Z restore
 	// after a mistaken discard. Separate from editUndo so text and hunk
 	// histories never clobber each other.
@@ -608,6 +611,10 @@ type App struct {
 	termRows           int
 	termAppCursor      bool
 	termBracketedPaste bool
+
+	// palx holds command palette extras: recently used commands, the ref
+	// comparison, and cached task/stash discovery (see palette_commands.go).
+	palx paletteExtra
 
 	lspm *lspManager
 
@@ -1386,6 +1393,10 @@ func (a *App) buildView() View {
 	v.TerminalZoom = a.zoomPerViewValue("terminal")
 	v.EditorZoomLabel = a.zoomPerViewLabel("editor")
 	v.TerminalZoomLabel = a.zoomPerViewLabel("terminal")
+	if a.settingsOpen && a.settingsTabName() == "lsp" {
+		v.LSPOn = lspEnabled(a.settings.LSP)
+		v.LSPRows = a.lspSettingsRows()
+	}
 	v.KeymapCapture = a.keymapCapture
 	v.KeymapPending = a.keymapPendingMessage()
 
@@ -1511,6 +1522,7 @@ func (a *App) fillCode(v *View) {
 		a.decorateCodeRows(doc, v.Rows, 0)
 		a.decorateDiagnostics(doc, v.Rows)
 		a.decorateEditRows(v.Rows)
+		a.decorateGuides(doc, v.Rows, 0)
 		a.decorateBlame(doc, v.Rows, 0)
 
 		return
@@ -1531,6 +1543,7 @@ func (a *App) fillCode(v *View) {
 	a.decorateCodeRows(doc, v.Rows, 0)
 	a.decorateDiagnostics(doc, v.Rows)
 	a.decorateEditRows(v.Rows)
+	a.decorateGuides(doc, v.Rows, 0)
 	a.decorateBlame(doc, v.Rows, 0)
 
 	a.sliceUnwrappedCodeRowsFor(v.Rows, cols, 0)
@@ -3645,6 +3658,9 @@ func (a *App) rebuildDiffRows() {
 
 func (a *App) readBranchChanges(ctx context.Context) (changeSet, error) {
 	var changes changeSet
+	if cmp := a.palx.compare; cmp[0] != "" && !a.ws.Sample {
+		return loadRefsChanges(ctx, a.ws.Root, cmp[0], cmp[1])
+	}
 	if a.ws.Sample {
 		changes = sampleChangeSet()
 		changes.Note = "Bundled sample: combined changes from the sample branch commits."
@@ -3668,6 +3684,13 @@ func (a *App) readBranchChanges(ctx context.Context) (changeSet, error) {
 }
 
 func (a *App) showBranchChanges(ctx context.Context) {
+	a.presentBranchChanges(ctx, [2]string{})
+}
+
+// presentBranchChanges shows the branch view; a non-empty compare pair
+// shows a two-ref comparison from the command palette instead.
+func (a *App) presentBranchChanges(ctx context.Context, compare [2]string) {
+	a.palx.compare = compare
 	if a.mode == "merge" {
 		a.leaveMergeMode()
 		a.mode = "changes"

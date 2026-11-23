@@ -221,6 +221,8 @@ type lspView struct {
 	First, Last int
 	Prev, Next  bool
 	Problems    []problemRow
+	// Progress is the active server work-done text for the status bar.
+	Progress string
 }
 
 // rebuildProblems updates the ordered index once for each diagnostics batch.
@@ -271,6 +273,7 @@ func (a *App) lspViewData() lspView {
 	}
 	v := lspView{problemCounts: m.problemSummary}
 	v.Open = a.problemsOpen
+	v.Progress = m.progressText()
 	v.Show = len(m.servers) > 0 || v.Total > 0
 	if !v.Open {
 		return v

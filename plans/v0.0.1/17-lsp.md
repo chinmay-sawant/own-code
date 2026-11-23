@@ -26,15 +26,15 @@
 - [x] Diagnostics: squiggle spans in the editor, gutter marker, status-bar counts, and a Problems list in the Details drawer (click to jump). Clear on close. Evidence: `internal/app/lsp_diag.go`, `lsp_sync_test.go`. Problems list shows the first 8 entries.
 - [x] Hover popup on mouse dwell (about 400 ms), rendered with the popup widget's Markdown card. Evidence: `internal/lsp/hover.go`, `internal/app/lsp_hover.go`, `lsp_hover_test.go` (fake server, UTF-16 position with a non-BMP rune, stale drop, dismissal rules, gopls-gated test). Not done: the `Ctrl+K Ctrl+I` keyboard chord.
 - [x] Server registry defaults for web languages: HTML, CSS/SCSS/Less, JSON/JSONC (`initializationOptions: {provideFormatter: true}`), Markdown (`marksman server`), YAML; per-server `initializationOptions` in settings. Evidence: `internal/lsp/registry.go`, `registry_test.go`, `internal/app/lsp_settings.go`.
-- [ ] Go to Definition / Declaration / Type Definition via LSP; **fall back to the current text-index path** when no server or no result (keep `goto_definition.go` as the fallback; do not delete).
-- [ ] Find References as a results panel (reuse the workspace-search result list UI).
-- [ ] Document symbols replace `outline.go` when a server is running; regex outline remains the fallback.
-- [ ] Workspace symbols behind `Ctrl+T` (already mentioned in goto-def toasts).
+- [x] Go to Definition / Declaration / Type Definition via LSP; **fall back to the current text-index path** when no server or no result (keep `goto_definition.go` as the fallback; do not delete). Evidence: `internal/lsp/definition.go`, `definition_test.go`, `internal/app/lsp_definition.go`, `lsp_definition_test.go`, `goto_definition.go`, `explorer_ops.go` (`textDocument/definition`, `declaration`, `typeDefinition`, `LocationLink`, UTF-16 col conversion, external-file jump, stale-reply drop, automatic fallback to text index).
+- [x] Find References as a results panel (reuse the workspace-search result list UI). Evidence: `internal/app/lsp_refs.go`, `lsp_features_test.go` (`Shift+F12`, palette `LSP: Find References`; hits install into the search panel).
+- [x] Document symbols replace `outline.go` when a server is running; regex outline remains the fallback. Evidence: `internal/app/lsp_symbols.go`, `lsp_features_test.go` (drawer outline and `Ctrl+Shift+O`; fallback on error, empty reply, or stale version).
+- [x] Workspace symbols behind `Ctrl+T`. Evidence: `lsp_symbols.go` (`workspace/symbol`, debounced; falls back to the local symbol index with no server).
 
 **Phase 3: editing intelligence**
-- [ ] Completion popup: trigger chars + `Ctrl+Space`, filter client-side as the user types, commit chars, snippet placeholders (basic `$1`/`${1:x}` only first). Needs a popup widget (see `18-ui-improvements.md`).
+- [x] Completion popup: trigger chars + `Ctrl+Space`, client-side filtering while typing, basic snippets (`$1`/`${1:x}`/`$0`, caret at first stop), `textEdit`/`additionalTextEdits`. Evidence: `internal/lsp/features.go`, `internal/app/lsp_completion.go`, `lsp_features_test.go`, gated screenshot `TestScreenshotLSPFeatures`. Not done: commit characters, placeholder selection/tab-stop cycling, `completionItem/resolve`.
 - [ ] Signature help.
-- [ ] Rename symbol with a preview of `WorkspaceEdit` (reuse workspace-replace confirm UI; one undo for the whole edit).
+- [x] Rename symbol with a preview of `WorkspaceEdit` (shared confirm dialog). Evidence: `lsp_refs.go`, `internal/lsp/edits.go`, tests. `F2` or palette. The open buffer changes in place (one `Ctrl+Z`); other files are written to disk and undone with the existing Undo replace. Refuses dirty files, files outside the workspace, and resource operations. No `prepareRename`.
 - [ ] Format document / selection; format on save (opt-in).
 - [ ] Code actions (quick fix lightbulb): apply `WorkspaceEdit`, run commands.
 
@@ -42,7 +42,7 @@
 - [ ] Incremental sync (needs range-based edits from the buffer; see `19`).
 - [ ] Semantic tokens to improve highlighting where available.
 - [ ] Inlay hints (opt-in), folding ranges from the server (feeds folding in `19`).
-- [ ] Progress (`$/progress`) in the status bar: "gopls: indexing".
+- [x] Progress (`$/progress`) in the status bar: "gopls: Indexing 42%". Evidence: `internal/app/lsp_progress.go`, `lsp_features_test.go`.
 
 ## Risks and decisions
 - **Threading:** all server I/O off the UI loop. Results are delivered via the app's existing async/"stale-drop" pattern used by history and search.

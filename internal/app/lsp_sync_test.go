@@ -30,6 +30,11 @@ type fakeLSP struct {
 	hoverResult string
 	hoverDelay  time.Duration
 	hovers      []lsp.HoverParams
+	// defResult is the raw JSON result for definition/declaration/typeDefinition.
+	defResult string
+	defDelay  time.Duration
+	defs      []lsp.TextDocumentPositionParams
+	defMethod []string
 }
 
 func (f *fakeLSP) count(method string) int {
@@ -79,6 +84,23 @@ func (f *fakeLSP) connect(_ lsp.ServerConfig, _ string, opt lsp.Options) (*lsp.C
 				f.mu.Lock()
 				f.hovers = append(f.hovers, p)
 				res, delay := f.hoverResult, f.hoverDelay
+				f.mu.Unlock()
+
+				time.Sleep(delay)
+
+				if res == "" {
+					res = "null"
+				}
+
+				_ = conn.Write(&lsp.Message{ID: m.ID, Result: json.RawMessage(res)})
+			case "textDocument/definition", "textDocument/declaration", "textDocument/typeDefinition":
+				var p lsp.TextDocumentPositionParams
+				_ = json.Unmarshal(m.Params, &p)
+
+				f.mu.Lock()
+				f.defs = append(f.defs, p)
+				f.defMethod = append(f.defMethod, m.Method)
+				res, delay := f.defResult, f.defDelay
 				f.mu.Unlock()
 
 				time.Sleep(delay)

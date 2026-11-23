@@ -120,6 +120,8 @@ type Info struct {
 type ClientCapabilities struct {
 	TextDocument map[string]any `json:"textDocument,omitempty"`
 	General      map[string]any `json:"general,omitempty"`
+	Window       map[string]any `json:"window,omitempty"`
+	Workspace    map[string]any `json:"workspace,omitempty"`
 }
 
 // InitializeResult is the server reply to initialize.

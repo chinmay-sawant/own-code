@@ -195,3 +195,11 @@
   color: var(--dim);
   font-size: 9px;
 }
+
+/* Command palette extras: fuzzy highlights and right-aligned keybindings. */
+#palette-panel .palette-cmd .palette-text b,
+#palette-panel .palette-cmd .palette-text span.cmd-desc { width: 400px; }
+#palette-panel .palette-text .fz { display: inline; width: auto; color: inherit; font-size: inherit; }
+#palette-panel .palette-text .fz-hit { display: inline; width: auto; color: var(--accent); font-size: inherit; font-weight: 700; }
+#palette-panel .palette-keys { margin-left: auto; min-width: 70px; max-width: 100px; text-align: right; color: var(--dim); font-family: var(--mono); font-size: 9px; white-space: nowrap; overflow: hidden; }
+#palette-panel .palette-recent { color: var(--accent); font-size: 8px; }

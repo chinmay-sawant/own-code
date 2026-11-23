@@ -246,6 +246,23 @@ func (c *Client) Initialize(ctx context.Context, rootDir string) error {
 				"synchronization":    map[string]any{"didSave": true},
 				"publishDiagnostics": map[string]any{},
 				"hover":              map[string]any{"contentFormat": []string{"markdown", "plaintext"}},
+				"definition":         map[string]any{"linkSupport": true},
+				"declaration":        map[string]any{"linkSupport": true},
+				"typeDefinition":     map[string]any{"linkSupport": true},
+				"references":         map[string]any{},
+				"rename":             map[string]any{"prepareSupport": false},
+				"documentSymbol":     map[string]any{"hierarchicalDocumentSymbolSupport": true},
+				"completion": map[string]any{
+					"completionItem": map[string]any{
+						"snippetSupport":      true,
+						"documentationFormat": []string{"plaintext"},
+					},
+				},
+			},
+			Window: map[string]any{"workDoneProgress": true},
+			Workspace: map[string]any{
+				"workspaceEdit": map[string]any{"documentChanges": true},
+				"symbol":        map[string]any{},
 			},
 			General: map[string]any{"positionEncodings": []string{"utf-16"}},
 		},

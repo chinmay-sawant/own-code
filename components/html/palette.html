@@ -77,7 +77,8 @@
       {{if .Cmd}}
       <button class="palette-row palette-cmd{{if .Active}} on{{end}}" id="palette-cmd-{{.Cmd}}" data-action="palette-cmd:{{.Cmd}}" type="button" aria-label="{{.Name}}">
         <span class="ficon cmd-badge">&gt;</span>
-        <span class="palette-text"><b>{{.Name}}</b><span>{{.Dir}}</span></span>
+        <span class="palette-text"><b>{{if .NameParts}}{{range .NameParts}}<span class="{{if .Hit}}fz-hit{{else}}fz{{end}}">{{.Text}}</span>{{end}}{{else}}{{.Name}}{{end}}</b><span class="cmd-desc">{{if .Recent}}Recent · {{end}}{{.Dir}}</span></span>
+        {{if .Keys}}<span class="palette-keys">{{.Keys}}</span>{{end}}
         <span class="palette-go">↵</span>
       </button>
       {{else if .Symbol}}

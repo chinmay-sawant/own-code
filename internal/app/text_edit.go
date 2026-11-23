@@ -55,7 +55,13 @@ func (a *App) onType(ctx context.Context, text string) error {
 		return err
 	}
 
-	return a.insertEditText(ctx, text)
+	if err := a.insertEditText(ctx, text); err != nil {
+		return err
+	}
+
+	a.lspTyped(text)
+
+	return nil
 }
 
 // onBackspace deletes the selection or the rune before the caret.

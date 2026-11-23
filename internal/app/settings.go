@@ -92,6 +92,8 @@ type globalSettings struct {
 	MaxFPS int `json:"maxFps,omitempty"`
 	// LSP configures language servers; see lsp_settings.go.
 	LSP *lspSettings `json:"lsp,omitempty"`
+	// Format configures format-on-save; see format_save.go.
+	Format *formatSettings `json:"format,omitempty"`
 }
 
 // defaultSettingsPath returns the global file beside the per-workspace
@@ -147,6 +149,11 @@ func loadSettings(path string) (globalSettings, error) {
 			_ = json.Unmarshal(value, &s.Excludes)
 		case "maxFps":
 			_ = json.Unmarshal(value, &s.MaxFPS)
+		case "format":
+			var f formatSettings
+			if json.Unmarshal(value, &f) == nil {
+				s.Format = &f
+			}
 		case "lsp":
 			var l lspSettings
 			if json.Unmarshal(value, &l) == nil {
@@ -227,6 +234,7 @@ func (s globalSettings) sanitize() globalSettings {
 	}
 	s.Theme = validTheme(s.Theme)
 	s.LSP = s.LSP.sanitize()
+	s.Format = s.Format.sanitize()
 	if s.FontSize == 0 {
 		s.FontSize = defaultFontSize
 	} else {
@@ -795,6 +803,7 @@ func (a *App) settingsSnapshot() globalSettings {
 	if keymap := a.keymapDiffs(); len(keymap) > 0 {
 		s.Keymap = keymap
 	}
+	s.LSP = a.settings.LSP
 	return s.sanitize()
 }
 
@@ -1140,7 +1149,7 @@ func chordFromEvent(ctrl, shift bool, key string) string {
 // appearance for unknown or empty values.
 func (a *App) settingsTabName() string {
 	switch a.settingsTab {
-	case "keyboard", "files", "help", "about":
+	case "keyboard", "files", "lsp", "help", "about":
 		return a.settingsTab
 	default:
 		return "appearance"

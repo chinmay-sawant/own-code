@@ -10,6 +10,13 @@ First tagged release. The feature set below is what already exists on
 (`plans/v0.0.1/`).
 
 ### Added
+- Command palette: fuzzy matching with highlighted characters, right-aligned
+  keybindings, recently used commands pinned first, `Task: Run Task…`
+  (Makefile, package.json, go, cargo) running in the integrated terminal.
+- Git review commands: unstage hunk, stash push and apply, and a two-ref
+  diff from the palette.
+- Settings: Language servers tab with a master switch, per-server toggles
+  and live status; the `lsp` block now survives settings saves.
 - Explorer with lazy directory loading, filterable project browser, recent
   projects, and WSL distro handoff.
 - In-place editor: save, dirty markers, unsaved-close prompt, auto-save,

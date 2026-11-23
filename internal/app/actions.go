@@ -553,6 +553,9 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.persistSession()
 		a.persistSettings()
 		a.refresh()
+	case action == "lsp-master-toggle" || strings.HasPrefix(action, "lsp-server-toggle:"):
+		_, err := a.lspSettingsAction(ctx, action)
+		return err
 	case strings.HasPrefix(action, "settings-tab:"):
 		a.settingsTab = strings.TrimPrefix(action, "settings-tab:")
 		a.resetSettingsScroll()
@@ -2473,6 +2476,12 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 	// events, mirroring the Ctrl+Shift+F/V chords below.
 	if a.ctrl && a.shift && key == "o" {
 		return a.openSymbolPalette(ctx)
+	}
+
+	// LSP chords: Ctrl+Space completion, F2 rename, Shift+F12 references,
+	// Ctrl+T workspace symbols.
+	if handled, err := a.lspKeyDown(ctx, key); handled || err != nil {
+		return err
 	}
 
 	// Ctrl+D jumps to the definition of the symbol under the caret. F12

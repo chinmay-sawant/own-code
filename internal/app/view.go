@@ -220,6 +220,8 @@ type View struct {
 	KeymapCapture     string
 	KeymapPending     string
 	HelpRows          []keymapRow
+	LSPOn             bool
+	LSPRows           []lspServerRow
 	AppName           string
 	AppVersion        string
 	AppScope          string

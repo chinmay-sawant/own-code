@@ -30,7 +30,7 @@ func (a *App) symbolRows(query string) []symbolRow {
 		lines = doc.Lines
 	}
 
-	full := outlineFull(doc.Lang, lines)
+	full := a.docSymbolRows(doc, lines)
 	q := strings.ToLower(strings.TrimSpace(query))
 
 	if q == "" {
@@ -78,6 +78,10 @@ func (a *App) symbolRows(query string) []symbolRow {
 // overlay. No is 1-based so the sibling symbol-open:path:line action (and
 // its template) round-trips through cutSymbolAction.
 func (a *App) symbolPaletteRows() []paletteRow {
+	if rows, ok := a.lspSymbolPaletteRows(); ok {
+		return rows
+	}
+
 	syms := a.symbolRows(a.paletteQuery)
 	rows := make([]paletteRow, 0, len(syms))
 
@@ -156,6 +160,10 @@ func (a *App) openSymbolPalette(ctx context.Context) error {
 // submitSymbol jumps to the selected symbol row: scroll plus caret move,
 // exiting preview like gotoLine.
 func (a *App) submitSymbol(ctx context.Context) error {
+	if handled, err := a.lspSubmitSymbol(ctx); handled {
+		return err
+	}
+
 	rows := a.symbolRows(a.paletteQuery)
 	if len(rows) == 0 {
 		return nil

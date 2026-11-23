@@ -446,8 +446,8 @@ func TestPaletteCommandMode(t *testing.T) {
 
 	app.paletteQuery = ">"
 	rows := app.paletteRows()
-	if len(rows) != len(paletteCommandCatalog()) {
-		t.Fatalf("command rows = %d, want %d", len(rows), len(paletteCommandCatalog()))
+	if want := len(paletteCommandCatalog()) + len(paletteExtraCatalog()); len(rows) != want {
+		t.Fatalf("command rows = %d, want %d", len(rows), want)
 	}
 
 	for _, row := range rows {
@@ -458,7 +458,7 @@ func TestPaletteCommandMode(t *testing.T) {
 
 	app.paletteQuery = ">fold"
 	rows = app.paletteRows()
-	if len(rows) != 1 || rows[0].Cmd != "new-folder" {
+	if len(rows) == 0 || rows[0].Cmd != "new-folder" {
 		t.Fatalf("filtered rows = %+v, want the new-folder command", rows)
 	}
 

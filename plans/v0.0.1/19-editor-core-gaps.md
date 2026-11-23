@@ -3,10 +3,10 @@
 These sit under the LSP work; several are prerequisites.
 
 ## Buffer model (do before incremental LSP sync)
-- [ ] Replace snapshot-undo (`editSnapshot` stores full text) with an operation/edit log: `Edit{rangeStart, rangeEnd, text}`. Gains: cheap undo for big files, incremental `didChange`, multi-cursor-safe edits.
+- [ ] Replace snapshot-undo (`editSnapshot` stores full text) with an operation/edit log: `Edit{rangeStart, rangeEnd, text}`. Gains: cheap undo for big files, incremental `didChange`, multi-cursor-safe edits. Step done: `internal/edit/op.go` adds `Edit` with `Diff`, `Apply`, `Invert`, and `MapOffset` plus property tests (random diff/apply/invert round trips). Remaining: record an `Edit` per undo entry in `internal/app/text_edit.go` instead of `editSnapshot`, and feed `Diff` to an incremental `didChange` in `lsp_sync.go`.
 - [ ] Choose the data structure: piece table or rope for files over about 1 MB. Keep the current `[]string` lines path for small files if it benchmarks better (`perf_editor_bench_test.go` is the gate).
 - [ ] Raise or remove the 512 KB / 20,000-line caps once the above lands. Keep a read-only "large file mode" (no highlighting, no LSP) above a new, documented cap (say 50 MB).
-- [ ] Add `internal/edit` property tests: random edit sequences, undo/redo round-trip, selection mapping.
+- [ ] Add `internal/edit` property tests: random edit sequences, undo/redo round-trip, selection mapping. Done for `Edit` diff/apply/invert and buffer text round trips; undo/redo stacks and selection mapping still live in `internal/app`.
 
 ## Features
 - [ ] Multi-cursor: `Ctrl+Alt+Up/Down`, `Alt+Click`, `Ctrl+D` is taken by go-to-definition, so use `Ctrl+Shift+L` "select all occurrences" and a rebindable "add next occurrence".
@@ -17,7 +17,7 @@ These sit under the LSP work; several are prerequisites.
 - [ ] Emmet and snippets (user-defined JSON snippets first).
 - [ ] Encoding and EOL: detect UTF-8 BOM/UTF-16/Latin-1, show in status bar, convert. Preserve original EOL on save (workspace replace already preserves CRLF).
 - [x] `.editorconfig` support (tab width, indent style, trim trailing whitespace on save; final newline is always written by the buffer).
-- [ ] Format-on-save hook for external formatters (`gofmt`, `prettier`) before LSP formatting exists.
+- [x] Format-on-save hook for external formatters (`gofmt`, `prettier`) before LSP formatting exists. `internal/app/format_save.go`; `format` block in `settings.json` (`onSave`, per-extension `formatters`); missing tool, non-zero exit, or timeout skips silently. LSP `textDocument/formatting` not wired.
 - [ ] Per-file undo history survives tab switch (verify) and optionally restarts (session).
 
 ## Highlighting

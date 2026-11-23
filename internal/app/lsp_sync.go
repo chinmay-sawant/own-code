@@ -84,6 +84,8 @@ type lspManager struct {
 	timer *time.Timer
 	log   *lspLog
 	hv    hoverState
+	def   defState
+	ext   lspExt // completion, references, rename, symbols, progress state
 
 	inboxMu sync.Mutex
 	inbox   []lspEvent
@@ -97,6 +99,8 @@ const (
 	lspEvFailed
 	lspEvExited
 	lspEvHover
+	lspEvDefinition
+	lspEvFunc // runs ev.fn on the loop (generic async replies, lsp_request.go)
 )
 
 // lspEvent travels from server goroutines to the loop.
@@ -109,7 +113,10 @@ type lspEvent struct {
 	diags      []lspDiag
 	err        error
 	hoverID    int
+	reqID      int
 	text       string
+	locs       []lsp.Location
+	fn         func(ctx context.Context) bool
 }
 
 // lspManager returns the app's manager, creating it on first use.
@@ -189,7 +196,7 @@ func (a *App) pollLSP(ctx context.Context) error {
 	}
 
 	hoverWasShown := m.hv.shown
-	changed := m.drain()
+	changed := m.drain(ctx)
 
 	if !lspSettingsEqual(m.cfg, a.settings.LSP) {
 		m.shutdownAll(false)
@@ -209,6 +216,14 @@ func (a *App) pollLSP(ctx context.Context) error {
 
 	changed = m.stopIdle() || changed
 	m.pollHover()
+
+	if m.completionPoll() {
+		changed = true
+	}
+
+	if m.pollSymbols() {
+		changed = true
+	}
 
 	if changed {
 		a.refresh()
@@ -494,7 +509,7 @@ func (m *lspManager) stopIdle() bool {
 }
 
 // drain applies server events on the loop.
-func (m *lspManager) drain() bool {
+func (m *lspManager) drain(ctx context.Context) bool {
 	m.inboxMu.Lock()
 	events := m.inbox
 	m.inbox = nil
@@ -510,6 +525,14 @@ func (m *lspManager) drain() bool {
 			}
 		case lspEvHover:
 			if m.applyHover(ev) {
+				changed = true
+			}
+		case lspEvDefinition:
+			if m.applyDefinition(ctx, ev) {
+				changed = true
+			}
+		case lspEvFunc:
+			if ev.fn != nil && ev.fn(ctx) {
 				changed = true
 			}
 		case lspEvFailed:
@@ -710,6 +733,8 @@ const (
 	lspOpClose
 	lspOpStop
 	lspOpHover
+	lspOpDefinition
+	lspOpCall // runs op.call on the server goroutine (lsp_request.go)
 )
 
 type lspOp struct {
@@ -721,8 +746,11 @@ type lspOp struct {
 	text     string
 	fromDisk bool
 	hoverID  int
-	line     int // hover: zero-based source line
-	col      int // hover: rune column in the raw line
+	reqID    int
+	method   string
+	line     int // hover/definition: zero-based source line
+	col      int // hover/definition: rune column in the raw line
+	call     func(c *lsp.Client, sent *lspSent)
 }
 
 // lspSent is what the server was last told about one document, so
@@ -894,6 +922,16 @@ func (s *lspServer) apply(c *lsp.Client, op lspOp) {
 		}
 	case lspOpHover:
 		s.startHover(c, op)
+	case lspOpDefinition:
+		s.startDefinition(c, op)
+	case lspOpCall:
+		s.smu.Lock()
+		sent := s.sent[op.uri]
+		s.smu.Unlock()
+
+		if op.call != nil {
+			op.call(c, sent)
+		}
 	case lspOpSave:
 		if err := c.Notify("textDocument/didSave", lsp.DidSaveParams{TextDocument: lsp.TextDocumentIdentifier{URI: op.uri}}); err != nil {
 			logf("[%s] didSave: %v", s.cfg.Name, err)
@@ -911,6 +949,12 @@ func (s *lspServer) apply(c *lsp.Client, op lspOp) {
 
 // onNotify runs on the client's read goroutine and must not block.
 func (s *lspServer) onNotify(method string, params json.RawMessage) {
+	if method == "$/progress" {
+		s.onProgress(params)
+
+		return
+	}
+
 	if method != "textDocument/publishDiagnostics" {
 		return
 	}
