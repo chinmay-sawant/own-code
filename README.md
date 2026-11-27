@@ -94,19 +94,10 @@ Manual alternative: grab your OS/arch file from the
 [latest release](https://github.com/chinmay-sawant/own-code/releases/latest),
 save it as `own-code` somewhere on your `PATH`, and `chmod +x` it.
 
-Build from source instead (run it next to `ownframe` and `blinkless`
-checkouts, since `go.work` and `go.mod` point at `../ownframe` and
-`../blinkless`; only their Go sources are needed, so sparse checkouts keep
-them small):
+Build from source instead:
 
 ```sh
 git clone https://github.com/chinmay-sawant/own-code.git
-for repo in ownframe blinkless; do
-  git clone --depth 1 --branch master --filter=blob:none --sparse \
-    "https://github.com/chinmay-sawant/$repo.git"
-  git -C "$repo" sparse-checkout set --no-cone \
-    '/*.go' '/go.mod' '/internal/' '/css/' '/html/' '/layout/' '/markup/'
-done
 cd own-code
 ./install-local.sh
 ```
@@ -153,7 +144,7 @@ VS Code is a general IDE and plugin host on Electron. own-code is a single-purpo
 
 | | VS Code | own-code |
 |---|---|---|
-| **Runtime** | Electron shell with 15+ helper processes | One static Go binary, no runtime to install |
+| **Runtime** | Electron shell with 15+ helper processes | One Go executable, no separate runtime to install |
 | **Idle memory** | ~1,166–1,440 MB RSS across those processes | ~200 MB RSS, one process |
 | **Startup work** | Background indexing over seconds | One scan up to the file budget, then it idles |
 | **Account and extensions** | Account, settings sync, extension host | None. No login, no plugins |
