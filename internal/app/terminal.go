@@ -375,16 +375,6 @@ func (a *App) pasteTerminal(text string) {
 	a.writeTerminal([]byte(text))
 }
 
-// pasteTerminalClipboard reads the OS clipboard and forwards it to the shell.
-func (a *App) pasteTerminalClipboard() {
-	text, err := ownframe.Read()
-	if err != nil || text == "" {
-		return
-	}
-
-	a.pasteTerminal(text)
-}
-
 // terminalOwnsKeys reports whether typed keys and clipboard chords belong to
 // the terminal rather than the editor or a focused form field.
 func (a *App) terminalOwnsKeys() bool {

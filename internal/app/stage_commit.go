@@ -100,30 +100,6 @@ func (a *App) unstagedHunkPatch(ctx context.Context, path string, oldStart, oldC
 	return patch, true
 }
 
-// stageClickedBlock resolves the line control back to its contiguous source
-// block and stages it, mirroring revertClickedBlock.
-func (a *App) stageClickedBlock(ctx context.Context, index int, id string) error {
-	_, coordinates, ok := strings.Cut(strings.TrimPrefix(id, "revert-line-"), "-")
-	if !ok {
-		return nil
-	}
-
-	oldText, newText, ok := strings.Cut(coordinates, "-")
-	if !ok {
-		return nil
-	}
-
-	oldNo, _ := strconv.Atoi(oldText)
-	newNo, _ := strconv.Atoi(newText)
-
-	sel, found := a.hunkBlockSelection(index, oldNo, newNo)
-	if !found {
-		return nil
-	}
-
-	return a.stageHunk(ctx, index, sel)
-}
-
 // hunkBlockSelection finds the contiguous changed block holding one of two
 // source line numbers. It mirrors the walk in revertClickedBlock so the
 // stage and discard menu rows address the same block.

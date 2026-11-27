@@ -88,7 +88,9 @@ func BenchmarkTerminalOutputRefresh(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		a.termVersion = ^uint64(0)
-		a.pollTerminal(context.Background())
+		if err := a.pollTerminal(context.Background()); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 

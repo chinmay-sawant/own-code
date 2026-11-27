@@ -16,13 +16,11 @@ import (
 // four-space default because their text is not one file.
 
 const (
-	defaultTabSize    = 4
-	indentOverrideCap = sessionMaxPaths
-	ecMaxDepth        = 24
+	defaultTabSize = 4
+	ecMaxDepth     = 24
 )
 
-// indentOverride pins one file's indentation. Size 0 means auto and Spaces
-// nil means auto; sanitize drops fully-auto entries.
+// indentOverride stores optional indentation settings for one file.
 type indentOverride struct {
 	Size   int   `json:"size,omitempty"`
 	Spaces *bool `json:"spaces,omitempty"`
@@ -65,78 +63,6 @@ func (a *App) uiUseEditorConfig() bool {
 	}
 
 	return a.useEditorConfig
-}
-
-// expandTabsSized replaces tabs with size spaces and strips a trailing CR.
-// Tabs make column alignment impossible, so the viewer never prints one.
-func expandTabsSized(text string, size int) string {
-	if size <= 0 {
-		size = defaultTabSize
-	}
-
-	text = strings.TrimSuffix(text, "\r")
-
-	if !strings.ContainsRune(text, '\t') {
-		return text
-	}
-
-	pad := strings.Repeat(" ", size)
-
-	var b strings.Builder
-	b.Grow(len(text) + size)
-
-	for _, r := range text {
-		if r == '\t' {
-			b.WriteString(pad)
-
-			continue
-		}
-
-		b.WriteRune(r)
-	}
-
-	return b.String()
-}
-
-// rawColumnAtSize turns a display column, with tabs expanded to size, back
-// into a raw rune column in the buffer line.
-func rawColumnAtSize(line string, displayCol, size int) int {
-	if size <= 0 {
-		size = defaultTabSize
-	}
-
-	if displayCol <= 0 {
-		return 0
-	}
-
-	cells := 0
-	for i, r := range []rune(line) {
-		width := 1
-		if r == '\t' {
-			width = size
-		}
-
-		if cells+width > displayCol {
-			return i
-		}
-
-		cells += width
-		if cells == displayCol {
-			return i + 1
-		}
-	}
-
-	return len([]rune(line))
-}
-
-// displayColumnSize expands the prefix of one buffer line with size.
-func displayColumnSize(text string, line, col, size int) int {
-	raw := []rune(lineTextAt(text, line))
-	if col > len(raw) {
-		col = len(raw)
-	}
-
-	return len([]rune(expandTabsSized(string(raw[:col]), size)))
 }
 
 // resolveIndent returns the width, style, and source for one file.
@@ -232,37 +158,6 @@ func (a *App) indentSizeFor(path string) int {
 	return size
 }
 
-// indentLabelFor is the status-bar and details label for one file, with a
-// source marker only for pinned and editorconfig results so plain detection
-// keeps its historic bare form.
-func (a *App) indentLabelFor(path string) string {
-	var lines []string
-	if doc := a.docs[path]; doc != nil {
-		lines = doc.Lines
-	}
-
-	size, spaces, source := a.resolveIndent(path, lines)
-
-	var base string
-	if !spaces {
-		base = "Tabs"
-		if size != defaultTabSize {
-			base = fmt.Sprintf("Tabs: %d", size)
-		}
-	} else {
-		base = fmt.Sprintf("Spaces: %d", size)
-	}
-
-	switch source {
-	case "pin":
-		return base + " · pin"
-	case "ec":
-		return base + " · ec"
-	default:
-		return base
-	}
-}
-
 // parseSpacesLabel reads the width out of a "Spaces: N" label.
 func parseSpacesLabel(label string) (int, bool) {
 	rest, ok := strings.CutPrefix(label, "Spaces: ")
@@ -276,102 +171,6 @@ func parseSpacesLabel(label string) (int, bool) {
 	}
 
 	return n, true
-}
-
-// sanitizeIndentOverrides drops bad keys, invalid entries, and caps the map.
-func sanitizeIndentOverrides(overrides map[string]indentOverride) map[string]indentOverride {
-	if len(overrides) == 0 {
-		return nil
-	}
-
-	out := make(map[string]indentOverride, min(len(overrides), indentOverrideCap))
-
-	for _, path := range sortedKeys(overrides) {
-		if len(out) >= indentOverrideCap {
-			break
-		}
-
-		clean, ok := cleanSessionPath(path)
-		if !ok {
-			continue
-		}
-
-		ov := overrides[path]
-		if ov.Spaces != nil {
-			size := 0
-			if ov.Size == 2 || ov.Size == 4 || ov.Size == 8 {
-				size = ov.Size
-			}
-			out[clean] = indentOverride{Size: size, Spaces: ov.Spaces}
-			continue
-		}
-
-		if ov.Size == 2 || ov.Size == 4 || ov.Size == 8 {
-			out[clean] = indentOverride{Size: ov.Size}
-		}
-	}
-
-	if len(out) == 0 {
-		return nil
-	}
-
-	return out
-}
-
-// setIndentOverride pins one file. A nil spaces with size 0 clears the pin.
-func (a *App) setIndentOverride(path string, ov indentOverride) bool {
-	clean, ok := cleanSessionPath(path)
-	if !ok {
-		return false
-	}
-
-	if ov.Size == 0 && ov.Spaces == nil {
-		delete(a.indentByFile, clean)
-		if len(a.indentByFile) == 0 {
-			a.indentByFile = nil
-		}
-
-		return true
-	}
-
-	if a.indentByFile == nil {
-		a.indentByFile = map[string]indentOverride{}
-	}
-
-	a.indentByFile[clean] = ov
-
-	for len(a.indentByFile) > indentOverrideCap {
-		for _, path := range a.groupPaths() {
-			delete(a.indentByFile, path)
-			break
-		}
-	}
-
-	return true
-}
-
-// reexpandDoc re-reads every open, unmodified document with its resolved tab
-// width and retokenizes it. Dirty files and the live edit buffer keep their
-// text.
-func (a *App) reexpandDoc() {
-	for path, doc := range a.docs {
-		if doc == nil || a.isDirty(path) {
-			continue
-		}
-
-		if a.editing && a.edit != nil && a.edit.Path == path {
-			continue
-		}
-
-		fresh := a.ws.openDoc(path)
-		if fresh.Err != "" || fresh.Binary {
-			continue
-		}
-
-		a.docs[path] = fresh
-	}
-
-	a.refresh()
 }
 
 // detectIndent reports the indentation the file actually uses. It scores

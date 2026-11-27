@@ -20,12 +20,12 @@ func startDetached(logPath string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer logFile.Close()
+	defer func() { _ = logFile.Close() }()
 	devNull, err := os.Open(os.DevNull)
 	if err != nil {
 		return 0, err
 	}
-	defer devNull.Close()
+	defer func() { _ = devNull.Close() }()
 
 	cmd := exec.Command(exe, os.Args[1:]...) //nolint:gosec // re-exec of this binary with the operator's own arguments
 	cmd.Env = append(os.Environ(), detachEnv+"=1")

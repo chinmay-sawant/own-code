@@ -11,8 +11,8 @@ import (
 // two modes: a keyboard-navigable item list and a read-only content card. The
 // model here is pure; popup_view.go paints it and popup_keys.go routes input.
 //
-// Callers use showPopup / hidePopup and the helpers popupSetItems,
-// popupSetFilter, popupMove, popupAccept, and popupCaretMoved.
+// Callers use showPopup / hidePopup and the helpers popupSetFilter,
+// popupMove, popupAccept, and popupCaretMoved.
 const (
 	popupRowH       = 22  // one list row
 	popupPad        = 4   // list padding top and bottom
@@ -269,17 +269,6 @@ func (a *App) clearPopup(reason popupDismiss) bool {
 	}
 
 	return true
-}
-
-// popupSetItems swaps the list items, keeping the selection when it survives.
-func (a *App) popupSetItems(items []popupItem) {
-	if !a.popup.open {
-		return
-	}
-
-	a.popup.spec.Items = items
-	a.popup.refilter(true)
-	a.refreshPopup()
 }
 
 // popupSetFilter sets the item filter text and refilters the list.

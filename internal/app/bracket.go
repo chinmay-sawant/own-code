@@ -19,7 +19,7 @@ func matchBracket(text, lang string, caret int) (match int, ok bool) {
 	caret = edit.ClampPos(caret, len(runes))
 	skip := bracketSkipSet(lang, text)
 
-	at := -1
+	var at int
 
 	if caret < len(runes) && isBracketRune(runes[caret]) && !skip[caret] {
 		at = caret

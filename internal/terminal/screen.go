@@ -1066,18 +1066,6 @@ func cloneLine(line []Cell) Line {
 	return clone
 }
 
-func cloneGrid(grid [][]Cell) []Line {
-	lines := make([]Line, len(grid))
-	for y, row := range grid {
-		lines[y] = cloneLine(row)
-	}
-	return lines
-}
-
-func resizeGrid(grid [][]Cell, cols, rows int) [][]Cell {
-	return resizeGridShifted(grid, cols, rows, 0)
-}
-
 // resizeGridShifted keeps rows starting at shift, then blanks the tail.
 func resizeGridShifted(grid [][]Cell, cols, rows, shift int) [][]Cell {
 	if shift < 0 {

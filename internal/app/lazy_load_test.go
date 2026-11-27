@@ -93,10 +93,18 @@ func TestLazyRetryPermission(t *testing.T) {
 	}
 	dir := t.TempDir()
 	writeFile(t, dir, "README.md", "# F\n")
-	os.MkdirAll(filepath.Join(dir, "locked"), 0o700)
+	if err := os.MkdirAll(filepath.Join(dir, "locked"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	writeFile(t, dir, "locked/a.go", "package x\n")
-	os.Chmod(filepath.Join(dir, "locked"), 0o000)
-	defer os.Chmod(filepath.Join(dir, "locked"), 0o700)
+	if err := os.Chmod(filepath.Join(dir, "locked"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.Chmod(filepath.Join(dir, "locked"), 0o700); err != nil {
+			t.Errorf("restore locked directory permissions: %v", err)
+		}
+	}()
 
 	app, err := New(dir)
 	if err != nil {
@@ -123,7 +131,9 @@ func TestLazyRetryPermission(t *testing.T) {
 		t.Fatal("no retry row visible")
 	}
 	// Fix perms and retry.
-	os.Chmod(filepath.Join(dir, "locked"), 0o700)
+	if err := os.Chmod(filepath.Join(dir, "locked"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	node.Loaded = false
 	node.LoadErr = ""
 	app.requestDirLoad("locked")
@@ -145,7 +155,9 @@ func TestLazyDirChildCap(t *testing.T) {
 	for i := 0; i < 25; i++ {
 		writeFile(t, dir, "many/file.go", "package many\n")
 		// unique names
-		os.Rename(filepath.Join(dir, "many/file.go"), filepath.Join(dir, "many", "file"+string(rune('a'+i%26))+string(rune('0'+i/26))+".go"))
+		if err := os.Rename(filepath.Join(dir, "many/file.go"), filepath.Join(dir, "many", "file"+string(rune('a'+i%26))+string(rune('0'+i/26))+".go")); err != nil {
+			t.Fatal(err)
+		}
 	}
 	// Ensure 25 files exist.
 	entries, _ := os.ReadDir(filepath.Join(dir, "many"))

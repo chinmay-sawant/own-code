@@ -41,11 +41,8 @@ func TestFindbarLayoutKeepsBodyStatic(t *testing.T) {
 			return track, firstNo, paneLeft, paneWidth, secondLeft, secondWidth
 		}
 
-		plain := [6]int{}
-		{
-			track, firstNo, paneLeft, paneWidth, secondLeft, secondWidth := snap()
-			plain = [6]int{track, firstNo, paneLeft, paneWidth, secondLeft, secondWidth}
-		}
+		track, firstNo, paneLeft, paneWidth, secondLeft, secondWidth := snap()
+		plain := [6]int{track, firstNo, paneLeft, paneWidth, secondLeft, secondWidth}
 
 		if err := app.openReplace(ctx); err != nil {
 			t.Fatalf("split=%v: open replace: %v", split, err)

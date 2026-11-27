@@ -83,17 +83,3 @@ func trimSavedLines(original string) []string {
 
 	return strings.Split(strings.TrimSuffix(original, "\n"), "\n")
 }
-
-// cycleTrimMode steps off to touched to all and back to off.
-func (a *App) cycleTrimMode() {
-	switch validTrimMode(a.trimMode) {
-	case "":
-		a.trimMode = "touched"
-	case "touched":
-		a.trimMode = "all"
-	default:
-		a.trimMode = ""
-	}
-
-	a.refresh()
-}

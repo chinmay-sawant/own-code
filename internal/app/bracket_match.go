@@ -55,7 +55,7 @@ func (a *App) passiveBracketPair() (int, int, bool) {
 	caret := edit.ClampPos(a.editCaret, len(runes))
 	at := caret
 
-	if !(at < len(runes) && isBracketRune(runes[at]) && bracketSkipAt(runes, at, match)) {
+	if at >= len(runes) || !isBracketRune(runes[at]) || !bracketSkipAt(runes, at, match) {
 		at = caret - 1
 	}
 

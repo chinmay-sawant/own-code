@@ -157,15 +157,6 @@ func loadDiskWorkspaceWithLimit(root string, limit int) (*workspace, error) {
 	return loadDiskWorkspaceInner(root, limit, nil)
 }
 
-// loadDiskWorkspaceInner is the filtered walk behind both wrappers above.
-// Custom scan excludes hide files and pruned dirs at walk time; hard skips
-// (skipDir, symlinks, depth, binary) always run first and win.
-// loadDiskWorkspaceLazyExcludes reads root with a custom-excludes filter.
-// A nil filter behaves exactly like loadDiskWorkspaceLazy.
-func loadDiskWorkspaceLazyExcludes(root string, filter *scanExcludes) (*workspace, error) {
-	return loadDiskWorkspaceLazyInner(root, filter)
-}
-
 // loadDiskWorkspaceLazy reads only the immediate entries of root for on-demand expansion.
 func loadDiskWorkspaceLazy(root string) (*workspace, error) {
 	return loadDiskWorkspaceLazyInner(root, nil)

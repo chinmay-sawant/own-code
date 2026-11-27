@@ -1,9 +1,6 @@
 package app
 
-import (
-	"sort"
-	"strings"
-)
+import "strings"
 
 // isDirty reports whether path has unsaved edits. The dirty map is the
 // single source of truth per path; a missing key reads as clean.
@@ -109,21 +106,6 @@ func (a *App) discardDirty(path string) {
 	delete(a.dirty, path)
 }
 
-// dirtyPathsSorted lists every dirty path in stable order for status copy.
-func (a *App) dirtyPathsSorted() []string {
-	var out []string
-
-	for path, d := range a.dirty {
-		if d {
-			out = append(out, path)
-		}
-	}
-
-	sort.Strings(out)
-
-	return out
-}
-
 // pathOpenInTabs reports whether path is still open in any group.
 func (a *App) pathOpenInTabs(path string) bool {
 	if path == "" {
@@ -143,20 +125,6 @@ func (a *App) pathOpenInTabs(path string) bool {
 	}
 
 	return false
-}
-
-// cleanStaleDirty drops a dirty entry whose path left every tab. Callers
-// that closed the last holder of a clean path use this so false entries
-// never linger.
-func (a *App) cleanStaleDirty(path string) {
-	if !a.pathOpenInTabs(path) {
-		// A folded-but-dirty doc whose tab just closed keeps its text in
-		// a.docs until the dialog arm decides; only drop clean entries
-		// here. The unsaved gate handles dirty holders explicitly.
-		if !a.isDirty(path) {
-			delete(a.dirty, path)
-		}
-	}
 }
 
 // dirtyGroupPaths is the ordered dirty subset of an explicit close set,

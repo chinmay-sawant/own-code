@@ -168,13 +168,6 @@ func (d *fileDoc) foldMask() *foldHidden {
 	return view
 }
 
-// lineHidden reports whether a source line is inside a folded region.
-func (d *fileDoc) lineHidden(line int) bool {
-	view := d.foldMask()
-
-	return view != nil && line >= 0 && line < len(view.mask) && view.mask[line]
-}
-
 // foldedAt reports whether line is the start of a collapsed fold.
 func (d *fileDoc) foldedAt(line int) bool {
 	if d == nil {
@@ -215,20 +208,6 @@ func (d *fileDoc) toggleFold(line int) bool {
 	d.Wrap = nil
 
 	return true
-}
-
-// enclosingFold returns the innermost region start that contains line,
-// counting a region's first line too. It returns -1 when none does.
-func (d *fileDoc) enclosingFold(line int) int {
-	best := -1
-
-	for start, end := range d.foldRegions() {
-		if line >= start && line <= end && start > best {
-			best = start
-		}
-	}
-
-	return best
 }
 
 // foldAround toggles the fold that covers line: the region opening on the

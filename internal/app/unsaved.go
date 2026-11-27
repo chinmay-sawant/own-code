@@ -483,7 +483,7 @@ func (a *App) pathOpenElsewhere(path string, group, index int) bool {
 			continue
 		}
 
-		if !(group == 0 && i == index) {
+		if group != 0 || i != index {
 			return true
 		}
 	}
@@ -493,7 +493,7 @@ func (a *App) pathOpenElsewhere(path string, group, index int) bool {
 			continue
 		}
 
-		if !(group == 1 && i == index) {
+		if group != 1 || i != index {
 			return true
 		}
 	}
@@ -659,11 +659,6 @@ func (a *App) requestMergeLeave(proceed func(context.Context) error) bool {
 	a.refresh()
 
 	return true
-}
-
-// mergeLeaveRequested reports whether a merge guard opened a dialog.
-func (a *App) mergeLeaveRequested() bool {
-	return a.confirmOpen && a.confirmMerge
 }
 
 // requestCloseMergeEditor gates the merge-editor close on a dirty result.

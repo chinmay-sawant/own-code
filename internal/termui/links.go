@@ -199,7 +199,7 @@ func parsePythonLinks(rs []rune) []Link {
 	var out []Link
 	n := len(rs)
 	for i := 0; i+6 < n; i++ {
-		if !(rs[i] == 'F' && rs[i+1] == 'i' && rs[i+2] == 'l' && rs[i+3] == 'e' && rs[i+4] == ' ') {
+		if rs[i] != 'F' || rs[i+1] != 'i' || rs[i+2] != 'l' || rs[i+3] != 'e' || rs[i+4] != ' ' {
 			continue
 		}
 		quote := rs[i+5]
@@ -231,7 +231,7 @@ func parsePythonLinks(rs []rune) []Link {
 		for k < n && (rs[k] == ' ' || rs[k] == '\t') {
 			k++
 		}
-		if k+4 > n || !(rs[k] == 'l' && rs[k+1] == 'i' && rs[k+2] == 'n' && rs[k+3] == 'e') {
+		if k+4 > n || rs[k] != 'l' || rs[k+1] != 'i' || rs[k+2] != 'n' || rs[k+3] != 'e' {
 			i = j
 			continue
 		}

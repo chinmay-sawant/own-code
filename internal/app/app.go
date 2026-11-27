@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"time"
 
@@ -106,11 +105,7 @@ const (
 	// project path). The templates carry the same maxlength="255" so the
 	// engine clamps typing/paste; the Go clamp below covers restored
 	// state and programmatic sets.
-	maxFieldLen = 255
-	// mruMax is the MRU switcher window. The persisted list and the
-	// welcome panel keep maxRecent; only the switcher shows this wider
-	// window.
-	mruMax        = 20
+	maxFieldLen   = 255
 	treeParentPad = 2
 
 	scrollStep = 96
@@ -420,12 +415,6 @@ type App struct {
 
 	settingsOpen bool
 	theme        string
-	// lineNumbersSet/showLineNumbers drive the gutter number column:
-	// unset defaults to shown.
-	lineNumbersSet  bool
-	showLineNumbers bool
-	// relativeNumbers toggles relative gutter numbers.
-	relativeNumbers bool
 	// tabSize is the global indent width (0 = auto per file).
 	// insertSet/insertSpaces pin the global indent style (default spaces).
 	// ecSet/useEditorConfig gate .editorconfig (default on).
@@ -440,8 +429,6 @@ type App struct {
 	// trimMode is the global trailing-whitespace mode ("" = auto).
 	ecCache  map[string]ecFile
 	trimMode string
-	// wrapByFile pins per-file soft-wrap overrides.
-	wrapByFile map[string]bool
 	// explorerInput is the inline new-file / rename prompt state.
 	explorerInput explorerInputState
 	// replaceOpen shows the in-file replace bar. findError carries an
@@ -539,10 +526,7 @@ type App struct {
 	symbolScope string
 	symIndex    *symbolIndex
 	// closedTabs is the LIFO closed-tab stack for Ctrl+Shift+T reopen.
-	// crumbMenu/crumbMenuOpen drive the breadcrumb sibling dropdown.
-	closedTabs    []closedTab
-	crumbMenu     int
-	crumbMenuOpen bool
+	closedTabs []closedTab
 	// previewTab is the per-group preview-tab slot. pinned is the per-group
 	// pin set.
 	previewTab [2]string
@@ -1556,14 +1540,6 @@ func (a *App) fillCode(v *View) {
 	a.decorateFolds(doc, v.Rows)
 
 	a.sliceUnwrappedCodeRowsFor(v.Rows, cols, 0)
-}
-
-// sliceUnwrappedCodeRows trims unwrapped rows to their visible rune window.
-// The laid text then fits its line box, so the engine never wraps it into
-// the rows below. EditStart, caret, selection, and click math keep using
-// full-line columns and the full scrollX, so only the painted slice moves.
-func (a *App) sliceUnwrappedCodeRows(rows []codeRow, cols int) {
-	a.sliceUnwrappedCodeRowsFor(rows, cols, a.focusedScrollGroup())
 }
 
 // sliceUnwrappedCodeRowsFor is sliceUnwrappedCodeRows for one editor group,
@@ -2747,35 +2723,6 @@ func (a *App) treeRows() ([]treeRow, int, int, bool) {
 	a.walkTree(a.ws.Tree, 0, false, &rows, &index, a.treeOffset, a.treeOffset+visible)
 
 	return rows, total, count, false
-}
-
-// ensureOpenFoldersLoaded is kept for by-path callers and tests that need
-// a synchronous load. The render path uses scheduleOpenFoldersLoaded
-// (enqueue-only) so the page loop never blocks on disk I/O.
-func (a *App) ensureOpenFoldersLoaded() {
-	if a.ws == nil || a.ws.Sample || !a.ws.Lazy {
-		return
-	}
-
-	var paths []string
-	for path, open := range a.folders {
-		if open {
-			paths = append(paths, path)
-		}
-	}
-
-	sort.Slice(paths, func(i, j int) bool {
-		di := strings.Count(paths[i], "/")
-		dj := strings.Count(paths[j], "/")
-		if di != dj {
-			return di < dj
-		}
-		return paths[i] < paths[j]
-	})
-
-	for _, p := range paths {
-		_ = a.ws.loadDir(p)
-	}
 }
 
 // filterNote scopes the sidebar filter when lazy: ws.Files is seen-so-far,
