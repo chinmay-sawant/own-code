@@ -210,8 +210,8 @@ func (a *App) topSourceLineFor(path string) int {
 		return a.scrollY / a.zx(rowH)
 	}
 
-	if a.wrapFor(path) {
-		return doc.wrapped(a.codeCols()).lineAt(a.scrollY / a.zx(rowH))
+	if a.wrapFor(path) || doc.foldMask() != nil {
+		return a.lineOfRow(doc, a.activeGroup(), a.scrollY/a.zx(rowH))
 	}
 
 	return a.scrollY / a.zx(rowH)
@@ -219,8 +219,8 @@ func (a *App) topSourceLineFor(path string) int {
 
 // snapScrollToLine keeps one source line on screen after a wrap flip.
 func (a *App) snapScrollToLine(doc *fileDoc, line int) {
-	if doc != nil && a.wrapFor(doc.Path) {
-		a.scrollTo(doc.wrapped(a.codeCols()).firstRow(line) * a.zx(rowH))
+	if doc != nil && (a.wrapFor(doc.Path) || doc.foldMask() != nil) {
+		a.scrollTo(a.rowOfLine(doc, a.activeGroup(), line) * a.zx(rowH))
 
 		return
 	}

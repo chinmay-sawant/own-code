@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/chinmay-sawant/own-code/internal/terminal"
+	"github.com/chinmay-sawant/own-code/internal/termui"
 )
 
 func TestTerminalModelSessionTabs(t *testing.T) {
@@ -190,24 +191,24 @@ func TestTerminalCopyText(t *testing.T) {
 
 	tests := []struct {
 		name string
-		rows []terminalRow
+		rows []termui.Row
 		want string
 	}{
 		{
 			name: "joins segments and trims trailing blanks",
-			rows: []terminalRow{
-				{Segments: []segment{{Text: "hello", Class: "plain"}, {Text: " world", Class: "plain"}}},
-				{Segments: []segment{{Text: "second", Class: "plain"}}},
+			rows: []termui.Row{
+				{Segments: []termui.Segment{{Text: "hello", Class: "plain"}, {Text: " world", Class: "plain"}}},
+				{Segments: []termui.Segment{{Text: "second", Class: "plain"}}},
 				{Empty: true},
-				{Segments: []segment{{Text: "   ", Class: "plain"}}},
+				{Segments: []termui.Segment{{Text: "   ", Class: "plain"}}},
 			},
 			want: "hello world\nsecond",
 		},
 		{
 			name: "keeps leading blank rows",
-			rows: []terminalRow{
+			rows: []termui.Row{
 				{Empty: true},
-				{Segments: []segment{{Text: "text", Class: "plain"}}},
+				{Segments: []termui.Segment{{Text: "text", Class: "plain"}}},
 				{Empty: true},
 			},
 			want: "\ntext",
@@ -219,7 +220,7 @@ func TestTerminalCopyText(t *testing.T) {
 		},
 		{
 			name: "only blank rows",
-			rows: []terminalRow{{Empty: true}, {Segments: []segment{{Text: " ", Class: "plain"}}}},
+			rows: []termui.Row{{Empty: true}, {Segments: []termui.Segment{{Text: " ", Class: "plain"}}}},
 			want: "",
 		},
 	}
@@ -288,7 +289,7 @@ func terminalManualSnapshot(lines ...string) terminal.Snapshot {
 	return snapshot
 }
 
-func terminalRowsText(rows []terminalRow) string {
+func terminalRowsText(rows []termui.Row) string {
 	lines := make([]string, len(rows))
 	for i, row := range rows {
 		var b strings.Builder

@@ -21,7 +21,7 @@ func themeCatalog() []theme {
 		{"nord", "Nord", "Cool slate and muted frost", "#242933", "#2e3440", "#343c4a", "#3b4555", "#4c566a", "#eceff4", "#c0c9d8", "#9caac0", "#88c0d0", "#b48ead", "#8fbcbb", "#88c0d0", "#a3be8c", "#d08770", "#a2aec2", "#81a1c1", "#bf8b8b", "#465d75"},
 		{"contrast", "High Contrast", "Bright text and strong boundaries", "#000000", "#101010", "#171717", "#252525", "#858585", "#ffffff", "#eeeeee", "#bdbdbd", "#75caff", "#ff9dff", "#ffdf75", "#75caff", "#a5f79a", "#ffba86", "#bdbdbd", "#a6eaff", "#ff9a9a", "#24598a"},
 		{"glass", "Liquid Glass", "Layered slate chrome with cool glass highlights", "#0b111b", "#101824", "#172230", "#202d3d", "rgba(230,241,255,0.16)", "#eff4fb", "#b7c3d3", "#8794a7", "#76baff", "#c4a2ff", "#78c7f0", "#70d5a6", "#f0a57b", "#f1ca75", "#95a2b4", "#9ab6ff", "#e2ecfb", "rgba(118,186,255,0.22)"},
-		{"glass-light", "Liquid Glass Light", "Clear chrome over a cool neutral canvas", "#f2f5f9", "#ffffff", "#eef2f7", "#e5ebf3", "rgba(31,55,86,0.14)", "#1c2737", "#536276", "#7c8ba0", "#0a84ff", "#a34479", "#1267b2", "#167346", "#96501e", "#805a13", "#77869a", "#365f9a", "#17263b", "rgba(10,132,255,0.18)"},
+		{"glass-light", "Liquid Glass Light", "Clear chrome over a cool neutral canvas", "#f2f5f9", "#ffffff", "#eef2f7", "#e5ebf3", "rgba(31,55,86,0.14)", "#1c2737", "#536276", "#5c6b80", "#0a84ff", "#a34479", "#1267b2", "#167346", "#96501e", "#805a13", "#77869a", "#365f9a", "#17263b", "rgba(10,132,255,0.18)"},
 		{"ember", "Ember", "A warm, retro charcoal-brown editor lit by gruvbox orange", "#241b14", "#1e1712", "#2b231c", "#342b23", "#463a2e", "#ecdfc9", "#b3a48d", "#96877a", "#fe8019", "#fe8019", "#fabd2f", "#8fb9de", "#b8bb26", "#d3869b", "#928374", "#74c3ae", "#f5e9d2", "rgba(254,128,25,0.22)"},
 		{"ember-light", "Ember Light", "Warm parchment and burnt orange, the light twin of Ember", "#f8efdd", "#eee2cd", "#e5d8c1", "#d9cbb2", "#c4b49c", "#3a2f23", "#66594a", "#5f5343", "#af3a03", "#af3a03", "#8a5f00", "#356a78", "#5f5f06", "#8f3f71", "#6f6254", "#34694c", "#2e251d", "rgba(175,58,3,0.16)"},
 	}
@@ -134,10 +134,10 @@ func themeCSS(id string) string {
 		}
 		glass := ""
 		if id == "glass" || id == "glass-light" {
-			glass = glassCSS(id)
+			glass = glassCSS(id) + glassSurfaceCSS(id) + glassTokenCSS(id)
 		}
 		thumb := thumbColorFor(id)
-		return fmt.Sprintf(`:root { %s --bg:%s !important; --panel:%s !important; --panel-2:%s !important; --panel-3:%s !important; --line:%s !important; --line-soft:%s !important; --text:%s !important; --muted:%s !important; --dim:%s !important; --icon:%s !important; --icon-strong:%s !important; --accent:%s !important; --accent-strong:%s !important; --thumb:%s !important; --syntax-keyword:%s !important; --syntax-type:%s !important; --syntax-function:%s !important; --syntax-string:%s !important; --syntax-number:%s !important; --syntax-comment:%s !important; --syntax-operator:%s !important; --syntax-variable:%s !important; --selection:%s !important; }`, semantic, t.Background, t.Panel, t.Panel2, t.Panel3, t.Line, t.Line, t.Text, t.Muted, t.Dim, t.Muted, t.Muted, t.Accent, accentStrongFor(id), thumb, t.Keyword, t.Type, t.Function, t.String, t.Number, t.Comment, t.Operator, t.Variable, t.Selection) + icons + glass + termCSS(id)
+		return fmt.Sprintf(`:root { %s --bg:%s !important; --panel:%s !important; --panel-2:%s !important; --panel-3:%s !important; --line:%s !important; --line-soft:%s !important; --text:%s !important; --muted:%s !important; --dim:%s !important; --icon:%s !important; --icon-strong:%s !important; --accent:%s !important; --accent-strong:%s !important; --thumb:%s !important; --syntax-keyword:%s !important; --syntax-type:%s !important; --syntax-function:%s !important; --syntax-string:%s !important; --syntax-number:%s !important; --syntax-comment:%s !important; --syntax-operator:%s !important; --syntax-variable:%s !important; --selection:%s !important; }`, semantic, t.Background, t.Panel, t.Panel2, t.Panel3, lineFor(id, t.Line), lineSoftFor(id, t.Line), t.Text, t.Muted, t.Dim, t.Muted, t.Muted, t.Accent, accentStrongFor(id), thumb, t.Keyword, t.Type, t.Function, t.String, t.Number, t.Comment, t.Operator, t.Variable, t.Selection) + icons + glass + termCSS(id)
 	}
 	return ""
 }
@@ -214,55 +214,55 @@ func accentStrongFor(id string) string {
 func glassCSS(id string) string {
 	if id == "glass" {
 		return `
-.palette, .settings-panel, .confirm-panel, .inline-card, .commit-tip-float, .recent-flyout { background-color:rgba(18,27,42,0.15) !important; background-image:linear-gradient(180deg, rgba(255,255,255,0.13), rgba(255,255,255,0.018) 42%, rgba(118,186,255,0.03)) !important; backdrop-filter:blur(34px) saturate(1.35) refract(8px) !important; border-color:rgba(225,239,255,0.24) !important; border-radius:16px !important; }
+.palette, .settings-panel, .confirm-panel, .inline-card, .commit-tip-float, .recent-flyout { background-color:rgba(18,27,42,0.15) !important; background-image:linear-gradient(180deg, rgba(255,255,255,0.13), rgba(255,255,255,0.018) 42%, rgba(118,186,255,0.03)) !important; backdrop-filter:blur(34px) saturate(1.35) refract(8px) !important; border-color:#334055 !important; border-radius:16px !important; }
 .palette-back, .confirm-backdrop { background-color:rgba(3,8,16,0.26) !important; }
 #settings-layer .palette-back { background-color:rgba(3,8,16,0.02) !important; backdrop-filter:blur(6px) saturate(1) !important; }
-.sidebar, .tabstrip { background-color:rgba(23,32,47,0.64) !important; background-image:linear-gradient(180deg, rgba(255,255,255,0.19), rgba(255,255,255,0.025)) !important; border-color:rgba(225,239,255,0.25) !important; backdrop-filter:blur(16px) saturate(1.3) refract(4px) !important; }
+.sidebar, .tabstrip { background-color:rgba(16,23,35,0.78) !important; background-image:linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01)) !important; border-color:#334055 !important; backdrop-filter:blur(16px) saturate(1.3) refract(4px) !important; }
 .sidebar .side-hsplit { background-color:rgba(23,32,47,0.72) !important; border-color:transparent !important; backdrop-filter:none !important; }
 .sidebar .side-hsplit .hsplit-grip { color:transparent !important; }
 .sidebar .side-hsplit:hover .hsplit-grip, .sidebar .side-hsplit:focus-visible .hsplit-grip { color:rgba(118,186,255,0.8) !important; }
-.titlebar, .statusbar { background-color:rgba(17,24,38,0.70) !important; background-image:linear-gradient(180deg, rgba(255,255,255,0.20), rgba(255,255,255,0.025)) !important; border-color:rgba(225,239,255,0.24) !important; backdrop-filter:blur(12px) saturate(1.25) refract(2.5px) !important; }
-.settings-btn, .tab, .palette-row { background-image:linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.01)) !important; }
+.titlebar, .statusbar { background-color:rgba(14,20,31,0.82) !important; background-image:linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01)) !important; border-color:#334055 !important; backdrop-filter:blur(12px) saturate(1.25) refract(2.5px) !important; }
+.settings-btn { background-image:linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.01)) !important; }
 .settings-header { background-color:rgba(255,255,255,0.02) !important; background-image:linear-gradient(108deg, rgba(255,255,255,0.07), rgba(255,255,255,0.01) 48%, rgba(118,186,255,0.035)) !important; }
-.settings-nav { background-color:rgba(14,23,37,0.20) !important; background-image:linear-gradient(148deg, rgba(255,255,255,0.04), rgba(255,255,255,0.008) 58%, rgba(118,186,255,0.025)) !important; border-right-color:rgba(225,239,255,0.16) !important; }
+.settings-nav { background-color:rgba(14,23,37,0.20) !important; background-image:linear-gradient(148deg, rgba(255,255,255,0.04), rgba(255,255,255,0.008) 58%, rgba(118,186,255,0.025)) !important; border-right-color:#2a3445 !important; }
 .settings-content { background-color:rgba(16,25,38,0.045) !important; background-image:linear-gradient(128deg, rgba(255,255,255,0.025), rgba(255,255,255,0) 34%, rgba(255,255,255,0) 70%, rgba(118,186,255,0.05)) !important; }
-.settings-nav-item.settings-nav-active { background-color:rgba(118,186,255,0.12) !important; background-image:linear-gradient(115deg, rgba(255,255,255,0.08), rgba(118,186,255,0.06)) !important; border-color:rgba(190,220,255,0.24) !important; }
-.settings-theme { background-color:rgba(25,36,51,0.06) !important; background-image:linear-gradient(118deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025) 55%, rgba(118,186,255,0.06)) !important; border-color:rgba(225,239,255,0.14) !important; border-radius:12px !important; }
-.settings-theme.selected { background-color:rgba(38,61,85,0.14) !important; background-image:linear-gradient(118deg, rgba(255,255,255,0.12), rgba(255,255,255,0.035) 48%, rgba(118,186,255,0.12)) !important; border-color:rgba(118,186,255,0.38) !important; }
-.settings-key, .settings-perview, .settings-area { background-color:rgba(25,36,51,0.09) !important; background-image:linear-gradient(125deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01) 54%, rgba(118,186,255,0.02)) !important; border-color:rgba(225,239,255,0.15) !important; }
-.settings-btn:not(.primary) { background-color:rgba(25,36,51,0.09) !important; background-image:linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01) 62%, rgba(118,186,255,0.025)) !important; border-color:rgba(225,239,255,0.16) !important; }
+.settings-nav-item.settings-nav-active { background-color:rgba(118,186,255,0.12) !important; background-image:linear-gradient(115deg, rgba(255,255,255,0.08), rgba(118,186,255,0.06)) !important; border-color:#3a4a62 !important; }
+.settings-theme { background-color:rgba(25,36,51,0.06) !important; background-image:linear-gradient(118deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025) 55%, rgba(118,186,255,0.06)) !important; border-color:#2a3445 !important; border-radius:12px !important; }
+.settings-theme.selected { background-color:rgba(38,61,85,0.14) !important; background-image:linear-gradient(118deg, rgba(255,255,255,0.12), rgba(255,255,255,0.035) 48%, rgba(118,186,255,0.12)) !important; border-color:#31597f !important; }
+.settings-key, .settings-perview, .settings-area { background-color:rgba(25,36,51,0.09) !important; background-image:linear-gradient(125deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01) 54%, rgba(118,186,255,0.02)) !important; border-color:#2a3445 !important; }
+.settings-btn:not(.primary) { background-color:rgba(25,36,51,0.09) !important; background-image:linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01) 62%, rgba(118,186,255,0.025)) !important; border-color:#2a3445 !important; }
 .settings-toggle:hover, .settings-toggle:focus-visible { background-color:rgba(118,186,255,0.08) !important; background-image:linear-gradient(115deg, rgba(255,255,255,0.06), rgba(118,186,255,0.04)) !important; }
-.settings-theme.selected, .palette-row.on, .tab.on { border-color:rgba(118,186,255,0.54) !important; }
-.settings-panel, .palette, .confirm-panel, .inline-card, .commit-tip-float, .settings-theme, .settings-key, .settings-perview, .settings-area, .settings-btn { border-top-color:rgba(240,247,255,0.22) !important; }
+.settings-theme.selected, .palette-row.on, .tab.on { border-color:#3d78ab !important; }
 * { box-shadow:none !important; }
-.editor.focus { border-top:2px solid rgba(118,186,255,0.42) !important; }
-.term-body.focus { outline:1px solid rgba(118,186,255,0.46) !important; outline-offset:-1px; }
+.editor.focus { border-top:1px solid var(--line-soft) !important; }
+.drawer-grip { background-color:var(--line-soft); }
+.term-body.focus { outline:1px solid #3d78ab !important; outline-offset:-1px; }
 .merge-actions.current { border-left:2px solid var(--red) !important; }`
 	}
 	return `
-.palette, .settings-panel, .confirm-panel, .inline-card, .commit-tip-float, .recent-flyout { background-color:rgba(245,248,252,0.17) !important; background-image:linear-gradient(180deg, rgba(255,255,255,0.19), rgba(255,255,255,0.045) 42%, rgba(10,132,255,0.018)) !important; backdrop-filter:blur(34px) saturate(1.2) refract(8px) !important; border-color:rgba(31,55,86,0.18) !important; border-radius:16px !important; }
+.palette, .settings-panel, .confirm-panel, .inline-card, .commit-tip-float, .recent-flyout { background-color:rgba(245,248,252,0.17) !important; background-image:linear-gradient(180deg, rgba(255,255,255,0.19), rgba(255,255,255,0.045) 42%, rgba(10,132,255,0.018)) !important; backdrop-filter:blur(34px) saturate(1.2) refract(8px) !important; border-color:#cdd5df !important; border-radius:16px !important; }
 .palette-back, .confirm-backdrop { background-color:rgba(28,43,64,0.16) !important; }
 #settings-layer .palette-back { background-color:rgba(28,43,64,0.015) !important; backdrop-filter:blur(6px) saturate(1) !important; }
-.sidebar, .tabstrip { background-color:rgba(239,244,250,0.72) !important; background-image:linear-gradient(180deg, rgba(255,255,255,0.76), rgba(255,255,255,0.16)) !important; border-color:rgba(31,55,86,0.24) !important; backdrop-filter:blur(16px) saturate(1.25) refract(4px) !important; }
+.sidebar, .tabstrip { background-color:rgba(239,244,250,0.72) !important; background-image:linear-gradient(180deg, rgba(255,255,255,0.76), rgba(255,255,255,0.16)) !important; border-color:#c3ccd8 !important; backdrop-filter:blur(16px) saturate(1.25) refract(4px) !important; }
 .sidebar .side-hsplit { background-color:rgba(239,244,250,0.78) !important; border-color:transparent !important; backdrop-filter:none !important; }
 .sidebar .side-hsplit .hsplit-grip { color:transparent !important; }
 .sidebar .side-hsplit:hover .hsplit-grip, .sidebar .side-hsplit:focus-visible .hsplit-grip { color:rgba(10,132,255,0.8) !important; }
-.titlebar, .statusbar { background-color:rgba(244,247,251,0.82) !important; background-image:linear-gradient(180deg, rgba(255,255,255,0.88), rgba(255,255,255,0.18)) !important; border-color:rgba(31,55,86,0.22) !important; backdrop-filter:blur(12px) saturate(1.2) refract(2.5px) !important; }
-.settings-btn, .tab, .palette-row { background-image:linear-gradient(180deg, rgba(255,255,255,0.62), rgba(255,255,255,0.06)) !important; }
+.titlebar, .statusbar { background-color:rgba(244,247,251,0.82) !important; background-image:linear-gradient(180deg, rgba(255,255,255,0.88), rgba(255,255,255,0.18)) !important; border-color:#c7d0db !important; backdrop-filter:blur(12px) saturate(1.2) refract(2.5px) !important; }
+.settings-btn { background-image:linear-gradient(180deg, rgba(255,255,255,0.62), rgba(255,255,255,0.06)) !important; }
 .settings-header { background-color:rgba(255,255,255,0.025) !important; background-image:linear-gradient(108deg, rgba(255,255,255,0.23), rgba(255,255,255,0.055) 48%, rgba(10,132,255,0.035)) !important; }
-.settings-nav { background-color:rgba(239,244,250,0.14) !important; background-image:linear-gradient(148deg, rgba(255,255,255,0.18), rgba(255,255,255,0.035) 58%, rgba(10,132,255,0.025)) !important; border-right-color:rgba(31,55,86,0.13) !important; }
+.settings-nav { background-color:rgba(239,244,250,0.14) !important; background-image:linear-gradient(148deg, rgba(255,255,255,0.18), rgba(255,255,255,0.035) 58%, rgba(10,132,255,0.025)) !important; border-right-color:#d8dee7 !important; }
 .settings-content { background-color:rgba(245,248,252,0.045) !important; background-image:linear-gradient(128deg, rgba(255,255,255,0.075), rgba(255,255,255,0) 34%, rgba(255,255,255,0) 70%, rgba(10,132,255,0.06)) !important; }
-.settings-nav-item.settings-nav-active { background-color:rgba(10,132,255,0.09) !important; background-image:linear-gradient(115deg, rgba(255,255,255,0.24), rgba(10,132,255,0.055)) !important; border-color:rgba(31,93,160,0.18) !important; }
-.settings-theme { background-color:rgba(251,252,254,0.07) !important; background-image:linear-gradient(118deg, rgba(255,255,255,0.18), rgba(255,255,255,0.055) 55%, rgba(10,132,255,0.05)) !important; border-color:rgba(31,55,86,0.13) !important; border-radius:12px !important; }
-.settings-theme.selected { background-color:rgba(232,242,255,0.16) !important; background-image:linear-gradient(118deg, rgba(255,255,255,0.27), rgba(255,255,255,0.11) 48%, rgba(10,132,255,0.11)) !important; border-color:rgba(10,132,255,0.36) !important; }
-.settings-key, .settings-perview, .settings-area { background-color:rgba(245,248,252,0.09) !important; background-image:linear-gradient(125deg, rgba(255,255,255,0.15), rgba(255,255,255,0.035) 54%, rgba(10,132,255,0.025)) !important; border-color:rgba(31,55,86,0.15) !important; }
-.settings-btn:not(.primary) { background-color:rgba(245,248,252,0.08) !important; background-image:linear-gradient(145deg, rgba(255,255,255,0.18), rgba(255,255,255,0.045) 62%, rgba(10,132,255,0.025)) !important; border-color:rgba(31,55,86,0.15) !important; }
+.settings-nav-item.settings-nav-active { background-color:rgba(10,132,255,0.09) !important; background-image:linear-gradient(115deg, rgba(255,255,255,0.24), rgba(10,132,255,0.055)) !important; border-color:#c5d4e6 !important; }
+.settings-theme { background-color:rgba(251,252,254,0.07) !important; background-image:linear-gradient(118deg, rgba(255,255,255,0.18), rgba(255,255,255,0.055) 55%, rgba(10,132,255,0.05)) !important; border-color:#d8dee7 !important; border-radius:12px !important; }
+.settings-theme.selected { background-color:rgba(232,242,255,0.16) !important; background-image:linear-gradient(118deg, rgba(255,255,255,0.27), rgba(255,255,255,0.11) 48%, rgba(10,132,255,0.11)) !important; border-color:#8cc0f5 !important; }
+.settings-key, .settings-perview, .settings-area { background-color:rgba(245,248,252,0.09) !important; background-image:linear-gradient(125deg, rgba(255,255,255,0.15), rgba(255,255,255,0.035) 54%, rgba(10,132,255,0.025)) !important; border-color:#d5dbe4 !important; }
+.settings-btn:not(.primary) { background-color:rgba(245,248,252,0.08) !important; background-image:linear-gradient(145deg, rgba(255,255,255,0.18), rgba(255,255,255,0.045) 62%, rgba(10,132,255,0.025)) !important; border-color:#d5dbe4 !important; }
 .settings-toggle:hover, .settings-toggle:focus-visible { background-color:rgba(10,132,255,0.06) !important; background-image:linear-gradient(115deg, rgba(255,255,255,0.20), rgba(10,132,255,0.045)) !important; }
-.settings-theme.selected, .palette-row.on, .tab.on { border-color:rgba(10,132,255,0.52) !important; }
-.settings-panel, .palette, .confirm-panel, .inline-card, .commit-tip-float, .settings-theme, .settings-key, .settings-perview, .settings-area, .settings-btn { border-top-color:rgba(255,255,255,0.52) !important; }
+.settings-theme.selected, .palette-row.on, .tab.on { border-color:#69aef0 !important; }
 * { box-shadow:none !important; }
-.editor.focus { border-top:2px solid rgba(10,132,255,0.36) !important; }
-.term-body.focus { outline:1px solid rgba(10,132,255,0.44) !important; outline-offset:-1px; }
+.editor.focus { border-top:1px solid var(--line-soft) !important; }
+.drawer-grip { background-color:var(--line-soft); }
+.term-body.focus { outline:1px solid #69aef0 !important; outline-offset:-1px; }
 .merge-actions.current { border-left:2px solid var(--red) !important; }`
 }
 
@@ -364,4 +364,115 @@ func termCSS(id string) string {
 	b.WriteString(" }")
 
 	return b.String()
+}
+
+// glassSkin holds the per-theme literals the shared glass surface rules use.
+// Values mirror the main glassCSS blocks so every surface reads as one glass.
+type glassSkin struct {
+	float    string // translucent floating panel fill
+	floatImg string // edge highlight gradient for floating panels
+	edge     string // floating panel border
+	dock     string // docked panel fill (sidebar family)
+	dockImg  string
+	dockEdge string
+	field    string // inset input fill
+	btn      string // button fill
+	btnImg   string
+	btnEdge  string
+	scrim    string
+	// red/green/amber are the theme semantic colors as "r,g,b" for tints.
+	red, green, amber string
+}
+
+func glassSkinFor(id string) glassSkin {
+	if id == "glass" {
+		return glassSkin{
+			float: "rgba(18,27,42,0.15)", floatImg: "linear-gradient(180deg, rgba(255,255,255,0.13), rgba(255,255,255,0.018) 42%, rgba(118,186,255,0.03))",
+			edge: "#334055", dock: "rgba(16,23,35,0.78)",
+			dockImg:  "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01))",
+			dockEdge: "#334055", field: "rgba(6,11,20,0.34)",
+			btn: "rgba(25,36,51,0.09)", btnImg: "linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01) 62%, rgba(118,186,255,0.025))",
+			btnEdge: "#2f3a4c", scrim: "rgba(3,8,16,0.26)",
+			red: "239,125,137", green: "112,213,166", amber: "232,189,105",
+		}
+	}
+
+	return glassSkin{
+		float: "rgba(245,248,252,0.17)", floatImg: "linear-gradient(180deg, rgba(255,255,255,0.19), rgba(255,255,255,0.045) 42%, rgba(10,132,255,0.018))",
+		edge: "#cdd5df", dock: "rgba(239,244,250,0.72)",
+		dockImg:  "linear-gradient(180deg, rgba(255,255,255,0.76), rgba(255,255,255,0.16))",
+		dockEdge: "#c3ccd8", field: "rgba(255,255,255,0.62)",
+		btn: "rgba(245,248,252,0.08)", btnImg: "linear-gradient(145deg, rgba(255,255,255,0.18), rgba(255,255,255,0.045) 62%, rgba(10,132,255,0.025))",
+		btnEdge: "#d5dbe4", scrim: "rgba(28,43,64,0.16)",
+		red: "168,52,69", green: "22,115,70", amber: "128,90,19",
+	}
+}
+
+// glassSurfaceCSS extends the glass look to the surfaces glassCSS does not
+// name: small floating widgets, docked panels, the terminal chrome, inset
+// fields and buttons. Selectors only restyle fills and edges, so layout and
+// the flat themes are untouched.
+func glassSurfaceCSS(id string) string {
+	k := glassSkinFor(id)
+
+	return fmt.Sprintf(`
+.ctx-menu, .popup, .file-drawer, .browse-panel, .file-alert, .hist-tip, .hist-preview { background-color:%[1]s !important; background-image:%[2]s !important; backdrop-filter:blur(30px) saturate(1.3) refract(6px) !important; border-color:%[3]s !important; border-radius:10px !important; }
+.palette.search-panel, .toast { background-color:%[4]s !important; }
+.tab { background-color:var(--panel-2); }
+.toast, .file-nav { background-image:%[2]s !important; backdrop-filter:blur(30px) saturate(1.3) refract(6px) !important; }
+.file-nav { background-color:%[1]s !important; }
+.details, .activity, .terminal, .workspace-problems { background-color:%[4]s !important; background-image:%[5]s !important; backdrop-filter:blur(16px) saturate(1.3) refract(4px) !important; border-color:%[6]s !important; }
+.history, .term-head, .term-foot, .term-note { background-color:transparent !important; background-image:none !important; }
+.browse-backdrop { background-color:%[7]s !important; }
+.filter, .branch-input, .find-input, .explorer-input, .explorer-input-field, .commit-message, .cmdbar, .project-input, .browse-filter, .palette-input { background-color:%[8]s !important; }
+.crumb-btn:not(.on):not(.stage):not(.save-btn), .commit-btn, .confirm-btn:not(.primary):not(.danger), .button, .hist-btn, .replace-btn:not(.danger), .seg, .term-tab:not(.on), .quick-row, .welcome-card { background-color:%[9]s !important; background-image:%[10]s !important; border-color:%[11]s !important; }
+.pbrow:hover, .pbrow:focus-visible, .popup-row.on, .ctx-item:hover, #palette-panel .palette-row.on, #search-panel .palette-row.on { background-color:var(--accent-soft) !important; }
+.popup-row:hover { background-color:var(--accent-soft) !important; }
+`, k.float, k.floatImg, k.edge, k.dock, k.dockImg, k.dockEdge, k.scrim, k.field, k.btn, k.btnImg, k.btnEdge)
+}
+
+// glassTokenCSS retints the semantic wash tokens that component CSS reads
+// (merge conflicts, find hits, meta rows) so they follow the glass palette
+// instead of the dark-theme literals baked into base.css.
+func glassTokenCSS(id string) string {
+	k := glassSkinFor(id)
+	rgba := func(rgb string, a string) string { return "rgba(" + rgb + "," + a + ")" }
+
+	var b strings.Builder
+
+	b.WriteString("\n:root {")
+
+	for _, a := range []string{"08", "10", "11", "16", "18", "20", "25", "40", "65"} {
+		fmt.Fprintf(&b, " --tint-red-%s:%s !important;", a, rgba(k.red, "0."+a))
+	}
+
+	fmt.Fprintf(&b, " --tint-green-35:%s !important; --tint-amber-06:%s !important; --tint-amber-07:%s !important; --tint-amber-20:%s !important; --find-hit:%s !important; --find-cur:%s !important; --find-cur-text:var(--bg) !important; }",
+		rgba(k.green, "0.35"), rgba(k.amber, "0.06"), rgba(k.amber, "0.07"), rgba(k.amber, "0.2"), rgba(k.amber, "0.28"), rgba(k.amber, "0.62"))
+
+	return b.String()
+}
+
+// lineFor and lineSoftFor return the divider colors. The glass themes use
+// opaque blends: 1px translucent borders paint near-white on the glass
+// panels (bright "edge lines"), while an opaque blend reads as a hairline.
+func lineFor(id, line string) string {
+	switch id {
+	case "glass":
+		return "#2f3949"
+	case "glass-light":
+		return "#d3dae3"
+	}
+
+	return line
+}
+
+func lineSoftFor(id, line string) string {
+	switch id {
+	case "glass":
+		return "#252e3c"
+	case "glass-light":
+		return "#dee4eb"
+	}
+
+	return line
 }

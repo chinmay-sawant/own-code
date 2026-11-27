@@ -43,6 +43,18 @@ type paletteRow struct {
 	Kind   string
 	Line   int
 	No     int
+	// Keys is the right-aligned keybinding hint of a command row. NameParts
+	// splits Name into fuzzy-match runs for highlighting, and Recent marks a
+	// command row pinned from the recently-used list.
+	Keys      string
+	NameParts []nameRun
+	Recent    bool
+}
+
+// nameRun is one run of a command name, highlighted when Hit.
+type nameRun struct {
+	Text string
+	Hit  bool
 }
 
 // paletteRows returns the open tabs followed by workspace files for an empty

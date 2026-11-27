@@ -11,7 +11,8 @@ import (
 // Opening find or replace must not move the code body, so headers never
 // shift when the code scrolls: TrackTop, the first visible row, and both
 // pane geometries stay identical at the same scroll offset.
-func TestFindbarLayoutKeepsBodyStatic(t *testing.T) {	ctx := context.Background()
+func TestFindbarLayoutKeepsBodyStatic(t *testing.T) {
+	ctx := context.Background()
 
 	for _, split := range []bool{false, true} {
 		app := newTestApp(t)

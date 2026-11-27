@@ -168,7 +168,6 @@ func zoomRailsCSS(b *strings.Builder, px func(int) string) {
 		{".list-thumb, .hist-thumb", []string{" width:", " !important; min-height:", " !important; border-radius:", " !important;"}, []int{8, 24, 4}},
 		{".list-scroll svg, .hist-scroll svg, .tree-scroll svg, .editor-scroll svg", []string{" width:", " !important;"}, []int{8}},
 		{".drawer-resize", []string{" width:", " !important;"}, []int{6}},
-		{".drawer-resize svg", []string{" width:", " !important;"}, []int{6}},
 		{".editor-scroll", []string{" width:", " !important;"}, []int{8}},
 		{".search-scroll-track", []string{" flex-basis:", " !important; width:", " !important; height:", " !important; border-radius:", " !important;"}, []int{8, 8, 352, 4}},
 		{".search-thumb", []string{" width:", " !important; border-radius:", " !important;"}, []int{8, 4}},

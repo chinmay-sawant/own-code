@@ -251,6 +251,8 @@ func TestBlameCacheInvalidatedOnSave(t *testing.T) {
 
 	doc := app.docs["app.go"]
 	next := strings.Join(doc.Lines, "\n") + "\n// blame-note\n"
+	noFormat := false
+	app.settings.Format = &formatSettings{OnSave: &noFormat}
 	app.toggleEdit()
 	app.applyEditText(next)
 	app.saveEdit()

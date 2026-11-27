@@ -191,31 +191,41 @@ type App struct {
 	// ratio at grab time and dx accumulates the pointer delta in page px.
 	splitDrag splitDividerDrag
 
-	editing    bool
-	edit       *edit.Buffer
-	dirty      map[string]bool
-	editCaret  int
-	editAnchor int
+	editing   bool
+	edit      *edit.Buffer
+	dirty     map[string]bool
+	editCaret int
+	// viewPointerHook is a test seam for the pointer position (line, col) used by read-only Go to Definition.
+	viewPointerHook func() (int, int, bool)
+	editAnchor      int
 	// bracketOn flashes the match of the bracket at the caret; BracketLine
 	// and BracketFrom/To locate it in source coordinates.
-	bracketOn   bool
-	bracketLine int
-	bracketFrom int
-	bracketTo   int
-	editUndo    []editSnapshot
-	editRedo    []editSnapshot
+	bracketOn    bool
+	bracketCache bracketMatchCache
+	bracketLine  int
+	bracketFrom  int
+	bracketTo    int
+	editUndo     []editRecord
+	editRedo     []editRecord
 	// revertUndo/revertRedo store forward hunk patches for Ctrl+Z restore
 	// after a mistaken discard. Separate from editUndo so text and hunk
 	// histories never clobber each other.
 	revertUndo []revertUndoEntry
 	revertRedo []revertUndoEntry
 	dragSelect bool
-	selX       float64
-	selY       float64
-	menuOpen   bool
-	menuX      int
-	menuY      int
-	menuItems  []menuViewRow
+
+	// pressAt/pressOffset/pressCountN track double and triple clicks in the
+	// edit body.
+	pressAt     time.Time
+	toastTimer  *time.Timer
+	pressOffset int
+	pressCountN int
+	selX        float64
+	selY        float64
+	menuOpen    bool
+	menuX       int
+	menuY       int
+	menuItems   []menuViewRow
 	// pendingFocus is a control id the next tick focuses once the panel that
 	// owns it has been laid out. Click handlers run inside the window's
 	// redraw batch, so a panel they open is not in the form state yet when
@@ -280,6 +290,7 @@ type App struct {
 	mergeNote        string
 	mergeRows        []mergeRow
 
+	popup        popupState
 	confirmOpen  bool
 	confirmKind  string
 	confirmPaths []string
@@ -378,6 +389,8 @@ type App struct {
 	cardStartTop  int
 
 	details       bool
+	problemsOpen  bool
+	problemScroll historyScroll
 	devOn         bool
 	windowControl bool
 	// fpsCLI/fpsCLISet carry the --fps override: CLI wins over settings,
@@ -600,11 +613,17 @@ type App struct {
 	termVersion        uint64
 	termRunning        bool
 	termNote           string
-	termShell          string
+	termProfiles       []terminal.ShellProfile
 	termCols           int
 	termRows           int
 	termAppCursor      bool
 	termBracketedPaste bool
+
+	// palx holds command palette extras: recently used commands, the ref
+	// comparison, and cached task/stash discovery (see palette_commands.go).
+	palx paletteExtra
+
+	lspm *lspManager
 
 	sessionPath     string
 	sessionLast     string
@@ -866,10 +885,6 @@ const (
 	fileFlyW       = 260
 	fileDrawerPad  = 6
 	fileItemH      = 30
-	filePickerH    = 76
-	locLabelH      = 22
-	locRowMax      = 6
-	locPad         = 8
 )
 
 // recentFlyoutX puts the recent flyout just right of the file drawer. The
@@ -879,32 +894,28 @@ func (a *App) recentFlyoutX() int {
 	return a.zx(fileDrawerW) + a.zx(fileFlyoutGap)
 }
 
-// recentFlyoutY lines the flyout top up with the recents toggle row,
-// relative to the drawer box. It mirrors the picker's stacked heights:
-// four 30px rows, the open picker's input block, and the capped
-// locations list.
+// recentFlyoutY aligns the flyout with the third File menu row.
 func (a *App) recentFlyoutY() int {
-	y := a.zx(fileDrawerPad) + a.zx(fileItemH)*4 - a.zx(fileDrawerPad)
-	if a.projectOpen {
-		rows := len(a.quickRootRows())
-		if rows > locRowMax {
-			rows = locRowMax
-		}
-
-		y += a.zx(filePickerH) + a.zx(locLabelH) + rows*a.zx(fileItemH) + a.zx(locPad)
-	}
-
-	return y
+	return a.zx(fileDrawerPad) + 2*a.zx(fileItemH)
 }
 
 // recentRootRows lists recently opened project roots with the active one marked.
 func (a *App) recentRootRows() []recentRootRow {
 	rows := make([]recentRootRow, 0, len(a.recentRoots))
+	labelWidth := fileFlyW - 2*fileDrawerPad - 2*10 - 2
+	fontSize := 11 * a.baseFontSize() / defaultFontSize
+	budget := max(3, int(float64(labelWidth)/fontSize))
 
 	for _, root := range a.recentRoots {
+		name := []rune(filepath.Base(root))
+		label := string(name)
+		if len(name) > budget {
+			tail := (budget - 1) / 2
+			label = string(name[:budget-1-tail]) + "…" + string(name[len(name)-tail:])
+		}
 		rows = append(rows, recentRootRow{
 			Path:   root,
-			Name:   baseName(root),
+			Name:   label,
 			Active: root == a.ws.Root || (root == "sample" && a.ws.Sample),
 		})
 	}
@@ -1023,6 +1034,7 @@ func (a *App) switchProject(ctx context.Context, root string) error {
 
 	a.StopWatcher()
 	a.stopDirLoader()
+	a.lspReset()
 	a.closeTerminalSessions()
 	a.ws = ws
 	a.docs = map[string]*fileDoc{}
@@ -1165,6 +1177,7 @@ func (a *App) onScroll(offsetY, viewH int) bool {
 		}
 	}
 
+	a.popupScrolled(offsetY)
 	a.lastScroll = offsetY
 
 	cols := 0
@@ -1197,77 +1210,82 @@ func (a *App) onScroll(offsetY, viewH int) bool {
 // buildView assembles one frame from the current state.
 func (a *App) buildView() View {
 	winW, _ := a.page.Size()
+	workspace := baseName(a.ws.Root)
 	v := View{
-		Mode:          a.mode,
-		Filter:        clipFilterDisplay(clampFieldLen(a.filter)),
-		Details:       a.details,
-		DevOn:         a.devOn,
-		MenuOpen:      a.menuOpen,
-		MenuX:         a.menuX,
-		MenuY:         a.menuY,
-		MenuRows:      append([]menuViewRow(nil), a.menuItems...),
-		Modal:         a.paletteOpen || a.branchOpen || a.searchOpen || a.settingsOpen || a.confirmOpen || a.commitDialogOpen || a.fileMenu || a.browseOpen || a.termFocus,
-		SettingsOpen:  a.settingsOpen,
-		FileMenu:      a.fileMenu,
-		ProjectOpen:   a.projectOpen,
-		ProjectQuery:  clampFieldLen(a.projectQuery),
-		RecentOpen:    a.recentOpen,
-		RecentFlyX:    a.recentFlyoutX(),
-		RecentFlyY:    a.recentFlyoutY(),
-		RecentRoots:   a.recentRootRows(),
-		QuickRoots:    a.quickRootRows(),
-		BrowseOpen:    a.browseOpen,
-		BrowseRoot:    a.browseRoot,
-		BrowseName:    clipBrowsePath(winW, a.browseDisplayName()),
-		BrowseQuery:   clampFieldLen(a.browseFilter),
-		BrowseEntries: a.browseWindowedEntries(),
-		BrowseTotal:   len(a.browseFilteredEntries()),
-		IsWSL:         isWSL(),
-		IsWindows:     runtime.GOOS == "windows",
-		HasWSL:        wsl.Available(),
-		Alert:         a.fileAlert,
-		Themes:        a.themeRows(),
-		ThumbColor:    thumbColorFor(a.theme),
-		PanelColor:    panelColorFor(a.theme),
-		AutoSave:      validAutoSave(a.autoSave),
-		AutoSaveDelay: clampAutoSaveDelay(firstNonZero(a.autoSaveDelayMs, autoSaveDefaultDelay)),
-		MaxFPS:        a.EffectiveMaxFPS(),
-		FPSLabel:      FPSLabel(a.EffectiveMaxFPS()),
-		FPSOptions:    fpsRows(a.EffectiveMaxFPS()),
-		SettingsTab:   a.settingsTabName(),
-		FontLabel:     a.fontLabel(),
-		KeymapRows:    a.keymapRows(),
-		HelpRows:      a.helpRows(),
-		AppName:       appName,
-		AppVersion:    appVersion,
-		AppScope:      appScope,
-		ScanText:      a.scanDraftText(),
-		SearchText:    a.searchDraftText(),
-		ScanBad:       invalidGlobLines(a.scanDraftText()),
-		SearchBad:     invalidGlobLines(a.searchDraftText()),
-		UseGitignore:  a.scanFilterAllowsGitignore(),
-		SearchIgnored: a.scanFilterAllowsSearchIgnored(),
-		ScanMatch:     a.scanExcludeMatchCount(),
-		SearchSkip:    a.searchExcludeSkipCount(),
-		SettingsNote:  a.settingsNote,
-		Workspace:     baseName(a.ws.Root),
-		Branch:        a.changes.Branch,
-		Changed:       len(a.changes.Files) + len(a.changes.Conflicts),
-		DevNote:       a.changes.Note,
-		ScanBudget:    a.ws.ScanBudget(),
-		WatchNote:     a.watchNote,
-		FilterNote:    a.filterNote(),
-		DirLoadNote:   a.dirLoadNote,
-		HoverPath:     a.hoverPath,
-		Dirty:         a.dirtyCount(),
-		Toast:         a.toast,
-		Wrap:          a.wrap,
-		ScrollX:       0,
-		FindQuery:     clampFieldLen(a.findQuery),
-		FindOpen:      a.findOpen,
-		FindCase:      a.findCase,
-		FindCurrent:   a.findCurrent(),
-		FindTotal:     len(a.findHits),
+		Mode:           a.mode,
+		Filter:         clipFilterDisplay(clampFieldLen(a.filter)),
+		Details:        a.details,
+		DevOn:          a.devOn,
+		MenuOpen:       a.menuOpen,
+		MenuX:          a.menuX,
+		MenuY:          a.menuY,
+		MenuRows:       append([]menuViewRow(nil), a.menuItems...),
+		Modal:          a.paletteOpen || a.branchOpen || a.searchOpen || a.settingsOpen || a.confirmOpen || a.commitDialogOpen || a.fileMenu || a.browseOpen || a.termFocus || a.popupTrapsFocus(),
+		SettingsOpen:   a.settingsOpen,
+		FileMenu:       a.fileMenu,
+		ProjectOpen:    a.projectOpen,
+		ProjectQuery:   clampFieldLen(a.projectQuery),
+		RecentOpen:     a.recentOpen,
+		RecentFlyX:     a.recentFlyoutX(),
+		RecentFlyY:     a.recentFlyoutY(),
+		RecentRoots:    a.recentRootRows(),
+		QuickRoots:     a.quickRootRows(),
+		BrowseOpen:     a.browseOpen,
+		BrowseRoot:     a.browseRoot,
+		BrowseName:     clipBrowsePath(winW, a.browseDisplayName()),
+		BrowseQuery:    clampFieldLen(a.browseFilter),
+		BrowseEntries:  a.browseWindowedEntries(),
+		BrowseTotal:    len(a.browseFilteredEntries()),
+		IsWSL:          isWSL(),
+		IsWindows:      runtime.GOOS == "windows",
+		HasWSL:         wsl.Available(),
+		Alert:          a.fileAlert,
+		Themes:         a.themeRows(),
+		ThumbColor:     thumbColorFor(a.theme),
+		PanelColor:     panelColorFor(a.theme),
+		AutoSave:       validAutoSave(a.autoSave),
+		AutoSaveDelay:  clampAutoSaveDelay(firstNonZero(a.autoSaveDelayMs, autoSaveDefaultDelay)),
+		MaxFPS:         a.EffectiveMaxFPS(),
+		FPSLabel:       FPSLabel(a.EffectiveMaxFPS()),
+		FPSOptions:     fpsRows(a.EffectiveMaxFPS()),
+		SettingsTab:    a.settingsTabName(),
+		FontLabel:      a.fontLabel(),
+		KeymapRows:     a.keymapRows(),
+		HelpRows:       a.helpRows(),
+		AppName:        appName,
+		AppVersion:     appVersion,
+		AppScope:       appScope,
+		ScanText:       a.scanDraftText(),
+		SearchText:     a.searchDraftText(),
+		ScanBad:        invalidGlobLines(a.scanDraftText()),
+		SearchBad:      invalidGlobLines(a.searchDraftText()),
+		UseGitignore:   a.scanFilterAllowsGitignore(),
+		SearchIgnored:  a.scanFilterAllowsSearchIgnored(),
+		ScanMatch:      a.scanExcludeMatchCount(),
+		SearchSkip:     a.searchExcludeSkipCount(),
+		SettingsNote:   a.settingsNote,
+		Workspace:      workspace,
+		WorkspaceLabel: clipRunes(workspace, 20),
+		GitRoot:        a.ws.Root,
+		Branch:         a.changes.Branch,
+		NoGit:          a.changes.Branch == "no git",
+		Changed:        len(a.changes.Files) + len(a.changes.Conflicts),
+		DevNote:        a.changes.Note,
+		ScanBudget:     a.ws.ScanBudget(),
+		WatchNote:      a.watchNote,
+		FilterNote:     a.filterNote(),
+		DirLoadNote:    a.dirLoadNote,
+		HoverPath:      a.hoverPath,
+		Dirty:          a.dirtyCount(),
+		Toast:          a.toast,
+		LSP:            a.lspViewData(),
+		Wrap:           a.wrap,
+		ScrollX:        0,
+		FindQuery:      clampFieldLen(a.findQuery),
+		FindOpen:       a.findOpen,
+		FindCase:       a.findCase,
+		FindCurrent:    a.findCurrent(),
+		FindTotal:      len(a.findHits),
 
 		ReplaceOpen:      a.replaceOpen,
 		ReplaceQuery:     clampFieldLen(a.replaceQuery),
@@ -1313,6 +1331,7 @@ func (a *App) buildView() View {
 	v.FileNav = a.fileNavViewState()
 	v.ChangeLabel = a.fileNavSummary()
 	v.Confirm = a.confirmViewState()
+	v.Popup = a.popupView()
 	v.CommitMessage = a.commitDialogMsg
 	v.CommitDialog = a.commitDialogViewState()
 
@@ -1381,6 +1400,10 @@ func (a *App) buildView() View {
 	v.TerminalZoom = a.zoomPerViewValue("terminal")
 	v.EditorZoomLabel = a.zoomPerViewLabel("editor")
 	v.TerminalZoomLabel = a.zoomPerViewLabel("terminal")
+	if a.settingsOpen && a.settingsTabName() == "lsp" {
+		v.LSPOn = lspEnabled(a.settings.LSP)
+		v.LSPRows = a.lspSettingsRows()
+	}
 	v.KeymapCapture = a.keymapCapture
 	v.KeymapPending = a.keymapPendingMessage()
 
@@ -1411,6 +1434,7 @@ func (a *App) buildView() View {
 	}
 	v.CommitTip = a.commitTip
 	v.InlineCard = a.inlineCard
+	v.BottomPanelLeft, v.BottomPanelWidth = a.windowControlLeftPx(), a.editorWidth()
 	v.Terminal = a.terminalView()
 	v.SpaceHeight = a.contentHeight()
 	a.fillDrawer(&v)
@@ -1483,8 +1507,7 @@ func (a *App) fillCode(v *View) {
 	v.TrackTop = reserve * a.zx(rowH)
 
 	start, end, _ := a.windowSliceReserve(0, len(doc.Lines), reserve)
-	if a.wrap {
-		plan := doc.wrapped(cols)
+	if plan := a.rowPlan(doc, 0); plan != nil {
 		start, end, _ = a.windowSliceReserve(0, len(plan.Rows), reserve)
 		// Never start mid-line: a scroll offset landing inside a wrapped
 		// source line would fill the viewport with No==0 continuations and
@@ -1503,8 +1526,12 @@ func (a *App) fillCode(v *View) {
 		v.Rows = a.copyFindRows(cloneCodeRows(plan.Rows[start:end]))
 		v.Rows = a.markBracketRows(v.Rows)
 		a.decorateCodeRows(doc, v.Rows, 0)
+		a.decorateDiagnostics(doc, v.Rows)
 		a.decorateEditRows(v.Rows)
+		a.decorateGuides(doc, v.Rows, 0)
 		a.decorateBlame(doc, v.Rows, 0)
+		a.decorateFolds(doc, v.Rows)
+		a.sliceUnwrappedCodeRowsFor(v.Rows, cols, 0)
 
 		return
 	}
@@ -1522,8 +1549,11 @@ func (a *App) fillCode(v *View) {
 	v.Rows = a.copyFindRows(v.Rows)
 	v.Rows = a.markBracketRows(v.Rows)
 	a.decorateCodeRows(doc, v.Rows, 0)
+	a.decorateDiagnostics(doc, v.Rows)
 	a.decorateEditRows(v.Rows)
+	a.decorateGuides(doc, v.Rows, 0)
 	a.decorateBlame(doc, v.Rows, 0)
+	a.decorateFolds(doc, v.Rows)
 
 	a.sliceUnwrappedCodeRowsFor(v.Rows, cols, 0)
 }
@@ -2097,7 +2127,7 @@ func (a *App) findCommit(hash string) *gitCommit {
 // bodyHeight is the editor body below the tab strip and breadcrumbs.
 func (a *App) bodyHeight() int {
 	h := a.viewportH - a.zx(editorBodyTop) - a.zx(windowControlBottom)
-	if a.termOpen {
+	if a.termOpen || a.problemsOpen {
 		h -= a.termPanelHeight()
 	}
 
@@ -2442,7 +2472,7 @@ func (a *App) contentHeight() int {
 	}
 
 	h := a.zx(editorBodyTop) + rows*a.zx(rowH) + a.zx(windowControlBottom)
-	if a.termOpen {
+	if a.termOpen || a.problemsOpen {
 		h += a.termPanelHeight()
 	}
 
@@ -2497,8 +2527,8 @@ func (a *App) codeCols() int {
 
 // topSourceLine is the source line at the top of the code view.
 func (a *App) topSourceLine() int {
-	if doc := a.activeDoc(); a.wrap && doc != nil {
-		return doc.wrapped(a.codeCols()).lineAt(a.scrollY / a.zx(rowH))
+	if doc := a.activeDoc(); doc != nil {
+		return a.lineOfRow(doc, a.activeGroup(), a.scrollY/a.zx(rowH))
 	}
 
 	return a.scrollY / a.zx(rowH)
@@ -2526,8 +2556,8 @@ func (a *App) toggleWrap() {
 	}
 	a.viewportCols = 0
 
-	if doc := a.activeDoc(); doc != nil && a.wrap {
-		a.scrollTo(doc.wrapped(a.codeCols()).firstRow(line) * a.zx(rowH))
+	if doc := a.activeDoc(); doc != nil {
+		a.scrollTo(a.rowOfLine(doc, a.activeGroup(), line) * a.zx(rowH))
 
 		return
 	}
@@ -3637,6 +3667,9 @@ func (a *App) rebuildDiffRows() {
 
 func (a *App) readBranchChanges(ctx context.Context) (changeSet, error) {
 	var changes changeSet
+	if cmp := a.palx.compare; cmp[0] != "" && !a.ws.Sample {
+		return loadRefsChanges(ctx, a.ws.Root, cmp[0], cmp[1])
+	}
 	if a.ws.Sample {
 		changes = sampleChangeSet()
 		changes.Note = "Bundled sample: combined changes from the sample branch commits."
@@ -3660,6 +3693,13 @@ func (a *App) readBranchChanges(ctx context.Context) (changeSet, error) {
 }
 
 func (a *App) showBranchChanges(ctx context.Context) {
+	a.presentBranchChanges(ctx, [2]string{})
+}
+
+// presentBranchChanges shows the branch view; a non-empty compare pair
+// shows a two-ref comparison from the command palette instead.
+func (a *App) presentBranchChanges(ctx context.Context, compare [2]string) {
+	a.palx.compare = compare
 	if a.mode == "merge" {
 		a.leaveMergeMode()
 		a.mode = "changes"
@@ -4139,7 +4179,30 @@ func (a *App) jumpHunk(delta int) {
 
 // showToast publishes one message card.
 func (a *App) showToast(kind, title, message string) {
-	a.toast = toastView{Show: true, Kind: kind, Title: title, Message: message}
+	a.toast = toastView{Show: true, Kind: kind, Title: title, Message: message, until: time.Now().Add(toastLifetime)}
+
+	// Wake the loop just after expiry so the card leaves without input. A
+	// wake requested from inside the current frame is dropped when that
+	// frame ends, so the timer fires it off-loop, as autosave does.
+	if a.toastTimer != nil {
+		a.toastTimer.Stop()
+	}
+
+	a.toastTimer = time.AfterFunc(toastLifetime+50*time.Millisecond, func() {
+		if a.page != nil {
+			a.page.WantFrameIn(0)
+		}
+	})
+}
+
+// toastLifetime is how long a message card stays before it dismisses itself.
+const toastLifetime = 5 * time.Second
+
+// pollToast hides the message card once its lifetime has elapsed.
+func (a *App) pollToast() {
+	if a.toast.Show && !a.toast.until.IsZero() && !time.Now().Before(a.toast.until) {
+		a.clearToast()
+	}
 }
 
 // clearToast hides the message card.
@@ -4187,7 +4250,7 @@ func (a *App) scrollToSourceLine(line int) {
 		if line >= 0 && line < len(doc.PreviewLine) && doc.PreviewLine[line] >= 0 {
 			target = doc.PreviewLine[line]
 		}
-	} else if doc := a.activeDoc(); a.wrap && doc != nil {
+	} else if doc := a.activeDoc(); doc != nil {
 		if line < 0 {
 			line = 0
 		}
@@ -4196,7 +4259,8 @@ func (a *App) scrollToSourceLine(line int) {
 			line = len(doc.Lines) - 1
 		}
 
-		target = doc.wrapped(a.codeCols()).firstRow(line)
+		doc.revealLine(line)
+		target = a.rowOfLine(doc, a.activeGroup(), line)
 	}
 
 	a.scrollTo(target * a.zx(rowH))

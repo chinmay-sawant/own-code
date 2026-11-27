@@ -91,12 +91,12 @@
     {{else if .Active}}
       <span class="cstat {{.StatusClass}}">{{.Status}}</span>
       <span class="lang-pill lang-{{.Lang}}">{{.LangLabel}}</span>
-      <span class="crumb-path file-path" id="crumb-path" title="{{.Active}}">{{if .ActiveDirShort}}<span class="file-dir">{{.ActiveDirShort}}/</span>{{end}}<b>{{.ActiveNameShort}}</b></span>
+      <span class="crumb-path file-path" id="crumb-path" title="{{.Active}}">{{if .ActiveDirShort}}<span class="file-dir">{{.ActiveDirShort}}/<b>{{.ActiveNameShort}}</b></span>{{else}}<b>{{.ActiveNameShort}}</b>{{end}}</span>
       {{if .Editing}}
       <span class="tabs-fill"></span>
       {{if .EditDirty}}<span class="edit-flag" id="edit-flag">Changes made</span>{{end}}
       {{if .Previewable}}<button class="crumb-btn" id="preview-toggle" data-action="preview-toggle" type="button" title="Markdown preview (M or Ctrl+Shift+V)"{{if .Modal}} tabindex="-1"{{end}}>{{if .Preview}}Source{{else}}Preview{{end}}</button>{{end}}
-      <button class="crumb-btn on" id="edit-save" data-action="edit-save" type="button" title="Save (Ctrl+S)">Save</button>
+      <button class="crumb-btn save-btn" id="edit-save" data-action="edit-save" type="button" title="Save (Ctrl+S)">Save</button>
       <button class="crumb-btn" id="edit-toggle" data-action="edit-toggle" type="button" title="Back to the source view (Esc)">Done</button>
       <span class="crumb-meta">{{.LineCount}} lines · Ctrl+S saves</span>
       {{else if .FindOpen}}
@@ -249,6 +249,15 @@
             {{end}}
           </div>
 
+          <div class="keys keys-core" id="welcome-core-keys">
+            <span class="key-item"><em>Ctrl+P</em><span>Open file</span></span>
+            <span class="key-item"><em>Ctrl+P  ></em><span>Commands</span></span>
+            <span class="key-item"><em>Ctrl+E</em><span>Edit file</span></span>
+            <span class="key-item"><em>Ctrl+S</em><span>Save</span></span>
+            <span class="key-item"><em>Ctrl+Shift+F</em><span>Search</span></span>
+            <span class="key-item"><em>Ctrl+Space</em><span>Complete</span></span>
+          </div>
+
           <div class="keys">
             <span class="key-item"><em>1</em><span>Explorer</span></span>
             <span class="key-item"><em>2</em><span>Changes</span></span>
@@ -280,8 +289,9 @@
       <div class="track" style="top:{{.TrackTop}}px">
         {{range .Rows}}
         <div class="crow {{.ChangeClass}}{{if .ChangeCurrent}} current{{end}}">
-          {{if .Mark}}<button class="gutter-mark {{.MarkClass}}" id="gutter-{{.ChangeLine}}" data-action="inline-card:{{.ChangeLine}}" type="button" title="{{.Hint}}" aria-label="{{.Hint}}" tabindex="-1">{{.Mark}}</button>{{else}}<span class="gutter-mark"></span>{{end}}
+          {{if .Mark}}<button class="gutter-mark {{.MarkClass}}" id="gutter-{{.ChangeLine}}" data-action="inline-card:{{.ChangeLine}}" type="button" title="{{.Hint}}" aria-label="{{.Hint}}" tabindex="-1">{{.Mark}}</button>{{else}}<span class="gutter-mark{{if .DiagClass}} {{.DiagClass}}{{end}}"{{if .DiagHint}} title="{{.DiagHint}}"{{end}}>{{.DiagMark}}</span>{{end}}
           <button class="ln{{if not .No}} cont{{end}}" id="ln-{{.Line}}-{{.Start}}" data-action="inline-card-line:{{.Line}}" type="button" title="Show line details" aria-label="Show line details" tabindex="-1">{{if .No}}{{.No}}{{end}}</button>
+          {{if .Fold}}<button class="fold-mark {{.Fold}}" id="fold-{{.Line}}" data-action="fold-toggle:{{.Line}}" type="button" title="{{if eq .Fold "closed"}}Unfold{{else}}Fold{{end}}" aria-label="{{if eq .Fold "closed"}}Unfold{{else}}Fold{{end}} line {{.No}}" tabindex="-1">{{if eq .Fold "closed"}}▸{{else}}▾{{end}}</button>{{end}}
           {{if .Blame}}<span class="blame" title="{{.BlameTitle}}">{{.Blame}}</span>{{else if $.BlameShow}}<span class="blame"></span>{{end}}
           <span class="cline">{{if .Selection}}<span class="edit-selection" style="left:{{.SelectionLeft}}px;width:{{.SelectionWidth}}px"></span>{{end}}<span class="clinetext"{{if not $.Wrap}} style="left: -{{.ScrollX}}px"{{end}}>{{range .Segments}}<span class="t-{{.Class}}">{{.Text}}</span>{{end}}</span>{{if .Caret}}<span class="edit-caret" style="left:{{.CaretLeft}}px"></span>{{end}}</span>
         </div>
@@ -303,8 +313,9 @@
       <div class="track" style="top:{{.TrackTop}}px">
         {{range .Rows}}
         <div class="crow {{.ChangeClass}}{{if .ChangeCurrent}} current{{end}}">
-          {{if .Mark}}<button class="gutter-mark {{.MarkClass}}" id="gutter-{{.ChangeLine}}" data-action="inline-card:{{.ChangeLine}}" type="button" title="{{.Hint}}" aria-label="{{.Hint}}" tabindex="-1">{{.Mark}}</button>{{else}}<span class="gutter-mark"></span>{{end}}
+          {{if .Mark}}<button class="gutter-mark {{.MarkClass}}" id="gutter-{{.ChangeLine}}" data-action="inline-card:{{.ChangeLine}}" type="button" title="{{.Hint}}" aria-label="{{.Hint}}" tabindex="-1">{{.Mark}}</button>{{else}}<span class="gutter-mark{{if .DiagClass}} {{.DiagClass}}{{end}}"{{if .DiagHint}} title="{{.DiagHint}}"{{end}}>{{.DiagMark}}</span>{{end}}
           <button class="ln{{if not .No}} cont{{end}}" id="ln-{{.Line}}-{{.Start}}" data-action="inline-card-line:{{.Line}}" type="button" title="Show line details" aria-label="Show line details" tabindex="-1">{{if .No}}{{.No}}{{end}}</button>
+          {{if .Fold}}<button class="fold-mark {{.Fold}}" id="fold-{{.Line}}" data-action="fold-toggle:{{.Line}}" type="button" title="{{if eq .Fold "closed"}}Unfold{{else}}Fold{{end}}" aria-label="{{if eq .Fold "closed"}}Unfold{{else}}Fold{{end}} line {{.No}}" tabindex="-1">{{if eq .Fold "closed"}}▸{{else}}▾{{end}}</button>{{end}}
           {{if .BlameHash}}<button class="blame" id="blame-{{.Line}}-{{.Start}}" data-action="blame-commit:{{.BlameHash}}" type="button" title="{{.BlameTitle}}" aria-label="Open commit {{.BlameHash}}" tabindex="-1">{{.Blame}}</button>{{else if .Blame}}<span class="blame uncommitted" title="{{.BlameTitle}}">{{.Blame}}</span>{{else if $.BlameShow}}<span class="blame"></span>{{end}}
           <span class="cline"><span class="clinetext"{{if not $.Wrap}} style="left: -{{.ScrollX}}px"{{end}}>{{range .Segments}}<span class="t-{{.Class}}">{{.Text}}</span>{{end}}</span></span>
           <button class="edit-line-hit" id="edit-line-{{.Line}}" data-action="edit-begin-line:{{.Line}}" type="button" title="Edit line {{if .No}}{{.No}}{{end}}" aria-label="Edit line {{if .No}}{{.No}}{{end}}" tabindex="-1"></button>
@@ -362,7 +373,7 @@
     {{if .Second.Active}}
     <span class="cstat {{.Second.StatusClass}}">{{.Second.Status}}</span>
     <span class="lang-pill lang-{{.Second.Lang}}">{{.Second.LangLabel}}</span>
-    <span class="crumb-path file-path" id="crumb-path-2" title="{{.Second.Active}}">{{if .Second.ActiveDirShort}}<span class="file-dir">{{.Second.ActiveDirShort}}/</span>{{end}}<b>{{.Second.ActiveNameShort}}</b></span>
+    <span class="crumb-path file-path" id="crumb-path-2" title="{{.Second.Active}}">{{if .Second.ActiveDirShort}}<span class="file-dir">{{.Second.ActiveDirShort}}/<b>{{.Second.ActiveNameShort}}</b></span>{{else}}<b>{{.Second.ActiveNameShort}}</b>{{end}}</span>
     <span class="tabs-fill"></span>
     {{if not .Second.Image.On}}{{if .Second.BlameNote}}<span class="crumb-meta blame-note" title="{{.Second.BlameNote}}">{{.Second.BlameNote}}</span>{{end}}{{end}}
     {{if .Second.Image.On}}<span class="crumb-meta">{{.Second.Image.Format}} · {{.Second.Image.NaturalW}} × {{.Second.Image.NaturalH}} · {{.Second.Image.Scale}}% · {{.Second.ByteSize}}</span>{{else}}<span class="crumb-meta">{{.Second.LineCount}} lines · {{.Second.ByteSize}}</span>{{end}}
@@ -405,8 +416,9 @@
       <div class="track" style="top:{{.Second.TrackTop}}px">
         {{range .Second.Rows}}
         <div class="crow {{.ChangeClass}}{{if .ChangeCurrent}} current{{end}}">
-          <span class="gutter-mark {{.MarkClass}}">{{.Mark}}</span>
+          <span class="gutter-mark {{.MarkClass}}{{if .DiagClass}} {{.DiagClass}}{{end}}"{{if .DiagHint}} title="{{.DiagHint}}"{{end}}>{{.Mark}}{{if not .Mark}}{{.DiagMark}}{{end}}</span>
           <span class="ln{{if not .No}} cont{{end}}">{{if .No}}{{.No}}{{end}}</span>
+          {{if .Fold}}<button class="fold-mark {{.Fold}}" id="fold2-{{.Line}}" data-action="fold-toggle2:{{.Line}}" type="button" title="{{if eq .Fold "closed"}}Unfold{{else}}Fold{{end}}" aria-label="{{if eq .Fold "closed"}}Unfold{{else}}Fold{{end}} line {{.No}}" tabindex="-1">{{if eq .Fold "closed"}}▸{{else}}▾{{end}}</button>{{end}}
           {{if .Blame}}<span class="blame" title="{{.BlameTitle}}">{{.Blame}}</span>{{else if $.Second.BlameShow}}<span class="blame"></span>{{end}}
           <span class="cline"><span class="clinetext"{{if not $.Wrap}} style="left: -{{.ScrollX}}px"{{end}}>{{range .Segments}}<span class="t-{{.Class}}">{{.Text}}</span>{{end}}</span></span>
         </div>

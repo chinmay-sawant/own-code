@@ -1416,8 +1416,18 @@ type fileDoc struct {
 	Encoding    string
 	Indent      string
 	Wrap        *wrapPlan
-	Syntax      *syntaxCache
-	Image       *imageDoc
+	// Folded maps a collapsed region's first line to its text, so an edit
+	// can tell whether the fold still applies. Fold view state is cached
+	// below and rebuilt when Lines or the fold set change.
+	Folded       map[int]string
+	foldGen      int
+	foldView     *foldHidden
+	foldViewGen  int
+	regs         map[int]int
+	regsKeyLines int
+	regsKeyPtr   *string
+	Syntax       *syntaxCache
+	Image        *imageDoc
 }
 
 // tokenizeLines highlights lines using the document's incremental token cache.

@@ -568,6 +568,10 @@ func (a *App) confirmDiscard(ctx context.Context) error {
 		return nil
 	}
 
+	if a.confirmKind == confirmKindLSPRename {
+		return a.applyLSPRename(ctx)
+	}
+
 	// Settings confirms share the dialog: a risky terminal chord or
 	// single-letter rebind, and an overbroad excludes edit. The pending
 	// state applies before closeConfirm clears it.
@@ -627,6 +631,10 @@ func (a *App) confirmViewState() confirmView {
 	if a.confirmKind == confirmKindReplaceAll {
 		limit = confirmReplacePreviewLimit
 		label, hint = "Replace", "Enter replace · Esc cancel"
+	}
+
+	if a.confirmKind == confirmKindLSPRename {
+		label, hint = "Rename", "Enter rename · Esc cancel"
 	}
 
 	if a.confirmKind == confirmExplorerDelete {

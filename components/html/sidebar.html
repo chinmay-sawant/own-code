@@ -75,7 +75,7 @@
 
     <div class="side-foot">
       <span class="ws-mark"></span>
-      <span class="ws-name">{{.Workspace}}</span>
+      <span class="ws-name" title="{{.Workspace}}">{{.WorkspaceLabel}}</span>
       <span class="side-sep">·</span>
       <span class="dim">{{.TreeCount}} files</span>
       {{if .ScanBudget}}<span class="scan-badge" title="{{.ScanBudget}}">limited</span>{{end}}
@@ -213,9 +213,17 @@
     </div>
     {{else}}
     <div class="clean">
-      <span class="clean-mark">✅</span>
+      <span class="clean-mark{{if .NoGit}} unavailable{{end}}" aria-hidden="true">{{if .NoGit}}i{{else}}✅{{end}}</span>
       <b>{{if .Diff.EmptyTitle}}{{.Diff.EmptyTitle}}{{else}}No changes{{end}}</b>
+      {{if .NoGit}}
+      <div class="clean-note">
+        <span>Git is unavailable at</span>
+        <span class="clean-path mono" id="git-unavailable-path">{{.GitRoot}}</span>
+        <span>The Explorer can still read this folder.</span>
+      </div>
+      {{else}}
       <span class="clean-note">{{.Diff.Note}}</span>
+      {{end}}
     </div>
     {{end}}
 
@@ -282,9 +290,11 @@
     </section>
     {{end}}
 
+    {{if or .WatchNote (not .NoGit)}}
     <div class="side-foot">
       <span class="dim note-one" title="{{if .WatchNote}}{{.WatchNote}}{{else}}{{.Diff.Note}}{{end}}">{{if .WatchNote}}{{.WatchNote}}{{else}}{{.Diff.Note}}{{end}}</span>
     </div>
+    {{end}}
   {{end}}
 </aside>
 
@@ -299,4 +309,4 @@
 </button>
 {{end}}
 
-<button class="drawer-resize" id="drawer-resize" type="button" title="Drag to resize the drawer (up to 30% wider)" aria-label="Resize the drawer" tabindex="-1" style="left:{{.DrawerResizeLeft}}px;top:{{.DrawerResizeTop}}px;height:{{.DrawerResizeH}}px"><svg width="6" height="{{.DrawerResizeH}}" aria-hidden="true"><rect x="2" y="0" width="2" height="{{.DrawerResizeH}}" fill="#8f8f8f"/></svg></button>
+<button class="drawer-resize" id="drawer-resize" type="button" title="Drag to resize the drawer (up to 30% wider)" aria-label="Resize the drawer" tabindex="-1" style="left:{{.DrawerResizeLeft}}px;top:{{.DrawerResizeTop}}px;height:{{.DrawerResizeH}}px"><span class="drawer-grip" aria-hidden="true"></span></button>

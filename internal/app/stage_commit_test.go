@@ -132,8 +132,8 @@ func TestStageHunkAtCursorAndHunkMenu(t *testing.T) {
 
 	rest := strings.TrimPrefix(box.ID, "revert-line-")
 	rows := app.ContextMenuFor(box.ID)
-	if len(rows) != 2 || rows[0].Label != "Stage Hunk" || rows[1].Label != "Discard Hunk" {
-		t.Fatalf("hunk menu = %+v, want Stage + Discard rows", rows)
+	if len(rows) != 3 || rows[0].Label != "Stage Hunk" || rows[1].Label != "Unstage Hunk" || rows[2].Label != "Discard Hunk" {
+		t.Fatalf("hunk menu = %+v, want Stage + Unstage + Discard rows", rows)
 	}
 
 	// Stage the remaining ELEVEN block: it is the last revert button in

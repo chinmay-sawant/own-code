@@ -28,26 +28,22 @@
   color: var(--thumb);
 }
 
-/* Drawer resize handle: a thin fixed strip centered on the sidebar's right
-   edge, like the VS Code sidebar resize. Dragging it widens the
-   file/source-control drawer from 268 px up to 348 px (about 30% more) so
-   long files and cards fit. It sits after the scroll rails in the document,
-   so it wins ties where they overlap, while rail thumbs keep working because
-   their centers sit clear of this strip. The 2 px SVG bar paints a universal mid-gray (#8f8f8f) so the handle reads on both dark and light chrome without a theme token; hover washes the strip so the target is unmistakable. */
+/* The 6 px hit target centers a 2 px divider on the drawer edge. */
 .drawer-resize {
   position: fixed;
   z-index: 27;
   width: 6px;
-  display: block;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
   padding: 0;
   border: 0;
-  /* A whisper of fill so the handle owns a paint op and hit-tests above the
-     drawer and editor edges; the 2 px SVG bar is the visible affordance. */
   background-color: var(--panel-2);
   cursor: ew-resize;
 }
 
-.drawer-resize:hover { background-color: var(--accent-strong); }
+.drawer-grip { width: 2px; background-color: var(--line); }
+.drawer-resize:hover .drawer-grip { background-color: var(--accent); }
 
 .hist-graph {
   position: relative;

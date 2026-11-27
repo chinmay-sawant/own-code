@@ -39,8 +39,8 @@ func TestScreenSGR(t *testing.T) {
 	tests := []struct {
 		name      string
 		input     string
-		fg        uint8
-		bg        uint8
+		fg        Color
+		bg        Color
 		bold      bool
 		dim       bool
 		italic    bool
@@ -54,11 +54,11 @@ func TestScreenSGR(t *testing.T) {
 		{name: "attributes off", input: "\x1b[1;2;3;4;7m\x1b[22;23;24;27mX", fg: DefaultColor, bg: DefaultColor},
 		{name: "default foreground", input: "\x1b[31m\x1b[39mX", fg: DefaultColor, bg: DefaultColor},
 		{name: "default background", input: "\x1b[44m\x1b[49mX", fg: DefaultColor, bg: DefaultColor},
-		{name: "256 bright red", input: "\x1b[38;5;196mX", fg: 9, bg: DefaultColor},
-		{name: "256 blue", input: "\x1b[38;5;21mX", fg: 4, bg: DefaultColor},
-		{name: "256 background", input: "\x1b[48;5;196mX", fg: DefaultColor, bg: 9},
-		{name: "truecolor green", input: "\x1b[38;2;0;255;0mX", fg: 10, bg: DefaultColor},
-		{name: "truecolor background", input: "\x1b[48;2;0;0;255mX", fg: DefaultColor, bg: 4},
+		{name: "256 bright red", input: "\x1b[38;5;196mX", fg: rgbColor(255, 0, 0), bg: DefaultColor},
+		{name: "256 blue", input: "\x1b[38;5;21mX", fg: rgbColor(0, 0, 255), bg: DefaultColor},
+		{name: "256 background", input: "\x1b[48;5;196mX", fg: DefaultColor, bg: rgbColor(255, 0, 0)},
+		{name: "truecolor green", input: "\x1b[38;2;0;255;0mX", fg: rgbColor(0, 255, 0), bg: DefaultColor},
+		{name: "truecolor background", input: "\x1b[48;2;0;122;204mX", fg: DefaultColor, bg: rgbColor(0, 122, 204)},
 	}
 
 	for _, test := range tests {

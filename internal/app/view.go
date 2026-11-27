@@ -1,5 +1,7 @@
 package app
 
+import "time"
+
 // View is the data the code view template prints. Every field is a plain
 // value or a prebuilt row, so one SetData call publishes one frame.
 type View struct {
@@ -14,14 +16,17 @@ type View struct {
 	MenuY        int
 	MenuRows     []menuViewRow
 
-	Workspace   string
-	Branch      string
-	BranchQuery string
-	Changed     int
-	DevNote     string
-	ScanBudget  string
-	WatchNote   string
-	HoverPath   string
+	Workspace      string
+	WorkspaceLabel string
+	GitRoot        string
+	Branch         string
+	NoGit          bool
+	BranchQuery    string
+	Changed        int
+	DevNote        string
+	ScanBudget     string
+	WatchNote      string
+	HoverPath      string
 
 	Tree         []treeRow
 	StickyTree   []treeRow
@@ -149,15 +154,18 @@ type View struct {
 	SplitDivH    int
 	Second       secondaryView
 
-	Diff         diffView
-	Merge        mergeView
-	History      historyView
-	Terminal     terminalView
-	Outline      []symbolRow
-	Toast        toastView
-	Confirm      confirmView
-	SettingsOpen bool
-	Themes       []themeRow
+	Diff             diffView
+	Merge            mergeView
+	History          historyView
+	BottomPanelLeft  int
+	BottomPanelWidth int
+	Terminal         terminalView
+	Outline          []symbolRow
+	LSP              lspView
+	Toast            toastView
+	Confirm          confirmView
+	SettingsOpen     bool
+	Themes           []themeRow
 	// ThumbColor and PanelColor carry theme colors into inline SVG paints;
 	// the SVG rasterizer does not resolve currentColor or var().
 	ThumbColor   string
@@ -176,6 +184,7 @@ type View struct {
 	CommitDialog   commitDialogView
 	CommitTip      commitFloatView
 	InlineCard     inlineCard
+	Popup          popupView
 	FileMenu       bool
 	ProjectOpen    bool
 	ProjectQuery   string
@@ -213,6 +222,8 @@ type View struct {
 	KeymapCapture     string
 	KeymapPending     string
 	HelpRows          []keymapRow
+	LSPOn             bool
+	LSPRows           []lspServerRow
 	AppName           string
 	AppVersion        string
 	AppScope          string
@@ -417,7 +428,6 @@ type searchRow struct {
 	Index    int
 	Path     string
 	Name     string
-	Dir      string
 	Line     int
 	Col      int
 	Before   string
@@ -518,6 +528,12 @@ type codeRow struct {
 	// RelNo is the gutter display number (relative or absolute). Zero
 	// blanks the number cell on wrapped continuation rows.
 	RelNo int
+	// DiagClass/DiagMark/DiagHint paint the language-server gutter marker.
+	DiagClass string
+	DiagMark  string
+	DiagHint  string
+	// Fold is "open" or "closed" on a row that opens a foldable region.
+	Fold string
 }
 
 // recentRow is one quick-open entry on the welcome panel.
@@ -768,6 +784,9 @@ type toastView struct {
 	Kind    string
 	Title   string
 	Message string
+
+	// until is when the card auto-dismisses; zero means it stays.
+	until time.Time
 }
 
 // confirmView is the destructive-action dialog, such as Discard. OkLabel

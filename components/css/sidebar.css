@@ -624,5 +624,8 @@ no position:sticky is used inside this list. */
   font-weight: 800;
 }
 
+.clean-mark.unavailable { background-color: var(--accent-soft); color: var(--accent); }
 .clean b { color: var(--muted); font-size: 11px; }
-.clean-note { max-width: 210px; font-size: 9.5px; line-height: 1.45; }
+.clean-note { width: 100%; max-width: 210px; min-width: 0; font-size: 9.5px; line-height: 1.45; white-space: normal; overflow-wrap: anywhere; }
+
+.clean-path { display: block; margin: 4px 0; color: var(--muted); overflow-wrap: anywhere; }

@@ -15,15 +15,15 @@ import (
 const (
 	termRowH          = 16
 	termCellW         = 7.2 // monospace advance at the 12 px terminal face, matching diffCellW
-	termDefaultHeight = 240
+	termDefaultHeight = 270
 	termMinHeight     = 120
 
 	termResizeH  = 5
-	termHeadH    = 30
-	termFootH    = 18
+	termHeadH    = 36
+	termFootH    = 22
 	termNoteH    = 18
-	termBodyPad  = 12
-	termWidthPad = 20
+	termBodyPad  = 16
+	termWidthPad = 28
 	termTopGap   = 80
 )
 
@@ -35,6 +35,7 @@ func (a *App) Close() {
 	}
 
 	a.stopDirLoader()
+	a.lspShutdown()
 
 	if a.patchLoader != nil {
 		a.patchLoader.Close()
@@ -136,7 +137,7 @@ func (a *App) termVisibleRows() int {
 
 // termColsForWidth is the fixed-width cell count for the editor column.
 func (a *App) termColsForWidth() int {
-	return max(20, int(float64(a.editorWidth()-termWidthPad)/a.zf(termCellW)))
+	return max(20, int(float64(a.editorWidth()-2*a.zx(termWidthPad/2))/a.zf(termCellW)))
 }
 
 // terminalMaxScroll is the largest bottom-relative scrollback offset.
@@ -165,15 +166,16 @@ func (a *App) newTerminalManager() *terminal.Manager {
 // startTerminalSession opens one shell in the workspace root. Failures keep
 // the panel open with a note instead of crashing or retrying on their own.
 func (a *App) startTerminalSession(ctx context.Context) {
-	a.termOpen = true
+	a.startTerminalShell(ctx, a.terminalShell())
+}
+
+func (a *App) startTerminalShell(ctx context.Context, shell string) {
+	a.termOpen, a.problemsOpen = true, false
 	_ = a.page.Form().Focus(ctx, "")
 
 	if a.term == nil {
 		a.term = a.newTerminalManager()
 	}
-
-	shell := a.terminalShell()
-	a.termShell = shell
 
 	_, err := a.term.Open(terminal.Config{
 		Shell: shell,
@@ -205,6 +207,29 @@ func (a *App) startTerminalSession(ctx context.Context) {
 	a.refresh()
 }
 
+const terminalProfileMenuPrefix = "terminal-profile:"
+
+func (a *App) openTerminalProfiles(box ownframe.Box) {
+	a.termProfiles = terminal.InstalledShells(a.terminalShell())
+	items := make([]ownframe.MenuItem, 0, len(a.termProfiles))
+	for i, profile := range a.termProfiles {
+		hint := ""
+		if profile.Default {
+			hint = "Default"
+		}
+		items = append(items, ownframe.MenuItem{
+			ID: fmt.Sprintf("%s%d", terminalProfileMenuPrefix, i), Label: profile.Label, Hint: hint, Enabled: true,
+		})
+	}
+	if len(items) == 0 {
+		a.showToast("info", "No shells found", "Install a shell or set OWN_CODE_SHELL to its executable.")
+		a.refresh()
+		return
+	}
+	y := int(box.Y) - a.zx(menuWindowControlPad) - len(items)*a.zx(menuWindowControlRow)
+	a.presentMenu(int(box.X+box.W)-a.zx(menuWindowControlWidth), y, items)
+}
+
 // toggleTerminal hides or shows the panel. Hiding leaves shells running.
 func (a *App) toggleTerminal(ctx context.Context) {
 	if a.termOpen {
@@ -215,7 +240,7 @@ func (a *App) toggleTerminal(ctx context.Context) {
 		return
 	}
 
-	a.termOpen = true
+	a.termOpen, a.problemsOpen = true, false
 
 	if a.term == nil {
 		a.term = a.newTerminalManager()
@@ -237,7 +262,7 @@ func (a *App) toggleTerminal(ctx context.Context) {
 
 // focusTerminal gives the keyboard back to the active shell.
 func (a *App) focusTerminal(ctx context.Context) {
-	a.termOpen = true
+	a.termOpen, a.problemsOpen = true, false
 	a.termFocus = true
 	a.refresh()
 
@@ -374,6 +399,15 @@ func (a *App) handleTerminalKey(ctx context.Context, key string) (bool, error) {
 		return false, nil
 	}
 
+	if a.menuOpen {
+		if key == "escape" {
+			a.closeMenu()
+			a.refresh()
+			return true, a.page.Redraw(ctx)
+		}
+		return true, nil
+	}
+
 	// The window maps Ctrl+C/Ctrl+V/Ctrl+Shift+C/Ctrl+Shift+V to its copy
 	// and paste chords after key handling. Let those chords reach onCopy and
 	// onPaste instead of also writing a control byte to the shell.
@@ -414,7 +448,7 @@ func (a *App) handleTerminalKey(ctx context.Context, key string) (bool, error) {
 
 // syncTerminalSize keeps the active PTY on the panel's current cell grid.
 func (a *App) syncTerminalSize(_ context.Context) {
-	if a.term == nil {
+	if !a.termOpen || a.term == nil {
 		return
 	}
 
@@ -437,22 +471,22 @@ func (a *App) syncTerminalSize(_ context.Context) {
 
 // pollTerminal copies the active screen when it changed. One refresh follows
 // a change, so an idle shell costs only an Info read.
-func (a *App) pollTerminal(ctx context.Context) {
+func (a *App) pollTerminal(ctx context.Context) error {
 	if !a.termOpen || a.term == nil {
-		return
+		return nil
 	}
 
 	_, session := a.term.Active()
 	if session == nil {
 		sessions := a.term.Sessions()
 		if len(sessions) == 0 {
-			return
+			return nil
 		}
 
 		a.term.SetActive(sessions[0].ID)
 		_, session = a.term.Active()
 		if session == nil {
-			return
+			return nil
 		}
 	}
 
@@ -460,7 +494,7 @@ func (a *App) pollTerminal(ctx context.Context) {
 
 	info := session.Info()
 	if info.Version == a.termVersion && info.Running == a.termRunning && info.Note == a.termNote {
-		return
+		return nil
 	}
 
 	snapshot := session.SnapshotViewport(1, 0)
@@ -479,7 +513,9 @@ func (a *App) pollTerminal(ctx context.Context) {
 	a.termAppCursor = snapshot.AppCursor
 	a.termBracketedPaste = snapshot.BracketedPaste
 	a.termScroll = terminalScrollBy(a.termScroll, max(0, total-a.termVisibleRows()), 0)
-	a.refresh()
+	a.view.Terminal = a.terminalView()
+	a.page.SetData(&a.view)
+	return a.page.RedrawIfChanged(ctx)
 }
 
 // terminalView builds the panel state for one frame.
@@ -516,12 +552,13 @@ func (a *App) terminalView() terminalView {
 		a.termScroll,
 	)
 
-	shell := a.termShell
-	if strings.TrimSpace(shell) == "" {
-		shell = a.terminalShell()
+	view.Shell = filepath.Base(a.terminalShell())
+	for _, session := range view.Sessions {
+		if session.Active {
+			view.Shell = session.Title
+			break
+		}
 	}
-
-	view.Shell = filepath.Base(shell)
 	if a.termNote != "" && view.Note == "" {
 		view.Note = a.termNote
 	}

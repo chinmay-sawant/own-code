@@ -80,6 +80,12 @@ func (a *App) onPress(ctx context.Context, box ownframe.Box, x, y float64) (bool
 	a.editCaret = sel.Caret
 	a.clearBracket()
 	a.dragSelect = true
+
+	// Double-click selects the word, triple-click the line. A multi-click
+	// is a finished selection, so a following drag must not replace it.
+	if a.selectByClicks(text, sel.Caret) {
+		a.dragSelect = false
+	}
 	a.refresh()
 
 	return true, a.page.Redraw(ctx)
@@ -126,14 +132,12 @@ func (a *App) editPointAt(x, y float64) (int, int, bool) {
 	// them before resolving the visual row.
 	y -= float64(a.stickyTopPx(0))
 
-	cols := a.codeColsForGroup(0)
 	visual := visualRowAt(int(y), int(box.Y), a.scrollY, a.zx(rowH))
 	line := visual
 
 	rowStart := 0
-	if a.wrap {
-		plan := doc.wrapped(cols)
-		line = sourceLineAt(doc, cols, visual)
+	if plan := a.rowPlan(doc, 0); plan != nil {
+		line = plan.lineAt(visual)
 		if visual >= 0 && visual < len(plan.Rows) {
 			line = plan.Rows[visual].Line
 			rowStart = plan.Rows[visual].Start

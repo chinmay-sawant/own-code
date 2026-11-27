@@ -22,7 +22,7 @@
     <div class="search-meta">
       <span>{{.Search.Files}} files · {{.Search.Total}} results{{if gt .Search.TotalAll .Search.Total}} · {{.Search.TotalAll}} total{{else if .Search.Capped}} · {{.Search.TotalAll}}+ total{{end}}</span>
       {{if .Search.Busy}}<span class="search-busy">searching…</span>{{else if .Search.Truncated}}<span class="search-more">more results hidden</span>{{end}}
-      {{if .Search.Note}}<span class="search-note">{{.Search.Note}}</span>{{end}}
+      {{if .Search.Note}}<span class="search-note" title="{{.Search.Note}}">{{.Search.Note}}</span>{{end}}
     </div>
     {{if .Search.Skipped}}<div class="search-skipped" id="search-skipped">{{.Search.Skipped}}</div>{{end}}
     <div class="search-results" id="search-results">
@@ -38,9 +38,9 @@
       <button class="palette-row search-row{{if .Selected}} on{{end}}{{if .Checked}} checked{{end}}{{if .Replacement}} with-replace{{end}}" id="search-hit-{{.Index}}" data-action="search-hit:{{.Index}}" type="button" title="{{.Path}}:{{.Line}}">
         <span class="search-loc mono">{{.Line}}:{{.Col}}</span>
         <span class="palette-text search-text">
-          <b>{{.Name}} <span class="search-dir">{{.Dir}}</span></b>
+          <b>{{.Name}}</b>
           <span class="search-line"><span class="search-before">{{.Before}}</span><span class="search-match">{{.Match}}</span><span class="search-after">{{.After}}</span></span>
-          {{if .Checked}}<span class="search-replace-line"><span class="search-arrow">→</span><span class="search-replacement">{{.Replacement}}</span></span>{{end}}
+          {{if .Replacement}}<span class="search-replace-line"><span class="search-arrow">→</span><span class="search-replacement">{{.Replacement}}</span></span>{{end}}
         </span>
       </button>
       {{else}}
@@ -49,13 +49,12 @@
     </div>
     {{if .Search.Scroll}}<div class="search-scroll-track" id="search-scroll-track"><button class="search-thumb" id="search-thumb" type="button" tabindex="-1" title="Drag to scroll search results" aria-label="Scroll search results" style="margin-top:{{.Search.ScrollTop}}px;height:{{.Search.ScrollHeight}}px"><svg width="8" height="{{.Search.ScrollHeight}}" aria-hidden="true"><rect width="8" height="{{.Search.ScrollHeight}}" fill="{{.ThumbColor}}"/></svg></button></div>{{end}}
     </div>
-    {{if .Palette.Busy}}<div class="palette-note">Searching disk…</div>{{else if .Palette.Note}}<div class="palette-note">{{.Palette.Note}}</div>{{end}}
     <div class="palette-foot"><span>↑↓ choose · Enter open · Ctrl+Enter replace · Space toggles file · Esc close</span><span>Ctrl+Shift+F · Ctrl+Shift+H</span></div>
     <div class="palette-foot replace-foot">
       <span>{{.Search.ReplaceFiles}} files · {{.Search.ReplaceTotal}} previewed</span>
       <span class="replace-actions">
         {{if .Search.CanUndoReplace}}<button class="replace-btn" id="replace-undo" data-action="replace-undo" type="button" title="Restore every file from the last replace" aria-label="Undo last workspace replace">Undo replace</button>{{else if .Search.UndoNote}}<span class="search-undo-note">{{.Search.UndoNote}}</span>{{end}}
-        <button class="replace-btn danger" id="search-replace-all" data-action="search-replace-all" type="button" title="Review and replace every checked match" aria-label="Replace all checked matches"{{if not .Search.CanReplace}} disabled{{end}}>Replace All{{if gt .Search.ReplaceTotal 0}} ({{.Search.ReplaceFiles}} files, {{.Search.ReplaceTotal}}){{end}}</button>
+        <button class="replace-btn{{if .Search.CanReplace}} danger{{end}}" id="search-replace-all" data-action="search-replace-all" type="button" title="Review and replace every checked match" aria-label="Replace all checked matches"{{if not .Search.CanReplace}} disabled{{end}}>Replace All{{if gt .Search.ReplaceTotal 0}} ({{.Search.ReplaceFiles}} files, {{.Search.ReplaceTotal}}){{end}}</button>
       </span>
     </div>
   </div>
@@ -78,7 +77,8 @@
       {{if .Cmd}}
       <button class="palette-row palette-cmd{{if .Active}} on{{end}}" id="palette-cmd-{{.Cmd}}" data-action="palette-cmd:{{.Cmd}}" type="button" aria-label="{{.Name}}">
         <span class="ficon cmd-badge">&gt;</span>
-        <span class="palette-text"><b>{{.Name}}</b><span>{{.Dir}}</span></span>
+        <span class="palette-text"><b>{{if .NameParts}}{{range .NameParts}}<span class="{{if .Hit}}fz-hit{{else}}fz{{end}}">{{.Text}}</span>{{end}}{{else}}{{.Name}}{{end}}</b><span class="cmd-desc">{{if .Recent}}Recent · {{end}}{{.Dir}}</span></span>
+        {{if .Keys}}<span class="palette-keys">{{.Keys}}</span>{{end}}
         <span class="palette-go">↵</span>
       </button>
       {{else if .Symbol}}

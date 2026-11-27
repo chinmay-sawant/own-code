@@ -15,17 +15,39 @@ const (
 	editPageLines = 20
 )
 
-// editSnapshot is one undo point. The buffer text is cheap to copy for the
-// files this viewer opens, and it keeps the editor model simple.
-type editSnapshot struct {
-	Text   string
-	Caret  int
+// editRecord is one undo or redo step. Resolved records hold only the small
+// edit.Edit that moves the current text to the target text, so history costs
+// the size of the changes rather than a copy of the buffer per step. The
+// newest undo record is "open": the change it will describe has not been
+// resolved yet, so it holds the before text until the next pushUndo (or an
+// undo) diffs it against the buffer.
+type editRecord struct {
+	Apply  edit.Edit // applied to the text current at pop time
+	Caret  int       // caret to restore
 	Anchor int
+	open   bool
+	before string // valid while open
+}
+
+// resolve turns an open record into an Edit against cur, the text after the
+// change it covers.
+func (r *editRecord) resolve(cur string) {
+	if !r.open {
+		return
+	}
+
+	if e, ok := edit.Diff(r.before, cur); ok {
+		r.Apply = e.Invert(r.before)
+	} else {
+		r.Apply = edit.Edit{}
+	}
+
+	r.open, r.before = false, ""
 }
 
 // onType inserts printable text at the edit caret.
 func (a *App) onType(ctx context.Context, text string) error {
-	if a.settingsOpen || text == "" {
+	if a.settingsOpen || a.menuOpen || text == "" {
 		return nil
 	}
 
@@ -51,7 +73,24 @@ func (a *App) onType(ctx context.Context, text string) error {
 	text = strings.ReplaceAll(text, "\r", "\n")
 	text = strings.ReplaceAll(text, "\t", tabSpaces)
 
-	return a.insertEditText(ctx, text)
+	a.lspCommitBefore(text)
+
+	if handled, err := a.autoPairType(ctx, text); handled || err != nil {
+		if err == nil {
+			// Auto-paired brackets skip lspTyped but still trigger signature help.
+			a.signatureTyped(text)
+		}
+
+		return err
+	}
+
+	if err := a.insertEditText(ctx, text); err != nil {
+		return err
+	}
+
+	a.lspTyped(text)
+
+	return nil
 }
 
 // onBackspace deletes the selection or the rune before the caret.
@@ -75,6 +114,12 @@ func (a *App) onBackspace(ctx context.Context) error {
 	}
 
 	text, start, end := a.editSelection()
+	if start == end {
+		if from, to, ok := pairBackspaceSpan([]rune(text), start); ok {
+			return a.replaceEditRange(ctx, text, from, to, "")
+		}
+	}
+
 	if start == end && start > 0 {
 		start--
 	}
@@ -235,10 +280,9 @@ func (a *App) onUndo(ctx context.Context) error {
 			return nil
 		}
 
-		a.pushRedo()
-		last := a.editUndo[len(a.editUndo)-1]
-		a.editUndo = a.editUndo[:len(a.editUndo)-1]
-		a.restoreEdit(last)
+		last, target := a.popUndo()
+		a.pushRedo(target)
+		a.restoreEdit(target, last.Caret, last.Anchor)
 		a.refresh()
 
 		return a.page.Redraw(ctx)
@@ -271,10 +315,11 @@ func (a *App) onRedo(ctx context.Context) error {
 			return nil
 		}
 
-		a.pushUndo()
 		next := a.editRedo[len(a.editRedo)-1]
 		a.editRedo = a.editRedo[:len(a.editRedo)-1]
-		a.restoreEdit(next)
+		target := next.Apply.Apply(a.edit.Text())
+		a.pushUndo()
+		a.restoreEdit(target, next.Caret, next.Anchor)
 		a.refresh()
 
 		return a.page.Redraw(ctx)
@@ -296,6 +341,15 @@ func (a *App) onRedo(ctx context.Context) error {
 func (a *App) editKey(ctx context.Context, key string) error {
 	if a.settingsOpen || !a.editing || a.edit == nil {
 		return nil
+	}
+
+	// Line operations (move, duplicate, delete, join) honor rebinding.
+	if handled, err := a.lineOpKey(ctx, key); handled || err != nil {
+		return err
+	}
+
+	if handled, err := a.foldKey(ctx, key); handled || err != nil {
+		return err
 	}
 
 	if a.ctrl {
@@ -441,6 +495,10 @@ func (a *App) editKey(ctx context.Context, key string) error {
 			return nil
 		}
 
+		if !a.shift && a.snippetTab() {
+			return a.page.Redraw(ctx)
+		}
+
 		return a.indentSelection(ctx, a.shift)
 	case "escape":
 		// An open goto/symbol overlay closes first; otherwise Esc leaves
@@ -533,48 +591,66 @@ func (a *App) editSelection() (string, int, int) {
 	return text, anchor, caret
 }
 
-// pushUndo records the current text before a change.
+// pushUndo records the current text before a change. The previous open
+// record is resolved first against the text it produced.
 func (a *App) pushUndo() {
 	if a.edit == nil {
 		return
 	}
 
-	a.editUndo = append(a.editUndo, editSnapshot{
-		Text:   a.edit.Text(),
-		Caret:  a.editCaret,
-		Anchor: a.editAnchor,
-	})
+	cur := a.edit.Text()
+	if n := len(a.editUndo); n > 0 {
+		a.editUndo[n-1].resolve(cur)
+	}
+
+	a.editUndo = append(a.editUndo, editRecord{open: true, before: cur, Caret: a.editCaret, Anchor: a.editAnchor})
 	if len(a.editUndo) > editUndoLimit {
 		a.editUndo = a.editUndo[1:]
 	}
 }
 
-// pushRedo records the current text before an undo.
-func (a *App) pushRedo() {
+// popUndo removes the newest undo record and returns the text it restores.
+func (a *App) popUndo() (editRecord, string) {
+	n := len(a.editUndo)
+	rec := a.editUndo[n-1]
+	a.editUndo = a.editUndo[:n-1]
+
+	cur := a.edit.Text()
+	if rec.open {
+		rec.resolve(cur)
+	}
+
+	return rec, rec.Apply.Apply(cur)
+}
+
+// pushRedo records how to get back from target (the text an undo is about to
+// restore) to the current text.
+func (a *App) pushRedo(target string) {
 	if a.edit == nil {
 		return
 	}
 
-	a.editRedo = append(a.editRedo, editSnapshot{
-		Text:   a.edit.Text(),
-		Caret:  a.editCaret,
-		Anchor: a.editAnchor,
-	})
+	rec := editRecord{Caret: a.editCaret, Anchor: a.editAnchor}
+	if e, ok := edit.Diff(target, a.edit.Text()); ok {
+		rec.Apply = e
+	}
+
+	a.editRedo = append(a.editRedo, rec)
 	if len(a.editRedo) > editUndoLimit {
 		a.editRedo = a.editRedo[1:]
 	}
 }
 
-// restoreEdit installs one snapshot without adding a new undo point.
-func (a *App) restoreEdit(snap editSnapshot) {
+// restoreEdit installs text and carets without adding a new undo point.
+func (a *App) restoreEdit(text string, caret, anchor int) {
 	if a.edit == nil {
 		return
 	}
 
-	a.edit.SetText(snap.Text)
+	a.edit.SetText(text)
 	a.setDirty(a.edit.Path, a.edit.Dirty)
-	a.editCaret = snap.Caret
-	a.editAnchor = snap.Anchor
+	a.editCaret = caret
+	a.editAnchor = anchor
 	a.commitEditBuffer()
 	a.scheduleAutoSave()
 }
@@ -589,8 +665,9 @@ func (a *App) ensureEditCaretVisible() {
 
 	line, col := a.editDisplayLineCol()
 	row := line
-	if a.wrap {
-		row = caretVisualRow(doc.wrapped(a.codeColsForGroup(0)).Rows, line, col)
+	doc.revealLine(line)
+	if plan := a.rowPlan(doc, 0); plan != nil {
+		row = caretVisualRow(plan.Rows, line, col)
 	}
 
 	top := a.scrollY / a.zx(rowH)
@@ -633,9 +710,9 @@ func (a *App) decorateEditRows(rows []codeRow) {
 	text := a.edit.Text()
 	caretLine, caretCol := a.editDisplayLineCol()
 	caretStart := 0
-	if a.wrap {
-		if doc := a.groupDoc(0); doc != nil {
-			rows := doc.wrapped(a.codeColsForGroup(0)).Rows
+	if doc := a.groupDoc(0); doc != nil {
+		if plan := a.rowPlan(doc, 0); plan != nil {
+			rows := plan.Rows
 			if len(rows) > 0 {
 				caretStart = rows[caretVisualRow(rows, caretLine, caretCol)].Start
 			}
@@ -790,10 +867,11 @@ func offsetLineCol(text string, offset int) (int, int) {
 
 // editMoveVertical follows visual rows when the editor wraps lines.
 func (a *App) editMoveVertical(runes []rune, caret, delta int) int {
-	if !a.wrap || a.groupDoc(0) == nil {
+	plan := a.rowPlan(a.groupDoc(0), 0)
+	if plan == nil {
 		return editMoveLine(runes, caret, delta)
 	}
-	rows := a.groupDoc(0).wrapped(a.codeColsForGroup(0)).Rows
+	rows := plan.Rows
 	if len(rows) == 0 {
 		return caret
 	}

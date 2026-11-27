@@ -8,10 +8,9 @@ A quick tour: explorer, editor, Source Control diff, and history.
 
 ## Run
 
-The entry point is `cmd/own-code/main.go`. App code lives in `internal/app/` (app core), `internal/edit/` (text buffer + selection model), and `internal/wsl/` (WSL path/handoff helpers). The embedded `components/`, `fixtures/`, and `testdata/` trees live at the repo root and are served via the root `owncode` package (`assets.go`). `go.mod`, `docs/`, `install.sh`, `install-local.sh`, and this file stay at the root. Builds resolve `ownframe` through the `../ownframe` sibling checkout in `go.mod`; `vendor/` is local-only and never committed.
+The entry point is `cmd/own-code/main.go`. App code lives in `internal/app/` (app core), `internal/edit/` (text buffer + selection model), and `internal/wsl/` (WSL path/handoff helpers). The embedded `components/`, `fixtures/`, and `testdata/` trees live at the repo root and are served via the root `owncode` package (`assets.go`). `go.mod`, `docs/`, `install.sh`, `install-local.sh`, and this file stay at the root. Dependencies, including `ownframe`, resolve through the Go module proxy; `vendor/` is local-only and never committed.
 
-You need Go 1.26 plus sibling `ownframe` and `blinkless` checkouts for the
-local `replace` and workspace.
+You need Go 1.26 or newer. Dependencies download automatically.
 
 ```sh
 cd /home/chinmay/ChinmayPersonalProjects/own-code
@@ -55,14 +54,16 @@ On Windows, a workspace under a WSL network path (`\\wsl$\...`) hands off into W
 ## Install
 
 One command installs the matching prebuilt binary (Linux, WSL2, Ubuntu, or
-macOS; amd64, arm64, or 386, detected automatically) to
+macOS; amd64 or arm64, detected automatically) to
 `$HOME/.local/bin/own-code`:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/chinmay-sawant/own-code/master/install.sh | sh
 ```
 
-Binaries live in `linux-release/` and `macos-release/`. To choose another
+The installer downloads the latest GitHub Release asset and verifies its
+SHA-256 against the release's `SHA256SUMS`. Set `OWN_CODE_VERSION=v0.0.1` to
+pin a version. To choose another
 prefix (the binary goes to `$PREFIX/bin`):
 
 ```sh
@@ -82,14 +83,15 @@ PREFIX=/usr/local ./install-local.sh    # -> /usr/local/bin/own-code
 make install                            # same as the first command
 ```
 
-It needs Go 1.26+ and the sibling `ownframe` and `blinkless` checkouts. To
+It needs Go 1.26+. To
 install an already-built binary instead of compiling:
 
 ```sh
-./install-local.sh --binary linux-release/own-code-linux-amd64
+./install-local.sh --binary ./own-code-linux-amd64
 ```
 
-Manual alternative: grab your OS/arch file from the release folders above,
+Manual alternative: grab your OS/arch file from the
+[latest release](https://github.com/chinmay-sawant/own-code/releases/latest),
 save it as `own-code` somewhere on your `PATH`, and `chmod +x` it.
 
 Build from source instead (run it next to `ownframe` and `blinkless`
@@ -111,8 +113,8 @@ cd own-code
 
 ### Windows
 
-One command installs the matching prebuilt binary from `windows-release/`
-(amd64, arm64, or 386, detected automatically) into
+One command installs the matching prebuilt binary from the latest GitHub Release
+(amd64 or arm64, detected automatically, checksum verified) into
 `%USERPROFILE%\.local\bin` and adds it to your user `PATH`, so `own-code`
 runs from anywhere. From CMD:
 
@@ -121,25 +123,28 @@ curl -fSL -o "%TEMP%\own-code-install.bat" https://raw.githubusercontent.com/chi
 ```
 
 Prefer a manual download instead? Grab your architecture's exe from the
-`windows-release/` folder above, save it as `own-code.exe` somewhere on
+[latest release](https://github.com/chinmay-sawant/own-code/releases/latest), save it as `own-code.exe` somewhere on
 your `PATH`, and run `own-code`.
 
 ## Features
 
 - Explorer tree with filter, language badges, change letters, and sticky folders. Right click gives Copy Path, Copy File, Paste, and Reveal in Finder, Explorer, or the Linux file manager.
 - Unlimited tabs plus a split second editor group with independent scroll, click or `Ctrl+1`/`Ctrl+2` focus, a draggable divider, and close-one-side that merges tabs into the survivor. Single-click previews at the back of the strip (italic); double-click, `Enter`, `Ctrl+K`, or editing pins the tab.
-- Click to edit in place with syntax colors, `Ctrl+S` saves. `Ctrl+A` select all, `Ctrl+C` copy, undo and redo.
+- Click to edit in place with syntax colors, `Ctrl+S` saves. `Ctrl+A` select all, `Ctrl+C` copy, undo and redo (operation-based: each step stores a small edit, not a copy of the file).
 - Gutter marks on changed lines with line cards, plus a bottom bar to step through changed files.
 - Unified and split diffs with word emphasis, hunk stepping (`N`/`P`), and per-block revert.
 - Source Control: working tree plus a history lane graph that loads in pages. Branch picker without changing checkout.
 - Quick open (`Ctrl+P`), in-file find (`Ctrl+F`) and replace (`Ctrl+H`), workspace content search (`Ctrl+Shift+F`) and replace (`Ctrl+Shift+H`).
+- Go to definition (`Ctrl+D`, or `Ctrl+Click`) also works from the read-only token view: `Ctrl+D` resolves the identifier under the mouse pointer. Format on save runs `gofmt` for `.go` and `prettier` (when on `PATH`) for web files; configure or disable it with the `format` block in `settings.json` (`{"format": {"onSave": false, "formatters": {".py": {"command": "black", "args": ["-q", "-"]}}}}`). Missing tools are skipped. The editor draws indent guides and highlights the bracket pair at the caret.
 - Go to line (`Ctrl+G` with `:<line>[:<col>]`), go to symbol in the active file (`Ctrl+Shift+O`), bracket jump and select (`Ctrl+M`, `Ctrl+Shift+M`).
 - Editing helpers: auto-indent on `Enter`, toggle line comment (`Ctrl+/`), indent and outdent (`Tab`, `Shift+Tab`).
 - Markdown preview (`Ctrl+Shift+V`) with tables and Mermaid flowcharts, in fixed rows.
 - Image viewer for PNG, JPEG, GIF, and SVG files, scaled to fit the editor pane in both split groups.
 - Highlighting for Go, Python, JavaScript/TypeScript, Markdown, CSS, JSON, HTML, YAML, and shell.
 - Details drawer with outline, status bar, persisted sessions, soft wrap (`Z`), desktop file watcher.
-- Embedded terminal panel with tabs, a resizable split, and shell selection through `OWN_CODE_SHELL`. See [docs/terminal.md](docs/terminal.md).
+- Language servers (optional, from `PATH`): diagnostics with squiggles, a workspace Problems panel, hover cards, and Go to Definition / Declaration / Type Definition (with automatic fallback to the local symbol index when no server responds), plus completion (`Ctrl+Space` and server trigger characters such as `.`; `Tab`/`Enter` accepts, typing filters), Find References (`Shift+F12`, shown in the workspace search panel), Rename Symbol (`F2`, `prepareRename` first when supported, previewed in a confirm dialog), signature help (on `(` and `,`), code actions (`Ctrl+.`), snippet tab stops (`Tab` cycles placeholders; commit characters accept completions), document symbols for the outline and `Ctrl+Shift+O`, workspace symbols (`Ctrl+T`, local index fallback), and server progress in the status bar (for example `gopls: Indexing 42%`). Each is also a `LSP:` palette command. Rest the pointer on an identifier for about 400 ms to see the server's hover text as Markdown; moving off the token, scrolling, editing, switching tabs, or `Esc` closes it. Defaults: `gopls`, `typescript-language-server` (`.ts .tsx .js .jsx .mjs .cjs`), `pyright-langserver`, `rust-analyzer`, `clangd`, `vscode-html-language-server` (`.html .htm`), `vscode-css-language-server` (`.css .scss .less`), `vscode-json-language-server` (`.json .jsonc`), `marksman` (`.md .markdown`), and `yaml-language-server` (`.yaml .yml`). For the web servers: `npm i -g typescript-language-server vscode-langservers-extracted yaml-language-server`. `typescript-language-server` also needs TypeScript 5 or 6 in the project (`npm i -D typescript` in the workspace) or an `initializationOptions.tsserver.path`; a global TypeScript 7 has no `tsserver.js` and the server fails to start. Override a server, or add one, in the `lsp` block of `settings.json` (`command`, `args`, `extensions`, `languages`, `initializationOptions`, `disabled`). A missing binary shows one install hint, never an error loop. Server processes cost memory beyond the own-code process.
+- Command palette (`Ctrl+P`, then `>`): fuzzy match with highlighted characters, right-aligned keybindings (they follow your rebinds), and recently used commands pinned on top. `Task: Run Task…` lists Makefile targets, `package.json` scripts (npm/pnpm/yarn by lockfile), `go test/build/vet ./...` and cargo tasks, and types the chosen one into the integrated terminal; only names matching `[A-Za-z0-9_.:@-]` are offered, so a hostile Makefile cannot inject shell text. Git commands: `Stage Hunk at Cursor`, `Unstage Hunk at Cursor`, `Stash Changes` (tracked files only), `Apply Stash…` (applying keeps the stash entry), and `Compare Refs…` (`>compare main feature/x` or `>diff v1..v2` shows the two-ref diff in the Source Control branch view). Settings has a Language servers tab: a master switch, a per-server enable toggle, and live status (running, ready, failed, not installed with an install hint).
+- Embedded terminal with session tabs, a resizable bottom panel, and an installed-shell picker. See [docs/terminal.md](docs/terminal.md).
 - Git merge conflict resolver with conflict badges, Current/Incoming/Both/Compare actions, conflict navigation, and explicit staging. See [docs/merge-conflicts.md](docs/merge-conflicts.md).
 
 ## Versus VS Code
@@ -182,12 +187,18 @@ Chrome's browser and GPU processes alone, 347 MB PSS, are larger than the entire
 | **`Ctrl+Shift+O`** | Go to symbol in the active file |
 | **`Ctrl+M`** | Jump to the matching bracket (`Ctrl+Shift+M` selects to it) |
 | **`Ctrl+/`** | Toggle line comment while editing |
+| **`Ctrl+Shift+Up` `Ctrl+Shift+Down`** | Move the line or selected lines up or down while editing |
+| **`Ctrl+Shift+D`** | Duplicate the line or selected lines |
+| **`Ctrl+Shift+[` `Ctrl+Shift+]`** | Fold or unfold the indent region at the caret while editing (also palette: Fold: Fold All / Unfold All; gutter chevrons toggle with a click) |
+| **`Ctrl+Shift+K`** | Delete the line or selected lines |
+| **`Ctrl+J`** | Join the line with the next (or the selected lines) |
 | **`Tab` `Shift+Tab`** | Indent or outdent while editing |
 | **`Ctrl+F`** | Find in the active file |
 | **`Ctrl+H`** | Find and replace in the active file (`Enter` replaces next, `Ctrl+Enter` replaces all) |
 | **`Ctrl+Shift+F`** | Search workspace contents |
 | **`Ctrl+Shift+H`** | Search and replace across the workspace (per-file checkboxes, `Ctrl+Enter` confirms) |
 | **`Alt+C` / `Alt+R` / `Alt+W`** | Match case, regular expression, whole word in the find or search bar |
+| *Pointer rests ~400 ms on an identifier* | Hover card from the language server (`Esc`, scrolling, or moving away closes it; not rebindable) |
 | **`Ctrl+E`** | Edit the active file |
 | **`Ctrl+S`** | Save while editing |
 | **`Ctrl+A`** | Select all in the edit buffer |
@@ -221,7 +232,7 @@ Chrome's browser and GPU processes alone, 347 MB PSS, are larger than the entire
 - Text files over 512 KB and files with a NUL byte show a notice. A text file over 20,000 lines keeps the first 20,000. A line over 32 KB shows a notice instead of opening. Images preview up to 32 MB and 16 megapixels.
 - A diff over 512 KB, 20,000 lines, or one line over 32 KB renders one notice row. A commit patch that hits its 512 KB read cap shows the same notice.
 - The scan skips `.git`, `node_modules`, `vendor`, build output, and unsupported binary extensions. PNG, JPEG, GIF, and SVG files are scanned and open in the image viewer.
-- There is no horizontal scroll. Files and diff cells soft wrap. `Z` turns wrap off and the diff clips with an ellipsis.
+- Files and diff cells soft wrap by default, so there is nothing to scroll sideways. `Z` turns wrap off; the editor and diff then scroll horizontally (wheel or keyboard, per editor group, clamped to the longest line) and diff cells can also clip with an ellipsis.
 - The History pane loads 20 commits, then grows the page as the rail crosses half the loaded rows, up to 500. Patches load on a background worker.
 - This app targets desktop. There is no phone layout or mobile path.
 - The fsnotify watcher is desktop only. `-web` keeps the manual Refresh and `R` path.
@@ -229,7 +240,7 @@ Chrome's browser and GPU processes alone, 347 MB PSS, are larger than the entire
 - In-file replace (`Ctrl+H`) and workspace replace (`Ctrl+Shift+H`) share one matcher: literal, `Aa` case, `.*` regex (Go RE2, `$1`/`$name` in the replacement), and whole-word toggles. Invalid patterns show an inline error and disable Replace. In-file replace-all is one undo step; workspace replace-all confirms first (`Replace N in K files?`), skips binary, oversized, ignored, dirty, and unreadable files, preserves CRLF, refuses past 2000 matches, and offers one explicit Undo replace (not `Ctrl+Z`).
 - The Markdown preview uses fixed rows. It is an approximation, not a browser DOM. Mermaid covers basic flowcharts and sequence diagrams, not subgraphs.
 - Gutter marks and line cards cover working tree changes only. A commit patch keeps its unified or split diff view.
-- Editing is a simple buffer. It has no multi cursor and no language server. Dirty tabs and explorer rows carry a dot; closing one asks Save / Don't Save / Cancel. Auto-save (Settings: Off, After delay with a 250–5000 ms debounce, On focus change) persists per workspace. It never writes merge results or the sample workspace, and the delay skips large files.
+- Editing is a simple buffer. It has no multi cursor. Language-server support covers diagnostics, hover, and go to definition / declaration / type definition so far plus completion, references, rename, and symbols (no gutter lightbulb or `completionItem/resolve` yet); hover works in token view and edit mode in either editor group, but not in Markdown preview, diffs, or the merge view, and a token split across a soft-wrap boundary anchors the card at its row start. Dirty tabs and explorer rows carry a dot; closing one asks Save / Don't Save / Cancel. Auto-save (Settings: Off, After delay with a 250–5000 ms debounce, On focus change) persists per workspace. It never writes merge results or the sample workspace, and the delay skips large files.
 - Git ignored paths stay in the explorer as muted gray rows with an `IGNORED` badge. A skipped ignored directory gets one placeholder row. Expanding an ignored folder loads real children with a spinner; empty stays a placeholder with no spin loop.
 - Settings (gear icon) roam in `settings.json` beside the per-workspace sessions: theme, base font (8–24px), interface zoom (50–300%), per-view editor/terminal overrides, keymap diffs, scan/search exclude globs, and desktop frame rate (`maxFps`: 60/120/144/240, -1/0 uncapped default). Precedence is session > settings > builtin for theme/zoom/font, and CLI `--fps` > settings > default (uncapped) for frame rate: a restored session overrides only the fields it stored, and every gesture writes both files. The status chip (`110% · 12px`) opens Appearance. Frame-rate changes apply on restart; the Frame tab shows FPS (presents, the FE number), TPS (hotter app rate at cap+20 when capped), MaxFPS, Present FPS, and Presents.
 - `-files N` sets the scan budget (default 10000): an explicit N runs a full walk, otherwise startup opens lazily. `-fps N` sets the desktop present cap (60/120/144/240, -1/0 uncapped default; Updates run at cap+20 when capped, idle still parks, no VSync). Lazy never sets a scan budget; per-operation caps apply instead: 2000 children per folder (+ "N more…" row), Quick Open 8 rows / 750 ms disk timeout, content search 200 hits / 8 per file / 512 KB, all cancellable with Busy + Note and stale-drop. Scan excludes (`**/coverage/**`, `*.log`, trailing `/` for folders) hide files from the tree and search at walk time; search excludes plus ignored files (unless toggled) skip content search with an "N files skipped" note. Invalid globs are rejected in red and never abort a scan. Overbroad edits (over half, or all, files hidden) need a confirm.

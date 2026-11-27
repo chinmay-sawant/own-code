@@ -99,8 +99,7 @@
    absolutely positioned at the tab's right edge and stays clear of the
    text through the tab-main right padding. */
 .tab-name { flex: 0 0 auto; overflow: hidden; font-family: var(--mono); font-size: 9.5px; line-height: 1.15; white-space: nowrap; }
-.tab-main .tab-dot, .tab-main .tab-status { position: relative; background-color: var(--panel-2); }
-.tab.on .tab-dot, .tab.on .tab-status { background-color: var(--bg); }
+.tab-main .tab-dot, .tab-main .tab-status { position: relative; }
 
 .tab-status {
   width: 16px;
@@ -115,8 +114,7 @@
   font-size: 8px;
   font-weight: 800;
 }
-.tab-x { position: absolute; right: 4px; top: 8px; width: 21px; height: 21px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; background-color: var(--panel-2); color: var(--dim); font-size: 13px; line-height: 1; }
-.tab.on .tab-x { background-color: var(--bg); }
+.tab-x { position: absolute; right: 4px; top: 8px; width: 21px; height: 21px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; color: var(--dim); font-size: 13px; line-height: 1; }
 .tab-x:hover { background-color: var(--panel-3); color: var(--text); }
 
 .tabs-fill { flex: 1; min-width: 4px; }
@@ -195,7 +193,10 @@
 .file-path { flex: 1 1 auto; min-width: 0; max-width: 100%; overflow: hidden; display: flex; align-items: center; font-family: var(--mono); font-size: 9.5px; line-height: 20px; white-space: nowrap; }
 .file-path b { flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .file-path b, .file-dir { white-space: nowrap; }
-.file-dir { flex: 0 0 auto; position: relative; background-color: var(--bg); color: var(--dim); margin-right: 5px; white-space: nowrap; }
+.file-dir { flex: 0 0 auto; position: relative; background-color: var(--bg); color: var(--dim); white-space: nowrap; }
+/* The file name shares the directory's text run, so a directory the engine
+   paints wider than it measures cannot run into the name. */
+.file-dir b { flex: none; display: inline; overflow: visible; }
 .crumb-stats { display: flex; gap: 6px; font-family: var(--mono); font-size: 9px; font-weight: 700; }
 /* A long path paints past its measured box, so the trailing controls carry
    the crumbs background and paint above the text. The buttons stay visible
@@ -237,6 +238,18 @@
 
 .crumb-btn:hover { border-color: var(--muted); color: var(--text); background-color: var(--panel-2); }
 .crumb-btn.on { border-color: var(--accent-strong); background-color: var(--accent-soft); color: var(--accent); }
+.crumbs .save-btn {
+  min-width: 48px;
+  justify-content: center;
+  border-color: var(--accent);
+  background-color: var(--panel-3);
+  color: var(--text);
+  font-weight: 650;
+}
+.crumbs .save-btn:hover, .crumbs .save-btn:focus-visible {
+  border-color: var(--accent);
+  background-color: var(--accent-soft);
+}
 .crumb-btn.off { color: var(--dim); }
 .crumb-btn.off:hover { background-color: transparent; border-color: var(--line); color: var(--dim); }
 
@@ -635,6 +648,27 @@ button.ln:focus { outline: 0; }
 
 .ln.cont { color: var(--dim); font-size: 9px; }
 
+/* Fold chevron: sits in the number cell's right padding, so the code text
+   offset (editTextLeft) never moves. A folded row keeps it highlighted. */
+.fold-mark {
+  position: absolute;
+  left: 50px;
+  top: 0;
+  width: 10px;
+  height: var(--row-h);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 9px;
+  line-height: var(--row-h);
+  cursor: pointer;
+}
+.fold-mark:hover, .fold-mark.closed { color: var(--accent); }
+.fold-mark:focus { outline: 0; }
+.t-fold { color: var(--dim); }
+
 /* Blame gutter: one short hash per first visual row. The column paints only
    while .BlameShow holds, and the code hit areas shift right with it (see
    the .code-body.blame rule below and the zoom override). Uncommitted lines
@@ -775,7 +809,7 @@ button.blame:focus { outline: 0; }
 .empty-mark.ok { border-color: rgba(63, 185, 80, 0.3); background-color: var(--green-bg); color: var(--green); }
 .empty-mark.warn { border-color: rgba(248, 81, 73, 0.3); background-color: var(--red-bg); color: var(--red); }
 .empty h2 { margin: 2px 0 0; font-size: 15px; font-weight: 650; }
-.empty p { margin: 0; max-width: 430px; color: var(--muted); font-size: 10.5px; line-height: 1.5; }
+.empty p { margin: 0; width: 100%; max-width: 430px; overflow-wrap: anywhere; color: var(--muted); font-size: 10.5px; line-height: 1.5; }
 
 .button {
   height: 28px;
@@ -872,3 +906,14 @@ button.blame:focus { outline: 0; }
   .tab { flex: 0 0 auto; }
   .tab.on { order: -1; }
 }
+
+/* Language-server diagnostics: squiggles and gutter markers */
+.diag-err { text-decoration-line: underline; text-decoration-style: wavy; text-decoration-color: var(--red); }
+.diag-warn { text-decoration-line: underline; text-decoration-style: wavy; text-decoration-color: var(--amber); }
+.diag-info { text-decoration-line: underline; text-decoration-style: wavy; text-decoration-color: var(--accent); }
+.gutter-diag-err, .pbmark.diag-err { color: var(--red); text-decoration-line: none; }
+.gutter-diag-warn, .pbmark.diag-warn { color: var(--amber); text-decoration-line: none; }
+.gutter-diag-info, .pbmark.diag-info { color: var(--accent); text-decoration-line: none; }
+.sb-diag { gap: 8px; }
+.sb-diag-err { color: var(--red); }
+.sb-diag-warn { color: var(--amber); }

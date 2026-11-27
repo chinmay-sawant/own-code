@@ -40,6 +40,7 @@ const (
 	contextMenuUnstageFileID = contextMenuIDPrefix + "unstage-file:"
 	contextMenuStageHunkID   = contextMenuIDPrefix + "stage-hunk:"
 	contextMenuRevertHunkID  = contextMenuIDPrefix + "revert-hunk:"
+	contextMenuUnstageHunkID = contextMenuIDPrefix + "unstage-hunk:"
 	contextMenuDiscardAllID  = contextMenuIDPrefix + "discard-all"
 	contextMenuStageAllID    = contextMenuIDPrefix + "stage-all"
 	contextMenuUnstageAllID  = contextMenuIDPrefix + "unstage-all"
@@ -140,6 +141,13 @@ func (a *App) dismissOpenMenu(id, action string) bool {
 // same buffer methods the shell menu used.
 func (a *App) runMenuItem(ctx context.Context, id string) error {
 	a.closeMenu()
+
+	if idx, ok := actionIndex(id, terminalProfileMenuPrefix); ok && strings.HasPrefix(id, terminalProfileMenuPrefix) && idx < len(a.termProfiles) {
+		shell := a.termProfiles[idx].Path
+		a.termProfiles = nil
+		a.startTerminalShell(ctx, shell)
+		return a.page.Redraw(ctx)
+	}
 
 	switch id {
 	case "cut":
@@ -503,6 +511,7 @@ func (a *App) hunkContextMenu(id string) ([]contextMenuRow, bool) {
 
 	return []contextMenuRow{
 		{ID: contextMenuStageHunkID + rest, Label: "Stage Hunk", Enabled: true},
+		{ID: contextMenuUnstageHunkID + rest, Label: "Unstage Hunk", Enabled: true},
 		{ID: contextMenuRevertHunkID + rest, Label: "Discard Hunk", Enabled: true},
 	}, true
 }
@@ -587,6 +596,16 @@ func (a *App) MenuAction(ctx context.Context, id string) error {
 		if index, oldNo, newNo, ok := parseHunkMenuRest(strings.TrimPrefix(id, contextMenuStageHunkID)); ok {
 			if sel, found := a.hunkBlockSelection(index, oldNo, newNo); found {
 				if err := a.stageHunk(ctx, index, sel); err != nil {
+					return err
+				}
+			}
+		}
+
+		return a.redrawMenuAction(ctx)
+	case strings.HasPrefix(id, contextMenuUnstageHunkID):
+		if index, oldNo, newNo, ok := parseHunkMenuRest(strings.TrimPrefix(id, contextMenuUnstageHunkID)); ok {
+			if sel, found := a.hunkBlockSelection(index, oldNo, newNo); found {
+				if err := a.unstageHunk(ctx, index, sel); err != nil {
 					return err
 				}
 			}

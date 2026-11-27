@@ -362,8 +362,7 @@ func (a *App) secondView() secondaryView {
 	reserve := len(sticky)
 	s.TrackTop = reserve * a.zx(rowH)
 
-	if a.wrap {
-		plan := doc.wrapped(cols)
+	if plan := a.rowPlan(doc, 1); plan != nil {
 		start, end, _ := a.windowSliceReserve(1, len(plan.Rows), reserve)
 		if len(plan.Rows) > 0 && start > 0 && start < len(plan.Rows) {
 			if lineStart := plan.firstRow(plan.lineAt(start)); lineStart < start {
@@ -377,7 +376,11 @@ func (a *App) secondView() secondaryView {
 		}
 		s.Rows = cloneCodeRows(plan.Rows[start:end])
 		a.decorateCodeRows(doc, s.Rows, 1)
+		a.decorateDiagnostics(doc, s.Rows)
+		a.decorateGuides(doc, s.Rows, 1)
 		a.decorateBlame(doc, s.Rows, 1)
+		a.decorateFolds(doc, s.Rows)
+		a.sliceUnwrappedCodeRowsFor(s.Rows, cols, 1)
 
 		return s
 	}
@@ -396,7 +399,10 @@ func (a *App) secondView() secondaryView {
 	}
 
 	a.decorateCodeRows(doc, s.Rows, 1)
+	a.decorateDiagnostics(doc, s.Rows)
+	a.decorateGuides(doc, s.Rows, 1)
 	a.decorateBlame(doc, s.Rows, 1)
+	a.decorateFolds(doc, s.Rows)
 	a.sliceUnwrappedCodeRowsFor(s.Rows, cols, 1)
 
 	return s
@@ -434,8 +440,8 @@ func (a *App) paneRowCount(group int, doc *fileDoc) int {
 	}
 
 	n := len(doc.Lines)
-	if a.wrap {
-		n = len(doc.wrapped(cols).Rows)
+	if plan := a.rowPlan(doc, group); plan != nil {
+		n = len(plan.Rows)
 	}
 
 	if n == 0 {

@@ -6,6 +6,7 @@
 package termui
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -19,10 +20,12 @@ import (
 type Segment struct {
 	Text string
 	// Class holds space-separated CSS classes such as "fg1 bg4 bold".
-	Class    string
-	LinkPath string
-	LinkLine int
-	LinkCol  int
+	Class      string
+	Foreground string
+	Background string
+	LinkPath   string
+	LinkLine   int
+	LinkCol    int
 }
 
 // Row is one rendered terminal line.
@@ -146,7 +149,7 @@ func renderLine(line terminal.Line, cursor bool, cursorCol int) Row {
 		if atCursor {
 			class = appendClass(class, "cursor")
 		}
-		segments = append(segments, Segment{Text: lineText(line, i, j), Class: class})
+		segments = append(segments, Segment{Text: lineText(line, i, j), Class: class, Foreground: colorHex(style.fg), Background: colorHex(style.bg)})
 		i = j
 	}
 
@@ -225,19 +228,19 @@ func applyRowLinks(segments []Segment) []Segment {
 }
 
 func withLinkPiece(seg Segment, runes []rune, from, to, segStart int, links []Link) Segment {
-	text := string(runes[from:to])
+	seg.Text = string(runes[from:to])
 	globalStart := segStart + from
 	globalEnd := segStart + to
 	for _, l := range links {
 		if l.Start <= globalStart && globalEnd <= l.End {
-			class := seg.Class
-			if !hasToken(class, "underline") {
-				class = appendClass(class, "underline")
+			if !hasToken(seg.Class, "underline") {
+				seg.Class = appendClass(seg.Class, "underline")
 			}
-			return Segment{Text: text, Class: class, LinkPath: l.Path, LinkLine: l.Line, LinkCol: l.Col}
+			seg.LinkPath, seg.LinkLine, seg.LinkCol = l.Path, l.Line, l.Col
+			break
 		}
 	}
-	return Segment{Text: text, Class: seg.Class}
+	return seg
 }
 
 func sortRunes(v []int) {
@@ -259,7 +262,7 @@ func hasToken(class, want string) bool {
 
 // cellStyle is the effective style after applying reverse video.
 type cellStyle struct {
-	fg, bg                       uint8
+	fg, bg                       terminal.Color
 	bold, dim, italic, underline bool
 }
 
@@ -286,6 +289,13 @@ func styleOf(cell terminal.Cell) cellStyle {
 		italic:    cell.Italic,
 		underline: cell.Underline,
 	}
+}
+
+func colorHex(color terminal.Color) string {
+	if rgb, ok := color.RGB(); ok {
+		return fmt.Sprintf("#%06x", rgb)
+	}
+	return ""
 }
 
 // class returns the CSS classes for the effective style. Palette entries

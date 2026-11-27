@@ -717,8 +717,8 @@ func (a *App) toggleBlame() {
 	a.blameOn = !a.blameOn
 	a.viewportCols = 0
 
-	if doc := a.activeDoc(); doc != nil && a.wrap {
-		a.scrollTo(doc.wrapped(a.codeCols()).firstRow(line) * a.zx(rowH))
+	if doc := a.activeDoc(); doc != nil {
+		a.scrollTo(a.rowOfLine(doc, a.activeGroup(), line) * a.zx(rowH))
 
 		return
 	}

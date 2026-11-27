@@ -617,12 +617,18 @@ func (a *App) tickWatch(ctx context.Context) error {
 	default:
 	}
 
-	a.pollTerminal(ctx)
+	if err := a.pollTerminal(ctx); err != nil {
+		return err
+	}
 	a.pollPatches(ctx)
 	a.pollBlame(ctx)
 	a.receiveSearch(ctx)
 	a.receiveHistoryLoad(ctx)
 	a.pollAutoSave(ctx)
+	a.pollToast()
+	if err := a.pollLSP(ctx); err != nil {
+		return err
+	}
 	a.scheduleOpenFoldersLoaded()
 	a.receiveDirLoads(ctx)
 

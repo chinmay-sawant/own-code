@@ -61,6 +61,10 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		return nil
 	}
 
+	if a.popupClick(box) {
+		return nil
+	}
+
 	if a.confirmOpen {
 		switch box.Action {
 		case "confirm-ok", "confirm-cancel", "confirm-save", "confirm-dont-save":
@@ -99,10 +103,19 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 	switch {
 	case action == "terminal-toggle":
 		a.toggleTerminal(ctx)
+	case action == "terminal-show":
+		if !a.termOpen {
+			a.toggleTerminal(ctx)
+		}
+	case action == "term-scroll-end":
+		a.termScroll = 0
+		a.refresh()
 	case action == "term-focus":
 		a.focusTerminal(ctx)
 	case action == "term-new":
 		a.startTerminalSession(ctx)
+	case action == "term-profiles":
+		a.openTerminalProfiles(box)
 	case strings.HasPrefix(action, "term-pick:"):
 		if id, ok := actionIndex(action, "term-pick:"); ok {
 			a.pickTerminal(ctx, id)
@@ -186,6 +199,14 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 	case strings.HasPrefix(action, "inline-card-line:"):
 		if line, ok := actionIndex(action, "inline-card-line:"); ok {
 			a.showInlineCard(line + 1)
+		}
+	case strings.HasPrefix(action, "fold-toggle2:"):
+		if line, ok := actionIndex(action, "fold-toggle2:"); ok {
+			a.toggleFoldLine(1, line)
+		}
+	case strings.HasPrefix(action, "fold-toggle:"):
+		if line, ok := actionIndex(action, "fold-toggle:"); ok {
+			a.toggleFoldLine(0, line)
 		}
 	case strings.HasPrefix(action, "blame-commit:"):
 		a.openBlameCommit(ctx, strings.TrimPrefix(action, "blame-commit:"))
@@ -540,6 +561,9 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.persistSession()
 		a.persistSettings()
 		a.refresh()
+	case action == "lsp-master-toggle" || strings.HasPrefix(action, "lsp-server-toggle:"):
+		_, err := a.lspSettingsAction(ctx, action)
+		return err
 	case strings.HasPrefix(action, "settings-tab:"):
 		a.settingsTab = strings.TrimPrefix(action, "settings-tab:")
 		a.resetSettingsScroll()
@@ -968,6 +992,23 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		if idx, ok := actionIndex(action, "diff-expand-all:"); ok {
 			a.diffExpandAll(idx)
 		}
+	case action == "problems-open":
+		a.showProblems()
+	case action == "problems-toggle":
+		if a.problemsOpen {
+			a.problemsOpen = false
+			a.refresh()
+		} else {
+			a.showProblems()
+		}
+	case action == "problems-prev":
+		a.scrollProblems(-a.problemPageSize())
+	case action == "problems-next":
+		a.scrollProblems(a.problemPageSize())
+	case strings.HasPrefix(action, "problem:"):
+		if idx, ok := actionIndex(action, "problem:"); ok {
+			a.openProblem(idx)
+		}
 	case strings.HasPrefix(action, "outline:"):
 		if line, ok := actionIndex(action, "outline:"); ok {
 			a.outlineLine(line)
@@ -1168,6 +1209,17 @@ func (a *App) onWheel(ctx context.Context, x, y, dx, dy float64) (bool, error) {
 	scrollX, scrollY := a.page.Scroll().ScrollOffset()
 	x -= float64(scrollX)
 	y -= float64(scrollY)
+
+	if a.problemsOpen {
+		box, ok := findBoxID(a.page.Boxes(), "workspace-problems")
+		if ok && x >= box.X && x < box.X+box.W && y >= box.Y && y < box.Y+box.H {
+			if rows := a.problemScroll.WheelRows(-dy * treeWheelRows); rows != 0 {
+				a.scrollProblems(rows)
+				return true, a.page.Redraw(ctx)
+			}
+			return true, nil
+		}
+	}
 
 	if a.termOpen && dy != 0 {
 		box, ok := findBoxID(a.page.Boxes(), "term-body")
@@ -1641,11 +1693,11 @@ func (a *App) onDragStart(ctx context.Context, box ownframe.Box) (bool, error) {
 		a.cardStartTop = a.inlineCard.Top
 		return true, nil
 	}
-	if box.ID == "term-resize" && a.termOpen {
+	if box.ID == "term-resize" && (a.termOpen || a.problemsOpen) {
 		a.termDrag = true
-		a.termDragStartH = a.termHeight
+		a.termDragStartH = int(float64(a.termPanelHeight()) / a.uiZoom())
 		a.termDragDy = 0
-		a.termFocus = true
+		a.termFocus = a.termOpen
 
 		return true, nil
 	}
@@ -2056,6 +2108,10 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 		return nil
 	}
 
+	if a.popupKeyDown(key) {
+		return a.page.Redraw(ctx)
+	}
+
 	// Layout zoom owns Ctrl+=, Ctrl+-, and Ctrl+0 everywhere, including
 	// while editing: the window leaves these chords to the page because
 	// key zoom is off. The allows gate kills the old chord when the action
@@ -2428,6 +2484,12 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 	// events, mirroring the Ctrl+Shift+F/V chords below.
 	if a.ctrl && a.shift && key == "o" {
 		return a.openSymbolPalette(ctx)
+	}
+
+	// LSP chords: Ctrl+Space completion, F2 rename, Shift+F12 references,
+	// Ctrl+T workspace symbols.
+	if handled, err := a.lspKeyDown(ctx, key); handled || err != nil {
+		return err
 	}
 
 	// Ctrl+D jumps to the definition of the symbol under the caret. F12
@@ -2939,6 +3001,9 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 		switch {
 		case a.inlineCard.Show:
 			a.closeInlineCard()
+		case a.problemsOpen:
+			a.problemsOpen = false
+			a.refresh()
 		case a.details:
 			a.details = false
 			a.refresh()

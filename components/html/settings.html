@@ -8,6 +8,7 @@
         <button class="settings-nav-item{{if eq .SettingsTab "appearance"}} settings-nav-active{{end}}" id="settings-tab-appearance" data-action="settings-tab:appearance" type="button" role="tab" aria-selected="{{if eq .SettingsTab "appearance"}}true{{else}}false{{end}}">Appearance</button>
         <button class="settings-nav-item{{if eq .SettingsTab "keyboard"}} settings-nav-active{{end}}" id="settings-tab-keyboard" data-action="settings-tab:keyboard" type="button" role="tab" aria-selected="{{if eq .SettingsTab "keyboard"}}true{{else}}false{{end}}">Keyboard</button>
         <button class="settings-nav-item{{if eq .SettingsTab "files"}} settings-nav-active{{end}}" id="settings-tab-files" data-action="settings-tab:files" type="button" role="tab" aria-selected="{{if eq .SettingsTab "files"}}true{{else}}false{{end}}">Files &amp; Search</button>
+        <button class="settings-nav-item{{if eq .SettingsTab "lsp"}} settings-nav-active{{end}}" id="settings-tab-lsp" data-action="settings-tab:lsp" type="button" role="tab" aria-selected="{{if eq .SettingsTab "lsp"}}true{{else}}false{{end}}">Language servers</button>
         <button class="settings-nav-item{{if eq .SettingsTab "help"}} settings-nav-active{{end}}" id="settings-tab-help" data-action="settings-tab:help" type="button" role="tab" aria-selected="{{if eq .SettingsTab "help"}}true{{else}}false{{end}}">Help</button>
         <button class="settings-nav-item{{if eq .SettingsTab "about"}} settings-nav-active{{end}}" id="settings-tab-about" data-action="settings-tab:about" type="button" role="tab" aria-selected="{{if eq .SettingsTab "about"}}true{{else}}false{{end}}">About</button>
       </div>
@@ -41,6 +42,18 @@
         </div>
         <div class="settings-caption">Custom scan excludes hide entirely (unlike dimmed gitignored rows). Search skips scan-excluded, search-excluded, and — unless toggled — ignored files. Search caps: 200 matches, 8 per file.</div>
         <div class="settings-foot"><button class="settings-btn primary" id="settings-rescan" data-action="settings-rescan" type="button">Apply &amp; Rescan</button><span class="settings-foot-note">Scan budget honors -files.</span></div>
+        {{else if eq .SettingsTab "lsp"}}
+        <div class="settings-title">Language servers</div>
+        <div class="settings-caption">Servers run only from this list and your settings.json, never from workspace files. Changes apply right away; a disabled server falls back to the built-in index.</div>
+        <div class="settings-toggles">
+          <button class="settings-toggle" id="lsp-master" data-action="lsp-master-toggle" type="button" aria-pressed="{{if .LSPOn}}true{{else}}false{{end}}"><span class="settings-check">{{if .LSPOn}}✓{{end}}</span>Enable language servers</button>
+        </div>
+        {{range .LSPRows}}
+        <div class="settings-key" id="lsp-row-{{.Name}}">
+          <span class="settings-key-text"><b>{{.Name}} · {{.Langs}}</b><span>{{.Status}}{{if .Hint}} · {{.Hint}}{{end}}</span></span>
+          <span class="settings-key-btns"><button class="settings-toggle" id="lsp-toggle-{{.Name}}" data-action="lsp-server-toggle:{{.Name}}" type="button" aria-pressed="{{if .Enabled}}true{{else}}false{{end}}" aria-label="Enable {{.Name}}"><span class="settings-check">{{if .Enabled}}✓{{end}}</span>Enabled</button></span>
+        </div>
+        {{end}}
         {{else if eq .SettingsTab "help"}}
         <div class="settings-title">Help</div>
         <div class="settings-caption">Every shortcut in one place. Bindings follow your Keyboard rebinds — a customized row names its default. Editing stays in the Keyboard tab.</div>

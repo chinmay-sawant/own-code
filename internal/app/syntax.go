@@ -155,8 +155,9 @@ type lineState struct {
 	container bool
 
 	// HTML & CSS
-	inComment bool
-	inTag     bool
+	inComment  bool
+	inTag      bool
+	htmlRawTag string
 }
 
 // initialLineState returns the starting scanner state for a language.

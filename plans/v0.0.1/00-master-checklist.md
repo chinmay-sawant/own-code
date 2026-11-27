@@ -12,7 +12,7 @@
 
 Ship a coherent v0.0.1 editor pass on top of the current app (`internal/app/`, `internal/edit/`, `internal/wsl/`, entry `cmd/own-code/main.go`) while keeping:
 
-1. **Current product surface intact** — explorer, in-place editor (`Ctrl+E`/`Ctrl+S`), unified/split diffs, history lane, Markdown preview (`Ctrl+Shift+V` / `M`), six themes, terminal, merge resolver (README Features).
+1. **Current product surface intact** — explorer, in-place editor (`Ctrl+E`/`Ctrl+S`), unified/split diffs, history lane, Markdown preview (`Ctrl+Shift+V` / `M`), ten themes (`themeCatalog` in `themes.go`), terminal, merge resolver (README Features).
 2. **Explicit limits honored** — 512 KB / 20,000-line / 32 KB-line caps, shared-scroll split, 200-hit workspace search, fsnotify desktop-only watcher, no unsaved-change prompt (README Limits — to be revisited deliberately in Phase 2).
 3. **Key bindings stable** — `Ctrl+P/F/Shift+F/E/S/A/C/V/\`, `Z`, `N/P`, `R/W`, `Esc`, `F12` (README Keys). New bindings added only in their phase with docs + tests.
 4. **Evidence per box** — path + command (`go test -p 1 ./...`, `go vet`, `gofmt -l`, `go run ./cmd/own-code`).
@@ -131,7 +131,7 @@ go run ./cmd/own-code -root ./testdata/sample
 - [ ] Soft wrap: global `Z` + per-file override; diff clipping-with-ellipsis preserved when wrap off (README Limits behavior kept)
 - [ ] Line numbers + whitespace rendering toggles; gutter width reflows without breaking `gutter_markers.go` paint
 - [ ] Font/zoom: editor zoom in/out/reset (`resetZoom`), persisted per Phase 9; preview zoom (`preview_zoom_test.go`) follows same setting or explicit split setting
-- [ ] Theme: six themes selectable + persisted; `activeThemeCSS` regression-free (`themes_test.go`)
+- [ ] Theme: ten themes selectable + persisted; `activeThemeCSS` regression-free (`themes_test.go`)
 - [ ] Settings surface: single place (command palette or Details panel section) — no scattered flags; every toggle has key + command + persisted value
 - [ ] Tests: each toggle render assertion, wrap on/off diff-clip case, zoom persist round-trip stub (full persist in Phase 9)
 
@@ -213,7 +213,7 @@ go run ./cmd/own-code -root ./testdata/sample
 ### 11.2 Docs + release
 - [ ] README Features/Keys/Limits refreshed: new bindings (replace, goto, comment, pin, symbol), autosave + unsaved-prompt change, preview-tab + breadcrumb + lazy-load notes
 - [ ] `docs/` deltas: terminal/merge docs untouched or explicitly updated; new settings doc if store added
-- [ ] Release notes stub: scope (the 11 features), known gaps marked `[~]` with reason, next version candidates
+- [x] Release notes stub (evidence: `CHANGELOG.md`; known gaps listed there): scope (the 11 features), known gaps marked `[~]` with reason, next version candidates
 - [ ] Checklist reconciled: every `[x]` has path + command evidence; every `[~]` links an issue/reason; no silent stubs in default flows
 
 ---

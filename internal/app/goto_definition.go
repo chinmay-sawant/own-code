@@ -298,12 +298,34 @@ func (a *App) gotoDefinitionAtCaret(ctx context.Context) error {
 		return a.page.Redraw(ctx)
 	}
 
+	if !a.editing {
+		return a.gotoDefinitionFromView(ctx, doc)
+	}
+
 	word, ok := a.symbolAtCaret()
 	if !ok || word == "" {
 		a.showToast("info", "Go to definition", "Place the caret on a symbol, then press Ctrl+D.")
 		a.refresh()
 
 		return a.page.Redraw(ctx)
+	}
+
+	line, col := a.editCaretLineCol()
+	if a.requestLSPDefinition(doc.Path, word, line, col, "textDocument/definition", "Go to definition", true) {
+		return nil
+	}
+
+	return a.gotoDefinitionFallback(ctx, word)
+}
+
+// gotoDefinitionFallback resolves word via the current file's outline, the
+// workspace symbol index, and finally a workspace text search. Used directly
+// when no language server is running and as the fallback when LSP returns no
+// locations.
+func (a *App) gotoDefinitionFallback(ctx context.Context, word string) error {
+	doc := a.activeDoc()
+	if doc == nil || doc.Err != "" || doc.Binary {
+		return nil
 	}
 
 	var lines []string
@@ -356,11 +378,35 @@ func (a *App) gotoDefinitionAtCaret(ctx context.Context) error {
 // outlineLine and gotoLine, so preview tabs, dirty guards, and nav history
 // behave like normal opens.
 func (a *App) jumpToDefinition(ctx context.Context, path string, line int) error {
+	return a.jumpToDefinitionCol(ctx, path, line, 1)
+}
+
+// jumpToDefinitionCol opens path and lands the caret on the 0-based line and
+// 1-based rune column.
+func (a *App) jumpToDefinitionCol(ctx context.Context, path string, line, col int) error {
 	if a.activeDocPath() != path {
 		a.openFilePreview(path)
 	}
 
 	a.outlineLine(line)
 
-	return a.gotoLine(ctx, line+1, 1)
+	return a.gotoLine(ctx, line+1, max(col, 1))
+}
+
+// gotoDefinitionFromView resolves the symbol under the mouse pointer while
+// the file is in the read-only token view.
+func (a *App) gotoDefinitionFromView(ctx context.Context, doc *fileDoc) error {
+	word, line, col, ok := a.viewDefinitionTarget()
+	if !ok || word == "" {
+		a.showToast("info", "Go to definition", "Place the caret on a symbol (or point the mouse at one), then press Ctrl+D.")
+		a.refresh()
+
+		return a.page.Redraw(ctx)
+	}
+
+	if a.requestLSPDefinition(doc.Path, word, line, col, "textDocument/definition", "Go to definition", true) {
+		return nil
+	}
+
+	return a.gotoDefinitionFallback(ctx, word)
 }

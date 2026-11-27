@@ -3,7 +3,7 @@
    contentHeight depend on that fixed height, so nothing here changes it. */
 
 .st-uu, .st-aa, .st-dd, .st-au, .st-ua, .st-du, .st-ud {
-  background: rgba(248, 81, 73, 0.16);
+  background: var(--tint-red-16);
   color: var(--red);
 }
 
@@ -15,9 +15,9 @@
 .conflict-head { border-top: 0; color: var(--red); }
 .conflict-head .changes-count { color: var(--red); }
 
-.change-wrap.conflict { border-left-color: rgba(248, 81, 73, 0.65); }
+.change-wrap.conflict { border-left-color: var(--tint-red-65); }
 .change-wrap.conflict.on { border-left-color: var(--red); }
-.change-wrap.conflict:hover { background-color: rgba(248, 81, 73, 0.08); }
+.change-wrap.conflict:hover { background-color: var(--tint-red-08); }
 
 .conflict-row .change-name { color: var(--text); }
 .conflict-mark {
@@ -28,7 +28,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 4px;
-  background: rgba(248, 81, 73, 0.16);
+  background: var(--tint-red-16);
   color: var(--red);
   font-family: var(--mono);
   font-size: 11px;
@@ -38,9 +38,9 @@
 .merge-conflict-badge {
   flex: 0 0 auto;
   padding: 1px 5px;
-  border: 1px solid rgba(248, 81, 73, 0.4);
+  border: 1px solid var(--tint-red-40);
   border-radius: 4px;
-  background: rgba(248, 81, 73, 0.1);
+  background: var(--tint-red-10);
   color: var(--red);
   font-family: var(--mono);
   font-size: 8px;
@@ -61,7 +61,7 @@
   width: 14px;
   height: 14px;
   border-radius: 3px;
-  background: rgba(248, 81, 73, 0.18);
+  background: var(--tint-red-18);
   color: var(--red);
   font-family: var(--mono);
   font-size: 9px;
@@ -97,7 +97,7 @@
 }
 
 .crumb-btn.stage {
-  border-color: rgba(63, 185, 80, 0.35);
+  border-color: var(--tint-green-35);
   color: var(--green);
 }
 .crumb-btn.stage:hover { border-color: rgba(63, 185, 80, 0.6); background: var(--green-bg); }
@@ -124,16 +124,16 @@
 
 .merge-head {
   padding: 0 10px;
-  border-top: 1px solid rgba(248, 81, 73, 0.25);
-  border-bottom: 1px solid rgba(248, 81, 73, 0.18);
-  background: rgba(248, 81, 73, 0.11);
+  border-top: 1px solid var(--tint-red-25);
+  border-bottom: 1px solid var(--tint-red-18);
+  background: var(--tint-red-11);
   color: var(--red);
   font-size: 9.5px;
 }
 
 .merge-head.current {
   border-left: 2px solid var(--red);
-  background: rgba(248, 81, 73, 0.2);
+  background: var(--tint-red-20);
   color: var(--text);
 }
 
@@ -152,7 +152,7 @@
 .merge-line.base { background: var(--amber-soft); }
 .merge-line.current.ours { background: var(--green-active); }
 .merge-line.current.theirs { background: var(--accent-strong); }
-.merge-line.current.base { background: rgba(240, 183, 90, 0.2); }
+.merge-line.current.base { background: var(--tint-amber-20); }
 
 .merge-side {
   flex: 0 0 62px;
@@ -187,7 +187,7 @@
 
 .merge-meta {
   padding: 0 10px;
-  background: rgba(240, 183, 90, 0.07);
+  background: var(--tint-amber-07);
   color: var(--amber);
   font-size: 9.5px;
 }
@@ -225,7 +225,7 @@
   cursor: pointer;
 }
 .merge-btn:hover { border-color: var(--muted); background: var(--panel-3); }
-.merge-btn.ours { border-color: rgba(63, 185, 80, 0.35); color: var(--green); }
+.merge-btn.ours { border-color: var(--tint-green-35); color: var(--green); }
 .merge-btn.theirs { border-color: var(--accent-strong); color: var(--accent); }
 .merge-btn.both { border-color: rgba(192, 132, 252, 0.4); color: var(--purple); }
 .merge-btn.stage { border-color: rgba(63, 185, 80, 0.45); color: var(--green); }

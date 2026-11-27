@@ -307,7 +307,7 @@
 .hdrow.del .hdnum, .hdrow.del .hdsign { color: var(--red); }
 .hdrow.hunk { background-color: var(--accent-soft); }
 .hdhunk { padding-left: 8px; color: var(--accent); font-size: 8.5px; }
-.hdrow.meta { background-color: rgba(240, 183, 90, 0.06); }
+.hdrow.meta { background-color: var(--tint-amber-06); }
 .hdmeta { padding-left: 8px; color: var(--amber); font-size: 8.5px; }
 
 .hist-open {

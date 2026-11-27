@@ -76,6 +76,7 @@
   max-width: 100%;
   padding: 0 6px;
   border: 1px solid transparent;
+  border-radius: 5px;
   line-height: 28px;
   white-space: pre;
   overflow: hidden;
@@ -83,7 +84,7 @@
 }
 
 .palette-input[data-ownframe-field][data-ownframe-focus="1"] {
-  border: 1px solid var(--muted);
+  border: 1px solid var(--accent);
   outline: 0;
 }
 
@@ -130,10 +131,13 @@
 
 /* Content search ----------------------------------------------------------- */
 
-.search-panel { top: 56px; }
+.search-panel {
+  --search-tools-w: 120px;
+  top: 56px;
+}
 .search-meta {
   height: 24px;
-  line-height: 24px;
+  line-height: 1.25;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -145,21 +149,21 @@
 }
 .search-busy { color: var(--accent); }
 .search-more { color: var(--amber); }
-.search-note { margin-left: auto; overflow: hidden; white-space: nowrap; }
+.search-note { min-width: 0; margin-left: auto; overflow: hidden; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .search-results { display: flex; align-items: flex-start; }
 .search-list { flex: 1; min-width: 0; max-height: 362px; overflow: hidden; }
 .search-scroll-track { flex: 0 0 8px; width: 8px; height: 352px; margin: 5px 2px 5px 0; background-color: var(--panel-2); }
 .search-thumb { display: block; width: 8px; padding: 0; background-color: var(--thumb); color: var(--thumb); cursor: pointer; }
 .search-row { height: 44px; min-height: 44px; max-height: 44px; align-items: flex-start; padding-top: 5px; padding-bottom: 5px; overflow: hidden; }
 .search-loc { width: 48px; flex: 0 0 48px; padding-top: 2px; color: var(--dim); font-size: 8.5px; text-align: right; }
-.search-text { gap: 1px; max-height: 34px; overflow: hidden; }
+.search-text { gap: 2px; }
+.search-row.with-replace .search-text { max-height: 46px; }
 .search-text b { white-space: nowrap; }
-.search-dir { color: var(--dim); font-weight: 400; font-size: 8.5px; }
 .search-line { width: 100%; height: 14px; overflow: hidden; color: var(--muted); font-family: var(--mono); font-size: 9px; line-height: 14px; white-space: pre; }
-.search-match { background-color: rgba(240, 183, 90, 0.3); color: var(--text); border-radius: 2px; }
+.search-match { background-color: var(--find-hit); color: var(--text); border-radius: 2px; }
 .search-before, .search-after { color: var(--muted); }
 .palette-close.on { background-color: var(--accent-soft); color: var(--accent); }
-.replace-search { border-top: 1px solid var(--line-soft); }
+.replace-search { padding-right: calc(12px + var(--search-tools-w)); }
 .search-error { padding: 4px 12px; color: var(--red); font-size: 9px; }
 .search-skipped { padding: 2px 12px; color: var(--dim); font-size: 8.5px; }
 .search-file { display: flex; align-items: center; gap: 7px; padding: 3px 11px 0; color: var(--text); font-size: 9.5px; font-weight: 600; }
@@ -172,12 +176,13 @@
 .search-replace-line { display: block; width: 100%; height: 14px; overflow: hidden; color: var(--muted); font-family: var(--mono); font-size: 9px; line-height: 14px; white-space: pre; }
 .search-arrow { color: var(--accent); }
 .search-replacement { background-color: var(--accent-strong); color: var(--text); border-radius: 2px; }
-.replace-foot { gap: 8px; }
+.palette-foot.replace-foot { height: 36px; gap: 8px; }
 .replace-actions { display: inline-flex; align-items: center; gap: 6px; }
-.replace-btn { height: 20px; padding: 0 9px; border: 1px solid var(--line); border-radius: 4px; color: var(--text); font-size: 9px; }
+.replace-btn { height: 24px; display: inline-flex; align-items: center; padding: 0 10px; border: 1px solid var(--line); border-radius: 5px; color: var(--text); font-size: 10px; font-weight: 650; }
 .replace-btn:hover { border-color: var(--muted); background-color: var(--panel-2); }
-.replace-btn.danger { border-color: var(--red); color: var(--red); }
-.replace-btn:disabled { opacity: 0.45; cursor: default; }
+.replace-btn.danger { border-color: var(--red); background-color: var(--red-bg); color: var(--red); }
+.replace-btn.danger:hover, .replace-btn.danger:focus-visible { border-color: var(--red); background-color: var(--red); color: var(--bg); }
+.replace-btn[disabled] { opacity: 0.55; border-color: var(--line); background-color: transparent; color: var(--dim); cursor: default; }
 .search-undo-note { color: var(--dim); font-size: 8.5px; }
 
 .palette-foot {
@@ -190,3 +195,11 @@
   color: var(--dim);
   font-size: 9px;
 }
+
+/* Command palette extras: fuzzy highlights and right-aligned keybindings. */
+#palette-panel .palette-cmd .palette-text b,
+#palette-panel .palette-cmd .palette-text span.cmd-desc { width: 400px; }
+#palette-panel .palette-text .fz { display: inline; width: auto; color: inherit; font-size: inherit; }
+#palette-panel .palette-text .fz-hit { display: inline; width: auto; color: var(--accent); font-size: inherit; font-weight: 700; }
+#palette-panel .palette-keys { margin-left: auto; min-width: 70px; max-width: 100px; text-align: right; color: var(--dim); font-family: var(--mono); font-size: 9px; white-space: nowrap; overflow: hidden; }
+#palette-panel .palette-recent { color: var(--accent); font-size: 8px; }

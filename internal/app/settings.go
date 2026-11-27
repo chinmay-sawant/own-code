@@ -90,6 +90,10 @@ type globalSettings struct {
 	// MaxFPS is the desktop present cap: 0 missing (default uncapped),
 	// -1 explicit uncapped, else 60/120/144/240. Invalid falls back to 0.
 	MaxFPS int `json:"maxFps,omitempty"`
+	// LSP configures language servers; see lsp_settings.go.
+	LSP *lspSettings `json:"lsp,omitempty"`
+	// Format configures format-on-save; see format_save.go.
+	Format *formatSettings `json:"format,omitempty"`
 }
 
 // defaultSettingsPath returns the global file beside the per-workspace
@@ -145,6 +149,16 @@ func loadSettings(path string) (globalSettings, error) {
 			_ = json.Unmarshal(value, &s.Excludes)
 		case "maxFps":
 			_ = json.Unmarshal(value, &s.MaxFPS)
+		case "format":
+			var f formatSettings
+			if json.Unmarshal(value, &f) == nil {
+				s.Format = &f
+			}
+		case "lsp":
+			var l lspSettings
+			if json.Unmarshal(value, &l) == nil {
+				s.LSP = &l
+			}
 		}
 	}
 	s = s.sanitize()
@@ -219,6 +233,8 @@ func (s globalSettings) sanitize() globalSettings {
 		// fields; unknown fields were already ignored at decode.
 	}
 	s.Theme = validTheme(s.Theme)
+	s.LSP = s.LSP.sanitize()
+	s.Format = s.Format.sanitize()
 	if s.FontSize == 0 {
 		s.FontSize = defaultFontSize
 	} else {
@@ -635,6 +651,11 @@ func keymapCatalog() []keymapEntry {
 		{"cut-path", "Cut path / file", "Ctrl+X", false},
 		{"select-all-files", "Select all files", "Ctrl+A", false},
 		{"line-card", "Open line card", "Ctrl+I", false},
+		{actionMoveLineUp, "Move line up", "Ctrl+Shift+ArrowUp", false},
+		{actionMoveLineDown, "Move line down", "Ctrl+Shift+ArrowDown", false},
+		{actionDuplicateLn, "Duplicate line", "Ctrl+Shift+D", false},
+		{actionDeleteLine, "Delete line", "Ctrl+Shift+K", false},
+		{actionJoinLines, "Join lines", "Ctrl+J", false},
 		{"mode-explorer", "Go to Explorer", "1", false},
 		{"mode-changes", "Go to Source Control", "2", false},
 		{"toggle-details", "Toggle details", "3", false},
@@ -782,6 +803,7 @@ func (a *App) settingsSnapshot() globalSettings {
 	if keymap := a.keymapDiffs(); len(keymap) > 0 {
 		s.Keymap = keymap
 	}
+	s.LSP = a.settings.LSP
 	return s.sanitize()
 }
 
@@ -1013,6 +1035,8 @@ func (a *App) runKeymapAction(ctx context.Context, action string) error {
 	case "line-card":
 		a.showInlineCardAtCurrent()
 		return a.page.Redraw(ctx)
+	case actionMoveLineUp, actionMoveLineDown, actionDuplicateLn, actionDeleteLine, actionJoinLines:
+		return a.runLineOp(ctx, action)
 	case "mode-explorer":
 		a.setMode(ctx, "explorer")
 		return a.page.Redraw(ctx)
@@ -1125,7 +1149,7 @@ func chordFromEvent(ctrl, shift bool, key string) string {
 // appearance for unknown or empty values.
 func (a *App) settingsTabName() string {
 	switch a.settingsTab {
-	case "keyboard", "files", "help", "about":
+	case "keyboard", "files", "lsp", "help", "about":
 		return a.settingsTab
 	default:
 		return "appearance"
