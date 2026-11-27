@@ -3,16 +3,16 @@
 All notable changes are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] - v0.0.1
+## [0.0.1] - 2026-11-27
 
-First tagged release. The feature set below is what already exists on
-`master`; it has not yet been verified end to end against the v0.0.1 plans
-(`plans/v0.0.1/`).
+First release of own-code. The release checklist records the checks run for
+this cut and any remaining manual checks; the older phase plan is retained as
+a historical planning draft, not as a list of release blockers.
 
 ### Added
-- LSP: completion commit characters, snippet placeholder selection with
-  `Tab` cycling, `prepareRename`, signature help, and code actions
-  (`Ctrl+.`) applied through the rename confirm dialog.
+- LSP support: diagnostics, hover, completion, definition/declaration/type
+  definition, references, rename, document and workspace symbols, formatting,
+  signature help, code actions, snippets, and progress reporting.
 - Diff hunk context menu: Unstage Hunk. Welcome card lists six core
   shortcuts.
 - Command palette: fuzzy matching with highlighted characters, right-aligned
@@ -41,25 +41,18 @@ First tagged release. The feature set below is what already exists on
 - CI (`ci.yml`) and a tag-triggered release workflow that publishes binaries
   and `SHA256SUMS` as GitHub Release assets.
 - `CONTRIBUTING.md` and `docs/architecture.md`.
+- The MIT license.
 
 ### Changed
-- `build-windows.yml` now checks out `ownframe` and `blinkless` at the
-  versions in `go.mod` instead of a hard-coded commit.
+- Upgrade `ownframe` to `v0.0.8`, which pins Blinkless `v0.1.10`.
+- Install scripts download release assets, verify `SHA256SUMS`, and replace
+  the installed binary only after verification succeeds.
+- Source builds use tagged Go modules and no longer need sibling checkouts.
 - README: corrected the horizontal-scroll limit (scrolling works when wrap is
   off).
 
-### Known gaps
-- The committed release binaries are removed and the install scripts download
-  from GitHub Release assets with SHA-256 verification. **No release exists
-  until `v0.0.1` is tagged**, so the installers fail until then. 32-bit
-  builds are no longer published. Old binaries remain in git history.
-- Added the MIT `LICENSE`.
-
-### Also in this release
-- Removed the `ownframe` `replace` in `go.mod` and `go.work`; the module now
-  builds from a clean clone with no sibling checkouts.
-- LSP groundwork: `internal/lsp` client, document sync, diagnostics
-  (squiggles, gutter marks, status counts, Problems list), `lsp` settings
-  block, and "LSP: Show log". Hover, completion and other features are not
-  wired yet.
-- Reusable popup widget for completion lists and hover cards.
+### Known limitations
+- Release binaries target Linux, macOS, and Windows on amd64 and arm64; 32-bit
+  builds are not published. Older binaries remain in Git history.
+- Language-server features require the corresponding server to be installed
+  and available on `PATH`.

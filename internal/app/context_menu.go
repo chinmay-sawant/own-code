@@ -330,7 +330,7 @@ func (a *App) splitContextMenu(id string) ([]contextMenuRow, bool) {
 		return nil, false
 	}
 
-	group := -1
+	var group int
 
 	switch id {
 	case "tabstrip", "editor-window", "code-body", "crumbs":
@@ -1067,18 +1067,4 @@ func (a *App) contextMenuFinish(ctx context.Context) error {
 	a.refresh()
 
 	return a.page.Redraw(ctx)
-}
-
-// contextMenuClampIndex keeps an active index on a real tab, with 0 for an
-// empty group.
-func contextMenuClampIndex(index, count int) int {
-	if index < 0 || count == 0 {
-		return 0
-	}
-
-	if index >= count {
-		return count - 1
-	}
-
-	return index
 }

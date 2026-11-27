@@ -58,15 +58,6 @@ func rowText(row Row) string {
 	return b.String()
 }
 
-func rowClasses(row Row) []string {
-	classes := make([]string, 0, len(row.Segments))
-	for _, segment := range row.Segments {
-		classes = append(classes, segment.Class)
-	}
-
-	return classes
-}
-
 func rowTexts(view View) []string {
 	texts := make([]string, 0, len(view.Rows))
 	for _, row := range view.Rows {

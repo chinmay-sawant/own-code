@@ -56,6 +56,12 @@ HTML (`buildHTML`), registers handlers, and calls `openInitial` and `refresh`.
    `page.SetScrollWindow(a.onScroll)` make the editor and diff render only the
    rows around the viewport; `onScroll` slices rows and reports whether a new
    layout is needed.
+   The v0.0.8 `Config.CullWindow` option stays off: the large variable-length
+   collections are already window-sliced, and no app-level measurement shows
+   additional benefit from layout culling. `Config.Render` also stays off.
+   `buildHTML` composes embedded Go-template fragments; passing a template
+   executor through `Render` would keep the same reflection work, while a
+   direct writer requires replacing that renderer and proving output parity.
 5. **Tick.** `page.SetTick(a.tickWatch)` runs each frame on the page loop.
    It applies watcher updates and drains the results of every background
    worker (below), then refreshes if anything changed.

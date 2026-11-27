@@ -68,7 +68,9 @@ func waitTerminalContains(t *testing.T, app *App, want string) {
 	deadline := time.Now().Add(terminalTestTimeout)
 
 	for {
-		app.pollTerminal(ctx)
+		if err := app.pollTerminal(ctx); err != nil {
+			t.Fatal(err)
+		}
 
 		text := terminalRowsText(app.View().Terminal.Rows)
 		if strings.Contains(text, want) {
@@ -256,7 +258,9 @@ func TestTerminalFocusRoutingAndHide(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	app.pollTerminal(ctx)
+	if err := app.pollTerminal(ctx); err != nil {
+		t.Fatal(err)
+	}
 	if strings.Contains(terminalCopyText(app.View().Terminal), "hidden-marker") {
 		t.Fatal("unfocused terminal received typed text")
 	}
@@ -335,7 +339,9 @@ func TestTerminalResizeSyncsSession(t *testing.T) {
 
 	app.termHeight = 400
 	app.syncTerminalSize(ctx)
-	app.pollTerminal(ctx)
+	if err := app.pollTerminal(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	after, ok := app.term.Snapshot(id)
 	if !ok {
@@ -409,7 +415,9 @@ func TestTerminalInterruptRestoresPrompt(t *testing.T) {
 
 	deadline := time.Now().Add(terminalTestTimeout)
 	for {
-		app.pollTerminal(ctx)
+		if err := app.pollTerminal(ctx); err != nil {
+			t.Fatalf("pollTerminal: %v", err)
+		}
 		text := terminalRowsText(app.View().Terminal.Rows)
 		lines := strings.Split(text, "\n")
 		last := ""

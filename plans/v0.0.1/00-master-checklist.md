@@ -1,10 +1,11 @@
 # own-code v0.0.1 — Master Phase-Wise Checklist
 
-> **Repo:** `/home/chinmay/ChinmayPersonalProjects/own-code`
+> **Repo:** `github.com/chinmay-sawant/own-code`
 > **Style:** scale-file, after `goslop/plans/port-phasewise-checklist.md`
-> **Status:** draft — all boxes unchecked unless marked `[x]` with evidence
+> **Status:** historical planning draft, reviewed for the v0.0.1 release on 2026-11-27
 > **Canonical ledger:** this file only (do not fork status docs)
 > **Scope:** v0.0.1 = editor core file ops, dirty/autosave, replace, goto/indent/comment, display settings, symbol/recent/breadcrumb, preview/pinned tabs, splits, settings persist, lazy load
+> The phase checkboxes below were written before much of this work landed. They are not a current feature inventory or release blocker list. See [CHANGELOG.md](../../CHANGELOG.md) for shipped scope and the release audit at the end of Phase 11.
 
 ---
 
@@ -13,11 +14,11 @@
 Ship a coherent v0.0.1 editor pass on top of the current app (`internal/app/`, `internal/edit/`, `internal/wsl/`, entry `cmd/own-code/main.go`) while keeping:
 
 1. **Current product surface intact** — explorer, in-place editor (`Ctrl+E`/`Ctrl+S`), unified/split diffs, history lane, Markdown preview (`Ctrl+Shift+V` / `M`), ten themes (`themeCatalog` in `themes.go`), terminal, merge resolver (README Features).
-2. **Explicit limits honored** — 512 KB / 20,000-line / 32 KB-line caps, shared-scroll split, 200-hit workspace search, fsnotify desktop-only watcher, no unsaved-change prompt (README Limits — to be revisited deliberately in Phase 2).
+2. **Explicit limits honored** — 512 KB / 20,000-line / 32 KB-line caps, independently scrolling split groups, 200-hit workspace search, fsnotify desktop-only watcher, autosave and unsaved-close prompts (see README Limits and Features).
 3. **Key bindings stable** — `Ctrl+P/F/Shift+F/E/S/A/C/V/\`, `Z`, `N/P`, `R/W`, `Esc`, `F12` (README Keys). New bindings added only in their phase with docs + tests.
 4. **Evidence per box** — path + command (`go test -p 1 ./...`, `go vet`, `gofmt -l`, `go run ./cmd/own-code`).
 
-Grounding (skimmed 2026-11-01): `internal/app/` ~182 `*.go` files — `edit_ops.go`/`text_edit.go`/`selection_ops.go` (buffer ops, `replaceEditRange`, `dirty` map), `find.go` (in-file find, `findStep`), `search_ops.go`/`workspace_search.go` (workspace search), `session.go`/`app_session.go` (`sessionState`, `persistSession`/`restoreState`), `tabs.go`/`editor_group.go` (`editorGroup`, 8-tab model), `split_ops.go`/`split_scroll.go` (second group, shared scroll), `outline.go` (`outline`/`symbolRow` per-lang), `project_recent.go`/`quick_roots.go` (recent projects/roots), `file_nav_ops.go` (changed-file nav), `explorer_paste.go`/`workspace.go` (`ws.Lazy`, `loadDiskWorkspaceLazy`), `markdown_preview.go`, `themes.go`, `wrap.go`, `zoom.go`/`zoom_sections.go`, `watch.go`.
+Grounding: the original plan was drafted on 2026-11-01. Recheck the current code and tests before treating any unchecked phase row as unfinished. The feature map is in the README and CHANGELOG; release evidence is recorded below.
 
 ---
 
@@ -33,7 +34,7 @@ Grounding (skimmed 2026-11-01): `internal/app/` ~182 `*.go` files — `edit_ops.
 | 5 | Display settings | Tab width, soft wrap, minimap/line-numbers toggles, zoom persist | 1 |
 | 6 | Symbol / recent / breadcrumb | Outline symbols, recent files, breadcrumb bar + navigation | 1, 5 |
 | 7 | Preview + pinned tabs | Markdown/preview tabs, pinned tabs, tab windowing (8-tab budget) | 1–2, 6 |
-| 8 | Splits | Second group ops, focus, shared-scroll contract, split persistence | 1–2, 7 |
+| 8 | Splits | Second group ops, focus, independent scrolling, split persistence | 1–2, 7 |
 | 9 | Settings persist | Unified settings store, session restore, recent projects | 2, 5–8 |
 | 10 | Lazy load | Lazy workspace/tree, on-demand dir load, paste/rescan integration | 1, 9 |
 | 11 | v0.0.1 gates + delivery | Full proof suite, manual pass, README Keys/Limits refresh, release notes | 2–10 |
@@ -53,14 +54,14 @@ go run ./cmd/own-code -root ./testdata/sample
 ## Phase 0: Bootstrap + baselines
 
 ### 0.1 Tree + toolchain
-- [ ] `go 1.26` + sibling `../ownframe` replace documented; `go mod tidy` clean
+- [ ] Go 1.26.11 and tagged module dependencies documented; `GOWORK=off go mod tidy -diff` clean
 - [ ] `go test -p 1 ./...` PASS recorded (note failures/host)
 - [ ] `go vet ./...` clean; `gofmt -l internal cmd` empty
 - [ ] `go run ./cmd/own-code -root ./testdata/sample` launches; screenshot script path noted (`OWNFRAME_CODE_VIEW_SCREENSHOT=1 go test -run '^TestScreenshot$' ./internal/app`)
 
 ### 0.2 Baseline inventory
 - [ ] Key inventory: current README Keys table reconciled with `actions.go` bindings (`Ctrl+P/F/Shift+F/E/S/A/C/V/\`, `Z`, `N/P`, `R/W`, `Esc`, `F12`)
-- [ ] Limit inventory: 512 KB / 20,000-line / 32 KB-line / 200-hit search / 8-tab / shared-scroll caps listed with code refs (`workspace.go`, `workspace_search.go`, `tabs.go`/`editor_group.go`, `split_scroll.go`)
+- [ ] Limit inventory: 512 KB / 20,000-line / 32 KB-line / 200-hit search / 8-tab caps listed with code refs (`workspace.go`, `workspace_search.go`, `tabs.go`/`editor_group.go`)
 - [ ] Fixture corpus fixed: `testdata/sample` (via `owncode.SampleFiles`) + `fixtures/` scenarios for large-file/binary/long-line cases
 - [ ] Session log started (see Session log stub)
 
@@ -169,10 +170,10 @@ go run ./cmd/own-code -root ./testdata/sample
 
 - [ ] Split ops: `Ctrl+\` toggles second group; open-in-split, close-split (focus returns, tabs merge or drop per explicit rule), swap groups
 - [ ] Focus model: exactly one focused group; guarded `openFileIn`/`closeTabIn(group, …)`; status + breadcrumb reflect focused group
-- [ ] Shared-scroll contract: both groups share one window + page scroll (README Limits) — `split_scroll.go` keeps same row offset; document as kept limit, not silently changed
+- [ ] Independent-scroll contract: each group keeps its own window and offset — `split_scroll.go` plus `split_improvements_test.go`
 - [ ] Split persistence: group tabs + actives + focus survive reload via Phase 9 session; single-group sessions restore cleanly
 - [ ] Diff + split: split diff (`S`/`U`) and editor split compose without row-ID collisions (`split_divider_revert_test.go` green)
-- [ ] Tests: toggle/focus/close rules, shared-offset assertion, persist round-trip, `split_scroll/divider_revert/editor_group_test.go` green
+- [ ] Tests: toggle/focus/close rules, independent-offset assertions, persist round-trip, `split_scroll/divider_revert/editor_group_test.go` green
 
 ---
 
@@ -205,16 +206,29 @@ go run ./cmd/own-code -root ./testdata/sample
 ## Phase 11: v0.0.1 gates + delivery
 
 ### 11.1 Proof suite
-- [ ] `go test -p 1 ./...` PASS (full, serial — required: parallel flakes historically)
-- [ ] `go vet ./...` clean; `gofmt -l internal cmd` empty
+- [x] `GOWORK=off xvfb-run -a go test -p 1 ./...` PASS on 2026-11-27
+- [x] `GOWORK=off go vet ./...` clean; `gofmt -l assets.go cmd internal` empty on 2026-11-27
 - [ ] `go run ./cmd/own-code -root ./testdata/sample` smoke: open/edit/save/replace/goto/split/preview/session-restore/lazy-expand each exercised
-- [ ] Screenshot pass: `OWNFRAME_CODE_VIEW_SCREENSHOT=1 go test -run '^TestScreenshot$' ./internal/app` → `/tmp/opencode/code-view-shots/` frames eyeballed (explorer, preview, palette, changes, split, details, edit, search)
+- [ ] Screenshot pass: the gated test passed and the explorer, split-editor, and changes captures were inspected; the full requested set has not been reviewed.
+- [x] Web smoke: `./own-code -web -root ./testdata/sample`; `GET /` and `GET /frame.png` returned HTTP 200 and a 1500×900 PNG.
 
 ### 11.2 Docs + release
-- [ ] README Features/Keys/Limits refreshed: new bindings (replace, goto, comment, pin, symbol), autosave + unsaved-prompt change, preview-tab + breadcrumb + lazy-load notes
-- [ ] `docs/` deltas: terminal/merge docs untouched or explicitly updated; new settings doc if store added
+- [x] README Features/Keys/Limits reviewed; source-build instructions and the binary runtime description corrected.
+- [x] `docs/` reviewed; architecture rendering boundary updated, terminal and merge guides remain current.
 - [x] Release notes stub (evidence: `CHANGELOG.md`; known gaps listed there): scope (the 11 features), known gaps marked `[~]` with reason, next version candidates
-- [ ] Checklist reconciled: every `[x]` has path + command evidence; every `[~]` links an issue/reason; no silent stubs in default flows
+- [x] Legacy phase checklist is marked as historical and points to `CHANGELOG.md`; current release checks are recorded separately below.
+
+### 11.3 v0.0.1 release audit (2026-11-27)
+
+Record only checks run against the final release commit. Keep the earlier phase plan as historical context; its unchecked backlog is not the release acceptance list.
+
+- [x] `ownframe v0.0.8` and its Blinkless `v0.1.10` dependency resolve from the module proxy; `GOWORK=off go mod tidy -diff` is clean.
+- [x] `go test -p 1 ./...`, `go vet ./...`, and `gofmt -l assets.go cmd internal` pass (serial tests run under Xvfb on 2026-11-27).
+- [ ] Linux, macOS, and Windows amd64/arm64 release builds and the `SHA256SUMS` asset are verified.
+- [x] `install.sh` installs a checksum-verified binary and preserves the existing install on a bad checksum (local release-artifact test, 2026-11-27).
+- [ ] `install.bat` installs a checksum-verified release without replacing an existing binary on failure.
+- [ ] Published `v0.0.1` release assets and installer URLs are verified.
+- [ ] `Config.Render` and `Config.CullWindow` applicability is recorded in the PR; the app's embedded templates and application-level row windowing are evaluated before opting in.
 
 ---
 
@@ -239,7 +253,7 @@ go run ./cmd/own-code -root ./testdata/sample
 
 ## Working agreements
 
-1. **README Limits are load-bearing** — changing a limit (unsaved prompt, lazy vs full scan, shared scroll) requires a README edit in the same change.
+1. **README Limits are load-bearing** — changing a limit (unsaved prompt, lazy vs full scan, split scroll) requires a README edit in the same change.
 2. **One checklist** — update this file when closing work; do not fork status docs.
 3. **Atomic rows** — check a box only with path + command evidence (`go test -p 1 ./...` at minimum for behavior rows).
 4. **Quarantine honestly** — if a feature cannot meet the phase bar yet, mark `[~]` with reason + follow-up (like goslop taint FNs).

@@ -64,7 +64,7 @@ func TestClientDefinitionFamily(t *testing.T) {
 	srv := NewConn(sr, sw)
 
 	go func() {
-		defer sw.Close()
+		defer func() { _ = sw.Close() }()
 
 		for {
 			m, err := srv.Read()

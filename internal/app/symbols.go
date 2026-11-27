@@ -403,30 +403,6 @@ func parseSymbolQuery(raw string) (name, scope string, line int) {
 	return query, scope, line
 }
 
-// openSymbolAction opens a symbol palette row: the file, then the
-// definition line encoded as path:line (0-based).
-func (a *App) openSymbolAction(rest string) {
-	path, line := cutSymbolAction(rest)
-	if path == "" {
-		return
-	}
-
-	a.openFilePreview(path)
-	a.outlineLine(line)
-}
-
-// cutSymbolAction splits a path:line action suffix. A non-numeric suffix
-// keeps the whole rest as the path at line 0.
-func cutSymbolAction(rest string) (string, int) {
-	if i := strings.LastIndexByte(rest, ':'); i >= 0 {
-		if n := parseLineSuffix(rest[i+1:]); n > 0 {
-			return rest[:i], n - 1
-		}
-	}
-
-	return rest, 0
-}
-
 // parseLineSuffix parses a 1-based :line suffix.
 func parseLineSuffix(s string) int {
 	if s == "" {

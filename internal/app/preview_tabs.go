@@ -233,12 +233,6 @@ func (a *App) autoPinForEdit(path string) {
 	}
 }
 
-// evictIndexForAppend is kept for callers that probe eviction. Tabs are
-// unlimited, so there is never anything to evict.
-func (a *App) evictIndexForAppend(group int) int {
-	return -1
-}
-
 // pushClosed captures one closed tab on the LIFO stack. Dirty tabs deep-copy
 // their document lines iff the text fits the byte cap; oversized dirty tabs
 // push path-only plus a toast. Clean tabs push path-only. The stack caps at
@@ -664,11 +658,6 @@ func (a *App) paletteBulkClose(group int, keep func(int, string) bool, includePi
 // group: a single-click / palette / search / outline entry point.
 func (a *App) openFilePreview(path string) {
 	a.openFileAtPreview(a.activeGroup(), path, true)
-}
-
-// openFilePreviewIn opens or focuses one file as a preview in a group.
-func (a *App) openFilePreviewIn(group int, path string) {
-	a.openFileAtPreview(group, path, true)
 }
 
 // openFileAtPreview is the preview-tab opener. Recorded opens push nav

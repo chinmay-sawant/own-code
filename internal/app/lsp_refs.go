@@ -379,10 +379,10 @@ func (a *App) renamePaletteRows() []paletteRow {
 	name := strings.TrimSpace(a.paletteQuery)
 	old := st.ext.refs.target.word
 
-	switch {
-	case name == "":
+	switch name {
+	case "":
 		return []paletteRow{{Cmd: paletteCmdLSPRenameGo, Name: "Type the new name for " + old, Dir: "Enter previews the changes"}}
-	case name == old:
+	case old:
 		return []paletteRow{{Cmd: paletteCmdLSPRenameGo, Name: "Rename " + old + " (name unchanged)", Dir: "Type a different name"}}
 	}
 

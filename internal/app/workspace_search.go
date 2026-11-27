@@ -243,19 +243,6 @@ search:
 	return finishWorkspaceSearch(result)
 }
 
-// workspaceMatchAt reports whether candidate starts with query. It delegates
-// to the shared matcher helper so the workspace scan and the find bar fold
-// case the same way.
-func workspaceMatchAt(candidate, query []rune, caseSensitive bool) bool {
-	return matchRunesAt(candidate, query, caseSensitive)
-}
-
-// workspaceRuneEqualFold compares one rune under Unicode simple folding. It
-// delegates to the shared matcher helper.
-func workspaceRuneEqualFold(a, b rune) bool {
-	return runeEqualFold(a, b)
-}
-
 // workspaceSearchNote describes why a pass stopped before its last match.
 func workspaceSearchNote(limitStopped, perFileStopped bool, limit int) string {
 	var notes []string

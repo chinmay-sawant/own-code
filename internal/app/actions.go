@@ -2424,7 +2424,7 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 		default:
 			// Editor chords (Ctrl+S and friends) keep working mid-edit;
 			// every other key belongs to the overlay input.
-			if !(a.editing && a.ctrl) {
+			if !a.editing || !a.ctrl {
 				return nil
 			}
 		}
@@ -2924,11 +2924,12 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 		if !a.keymapAllows("close-tab", key) {
 			return nil
 		}
-		if a.mode == "changes" {
+		switch a.mode {
+		case "changes":
 			a.closeWorkingTree(ctx)
-		} else if a.mode == "merge" {
+		case "merge":
 			a.requestCloseMergeEditor()
-		} else {
+		default:
 			group := a.activeGroup()
 			a.requestCloseTabIn(group, a.groupActive(group))
 		}
@@ -3353,11 +3354,5 @@ func (a *App) onToggleDir(path string) {
 		}
 	}
 
-	a.refresh()
-}
-
-// retryDirLoad re-enqueues a failed directory load (retry row).
-func (a *App) retryDirLoad(path string) {
-	a.requestDirLoad(path)
 	a.refresh()
 }

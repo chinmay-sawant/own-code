@@ -53,15 +53,6 @@ func outlineFull(lang string, lines []string) []symbolRow {
 	return rows
 }
 
-// addSymbol appends one symbol unless the row cap is reached.
-func addSymbol(rows []symbolRow, name, kind string, line, depth int) []symbolRow {
-	if len(rows) >= maxOutlineRows {
-		return rows
-	}
-
-	return appendSymbol(rows, name, kind, line, depth)
-}
-
 // appendSymbol appends one symbol without the drawer row cap.
 func appendSymbol(rows []symbolRow, name, kind string, line, depth int) []symbolRow {
 	name = strings.TrimSpace(name)

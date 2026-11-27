@@ -345,7 +345,9 @@ func isBlameHeader(ln string) bool {
 
 	for i := 0; i < commitHashLen; i++ {
 		c := ln[i]
-		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
+		if (c < '0' || c > '9') &&
+			(c < 'a' || c > 'f') &&
+			(c < 'A' || c > 'F') {
 			return false
 		}
 	}
@@ -779,7 +781,9 @@ func isHexHash(s string) bool {
 
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
+		if (c < '0' || c > '9') &&
+			(c < 'a' || c > 'f') &&
+			(c < 'A' || c > 'F') {
 			return false
 		}
 	}

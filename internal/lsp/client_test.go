@@ -33,7 +33,7 @@ func newPair(t *testing.T, opt Options) (*Client, *fakeServer) {
 		for {
 			m, err := srv.conn.Read()
 			if err != nil {
-				sw.Close()
+				_ = sw.Close()
 				return
 			}
 			srv.mu.Lock()
@@ -41,19 +41,34 @@ func newPair(t *testing.T, opt Options) (*Client, *fakeServer) {
 			srv.mu.Unlock()
 			switch m.Method {
 			case "initialize":
-				srv.conn.Write(&Message{ID: m.ID, Result: json.RawMessage(`{"capabilities":{"textDocumentSync":1},"serverInfo":{"name":"fake"}}`)})
+				if err := srv.conn.Write(&Message{ID: m.ID, Result: json.RawMessage(`{"capabilities":{"textDocumentSync":1},"serverInfo":{"name":"fake"}}`)}); err != nil {
+					t.Errorf("write initialize response: %v", err)
+					return
+				}
 				// Also push a diagnostic and a server request.
-				srv.conn.Write(&Message{Method: "textDocument/publishDiagnostics", Params: json.RawMessage(`{"uri":"file:///a.go","diagnostics":[{"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":1}},"message":"boom"}]}`)})
+				if err := srv.conn.Write(&Message{Method: "textDocument/publishDiagnostics", Params: json.RawMessage(`{"uri":"file:///a.go","diagnostics":[{"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":1}},"message":"boom"}]}`)}); err != nil {
+					t.Errorf("write diagnostics notification: %v", err)
+					return
+				}
 			case "slow":
 				// never answers
 			case "echo":
-				srv.conn.Write(&Message{ID: m.ID, Result: m.Params})
+				if err := srv.conn.Write(&Message{ID: m.ID, Result: m.Params}); err != nil {
+					t.Errorf("write echo response: %v", err)
+					return
+				}
 			case "fail":
-				srv.conn.Write(&Message{ID: m.ID, Error: &ResponseError{Code: -32000, Message: "nope"}})
+				if err := srv.conn.Write(&Message{ID: m.ID, Error: &ResponseError{Code: -32000, Message: "nope"}}); err != nil {
+					t.Errorf("write error response: %v", err)
+					return
+				}
 			case "shutdown":
-				srv.conn.Write(&Message{ID: m.ID, Result: json.RawMessage("null")})
+				if err := srv.conn.Write(&Message{ID: m.ID, Result: json.RawMessage("null")}); err != nil {
+					t.Errorf("write shutdown response: %v", err)
+					return
+				}
 			case "exit":
-				sw.Close()
+				_ = sw.Close()
 				return
 			}
 		}
@@ -68,7 +83,10 @@ func TestLifecycle(t *testing.T) {
 	c, srv := newPair(t, Options{Handler: func(method string, p json.RawMessage) {
 		if method == "textDocument/publishDiagnostics" {
 			var d PublishDiagnosticsParams
-			json.Unmarshal(p, &d)
+			if err := json.Unmarshal(p, &d); err != nil {
+				t.Errorf("decode diagnostic notification: %v", err)
+				return
+			}
 			diag <- d
 		}
 	}})
@@ -124,7 +142,9 @@ func TestCallCancelAndServerExit(t *testing.T) {
 	errc := make(chan error, 1)
 	go func() { errc <- c.Call(context.Background(), "slow", nil, nil) }()
 	time.Sleep(50 * time.Millisecond)
-	c.Notify("exit", nil)
+	if err := c.Notify("exit", nil); err != nil {
+		t.Fatalf("notify exit: %v", err)
+	}
 	select {
 	case err := <-errc:
 		if err != ErrClosed {
@@ -157,8 +177,12 @@ func TestFramingRoundTripMultibyteAndSplit(t *testing.T) {
 	var buf bytes.Buffer
 	w := NewConn(strings.NewReader(""), &buf)
 	id := json.RawMessage("1")
-	w.Write(&Message{ID: &id, Method: "m", Params: json.RawMessage(`{"s":"😀é"}`)})
-	w.Write(&Message{Method: "n"})
+	if err := w.Write(&Message{ID: &id, Method: "m", Params: json.RawMessage(`{"s":"😀é"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Write(&Message{Method: "n"}); err != nil {
+		t.Fatal(err)
+	}
 	// Feed one byte at a time.
 	r := NewConn(iotestOneByte{bytes.NewReader(buf.Bytes())}, io.Discard)
 	m1, err := r.Read()

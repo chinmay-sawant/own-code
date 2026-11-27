@@ -3,7 +3,7 @@ module github.com/chinmay-sawant/own-code
 go 1.26.11
 
 require (
-	github.com/chinmay-sawant/ownframe v0.0.5
+	github.com/chinmay-sawant/ownframe v0.0.8
 	github.com/creack/pty v1.1.24
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/hajimehoshi/ebiten/v2 v2.10.6
@@ -19,7 +19,7 @@ require (
 	github.com/andybalholm/brotli v1.2.7 // indirect
 	github.com/benoitkugler/textlayout v0.3.2 // indirect
 	github.com/benoitkugler/textprocessing v0.0.6 // indirect
-	github.com/chinmay-sawant/blinkless v0.1.7 // indirect
+	github.com/chinmay-sawant/blinkless v0.1.10 // indirect
 	github.com/ebitengine/gomobile v0.0.0-20260820040257-d11f821a26a6 // indirect
 	github.com/ebitengine/hideconsole v1.0.0 // indirect
 	github.com/ebitengine/oto/v3 v3.5.1 // indirect

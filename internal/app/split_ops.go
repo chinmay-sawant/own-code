@@ -84,16 +84,14 @@ func (a *App) toggleSplit() {
 // left, narrow right, then back to even. It backs the divider
 // double-click and the End key so both minimize/maximize without the mouse.
 func (a *App) cycleSplitRatio() {
-	next := defaultSplitRatio
 	switch {
 	case splitRatioNear(a.splitRatio, defaultSplitRatio):
-		next = sessionSplitMin
+		a.setSplitRatio(sessionSplitMin)
 	case splitRatioNear(a.splitRatio, sessionSplitMin):
-		next = sessionSplitMax
+		a.setSplitRatio(sessionSplitMax)
 	default:
-		next = defaultSplitRatio
+		a.setSplitRatio(defaultSplitRatio)
 	}
-	a.setSplitRatio(next)
 }
 
 // splitRatioNear reports whether two ratios match within a hair, so exact

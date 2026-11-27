@@ -445,7 +445,11 @@ func TestManagerNotifyFiresOnOutput(t *testing.T) {
 func TestManagerNotifiesExit(t *testing.T) {
 	requireUnixShell(t)
 	manager := NewManager()
-	defer manager.CloseAll()
+	t.Cleanup(func() {
+		if err := manager.CloseAll(); err != nil {
+			t.Errorf("CloseAll: %v", err)
+		}
+	})
 	exited := make(chan struct{}, 1)
 	manager.SetNotify(func() {
 		_, session := manager.Active()

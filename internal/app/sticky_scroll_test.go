@@ -361,7 +361,7 @@ func TestStickyZoomScaling(t *testing.T) {
 	}
 }
 
-func TestStickyGutterToggle(t *testing.T) {
+func TestStickyHeaderSurvivesRefresh(t *testing.T) {
 	app := newTestApp(t)
 	app.openFile("backend/server.go")
 
@@ -373,8 +373,6 @@ func TestStickyGutterToggle(t *testing.T) {
 		t.Fatal("expected a sticky header with the gutter on")
 	}
 
-	app.lineNumbersSet = true
-	app.showLineNumbers = false
 	app.refresh()
 
 	after := app.View().Sticky

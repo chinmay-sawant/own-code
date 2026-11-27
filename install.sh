@@ -40,7 +40,7 @@ esac
 file="own-code-${osname}-${arch}"
 url="$REL_URL/$file"
 
-tmp=$(mktemp 2>/dev/null || mktemp -t own-code)
+tmp=$(mktemp "$bindir/.own-code.XXXXXX")
 sums=$(mktemp 2>/dev/null || mktemp -t own-code-sums)
 trap 'rm -f "$tmp" "$sums"' EXIT INT TERM
 
@@ -76,8 +76,8 @@ if [ "$got" != "$want" ]; then
   exit 1
 fi
 
-cp "$tmp" "$bindir/own-code"
-chmod +x "$bindir/own-code"
+chmod +x "$tmp"
+mv -f "$tmp" "$bindir/own-code"
 
 echo "Installed own-code ($file) to $bindir/own-code"
 case ":$PATH:" in

@@ -52,12 +52,12 @@ func OffsetPosition(text string, off int) Position {
 	rs := []rune(text)
 
 	for i < len(rs) && i < off {
-		switch r := rs[i]; {
-		case r == '\n':
+		switch r := rs[i]; r {
+		case '\n':
 			line++
 
 			col = 0
-		case r == '\r':
+		case '\r':
 			if i+1 < len(rs) && rs[i+1] == '\n' && i+1 < off {
 				i++
 			} else if i+1 < len(rs) && rs[i+1] == '\n' {

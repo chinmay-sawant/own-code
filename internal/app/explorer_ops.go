@@ -63,12 +63,6 @@ const (
 	contextMenuDuplicateID = contextMenuIDPrefix + "duplicate:"
 )
 
-// contextMenuSep marks a separator row. The menu template renders it as an
-// <hr>; it is disabled so it never dispatches.
-func contextMenuSep() contextMenuRow {
-	return contextMenuRow{Label: "-"}
-}
-
 // cleanExplorerRel normalizes one workspace-relative path for the explorer
 // ops: "" is rejected (callers pass root as "" before joining), anything
 // absolute or escaping with ".." is rejected, and NUL bytes are rejected.
@@ -891,29 +885,6 @@ func (a *App) explorerOpReady() bool {
 	return isTreeRowID(a.page.Form().FocusID())
 }
 
-// explorerNewDir maps a menu row to the folder a new file lands in: a
-// directory stays, a file maps to its parent, and "" is the root.
-func (a *App) explorerNewDir(rel string) string {
-	if strings.TrimSpace(rel) == "" {
-		return ""
-	}
-
-	clean, ok := cleanExplorerRel(rel)
-	if !ok {
-		return ""
-	}
-
-	if isDir, found := a.lookupTreePath(clean); found {
-		if isDir {
-			return clean
-		}
-
-		return dirName(clean)
-	}
-
-	return ""
-}
-
 // explorerOpTarget is the single row rename and duplicate act on: the focused
 // tree row, else the active document when it is in the workspace.
 func (a *App) explorerOpTarget() string {
@@ -1258,27 +1229,4 @@ func (a *App) runPaletteCommand(ctx context.Context, id string) error {
 	}
 
 	return nil
-}
-
-// duplicateExplorerTarget duplicates one row for the context menu, with
-// toasts and a tree refresh.
-func (a *App) duplicateExplorerTarget(ctx context.Context, rel string) error {
-	clean, ok := cleanExplorerRel(rel)
-	if !ok {
-		return a.redrawTreeMenu(ctx)
-	}
-
-	next, err := a.duplicateExplorerPath(clean)
-	if err != nil {
-		a.showToast("error", "Cannot duplicate", err.Error())
-		a.refresh()
-
-		return a.redrawTreeMenu(ctx)
-	}
-
-	a.refreshExplorerAfterMutation([]string{next}, nil, nil)
-	a.showToast("success", "Duplicated", next)
-	a.refresh()
-
-	return a.redrawTreeMenu(ctx)
 }

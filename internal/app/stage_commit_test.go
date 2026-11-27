@@ -130,7 +130,6 @@ func TestStageHunkAtCursorAndHunkMenu(t *testing.T) {
 		t.Fatal("missing revert button for the remaining hunk")
 	}
 
-	rest := strings.TrimPrefix(box.ID, "revert-line-")
 	rows := app.ContextMenuFor(box.ID)
 	if len(rows) != 3 || rows[0].Label != "Stage Hunk" || rows[1].Label != "Unstage Hunk" || rows[2].Label != "Discard Hunk" {
 		t.Fatalf("hunk menu = %+v, want Stage + Unstage + Discard rows", rows)
@@ -150,7 +149,7 @@ func TestStageHunkAtCursorAndHunkMenu(t *testing.T) {
 		t.Fatal("missing revert button for the remaining hunk")
 	}
 
-	rest = strings.TrimPrefix(last.ID, "revert-line-")
+	rest := strings.TrimPrefix(last.ID, "revert-line-")
 
 	if err := app.MenuAction(ctx, "code-view:stage-hunk:"+rest); err != nil {
 		t.Fatal(err)

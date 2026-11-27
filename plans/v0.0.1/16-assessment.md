@@ -20,7 +20,7 @@ Scope: review of the tree at `056c541`. The `replace` line in `go.mod` is ignore
 2. **Editor ceiling.** The edit buffer is a full-text snapshot (`editSnapshot` in `text_edit.go`). The README limits files to 512 KB and 20,000 lines. There is no multi-cursor, folding, minimap, bracket colorization, or column select.
 3. **Giant files.** `app.go` is 4.2k lines and `actions.go` is 3.3k, in one `app` package of 120+ files. Every new feature raises the cost of the next one.
 4. **Repo hygiene.** About 350 MB of release binaries are committed (`.git` is 487 MB). Every release adds roughly 350 MB of history, permanently. The Windows CI workflow is `workflow_dispatch` only and pins a stale ownframe commit. There is no CI running `go test`/`go vet` on PRs.
-5. **Build friction.** The build needs sibling checkouts (`../ownframe`, `../blinkless`) plus `go.work`. A new contributor cannot `go build` cleanly. (You are handling the `replace`; the `go.work` and README steps remain.)
+5. **Build friction (resolved 2026-11-27).** This assessment found that builds needed sibling `ownframe` and `blinkless` checkouts plus `go.work`. The v0.0.1 release now consumes tagged modules from the Go module proxy, and the README documents a clean-clone build.
 6. **README drift.** The README says ten themes, but `plans/v0.0.1/00-master-checklist.md` still says six. The README also says "no horizontal scroll", yet `hscroll.go` exists. The plans checklist (`00-master-checklist.md`) is entirely unchecked even though most of it shipped.
 
 ## Recommended order

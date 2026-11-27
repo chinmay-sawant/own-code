@@ -4,7 +4,6 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 )
 
 // matcherQueryCap bounds a regex query in runes. RE2 itself is safe, but a
@@ -241,10 +240,4 @@ func wordBoundary(line []rune, start, end int) bool {
 		return before != after
 	}
 	return true
-}
-
-// runeLen counts the runes in s without importing utf8 at call sites that
-// already import this file's helpers.
-func runeLen(s string) int {
-	return utf8.RuneCountInString(s)
 }

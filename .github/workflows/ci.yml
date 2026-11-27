@@ -43,7 +43,6 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
-    continue-on-error: true # advisory until the linter set is tuned
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -56,7 +55,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends libgl1-mesa-dev xorg-dev libasound2-dev
       - uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          version: v2.15.0
 
   build:
     needs: test
@@ -73,3 +72,32 @@ jobs:
           cache: true
       - name: Build
         run: go build ./cmd/own-code
+
+      - name: Verify Windows installer checksum and replacement
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $testRoot = Join-Path $env:RUNNER_TEMP 'own-code-installer-test'
+          $releaseDir = Join-Path $testRoot 'release'
+          $profileDir = Join-Path $testRoot 'profile'
+          $binDir = Join-Path $profileDir '.local\bin'
+          New-Item -ItemType Directory -Path $releaseDir, $binDir -Force | Out-Null
+          Copy-Item .\own-code.exe (Join-Path $releaseDir 'own-code-windows-amd64.exe')
+          $env:OWN_CODE_RELEASE_URL = ([Uri]$releaseDir).AbsoluteUri.TrimEnd('/')
+          $env:USERPROFILE = $profileDir
+          $env:PATH = "$binDir;$env:PATH"
+
+          $installed = Join-Path $binDir 'own-code.exe'
+          Set-Content -Path $installed -Value 'previous-install' -NoNewline
+          Set-Content -Path (Join-Path $releaseDir 'SHA256SUMS') -Encoding ascii -Value '0000000000000000000000000000000000000000000000000000000000000000  own-code-windows-amd64.exe'
+          & "$PWD\install.bat"
+          if ($LASTEXITCODE -eq 0) { throw 'Installer accepted an invalid checksum.' }
+          if ((Get-Content -Raw $installed) -ne 'previous-install') { throw 'Invalid checksum replaced the existing install.' }
+
+          $hash = (Get-FileHash -Path (Join-Path $releaseDir 'own-code-windows-amd64.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -Path (Join-Path $releaseDir 'SHA256SUMS') -Encoding ascii -Value "$hash  own-code-windows-amd64.exe"
+          & "$PWD\install.bat"
+          if ($LASTEXITCODE -ne 0) { throw "Installer failed for a valid checksum: $LASTEXITCODE" }
+          $installedHash = (Get-FileHash -Path $installed -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($installedHash -ne $hash) { throw 'Installed executable does not match the verified release asset.' }

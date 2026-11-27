@@ -125,7 +125,7 @@ func (m *lspManager) pollHover() {
 		h.since, h.evaluated = now, false
 		h.cur, h.curOK = m.hoverTargetAt(float64(x), float64(y))
 
-		if h.shown && !(h.curOK && h.cur.key == h.shownTgt.key) {
+		if h.shown && (!h.curOK || h.cur.key != h.shownTgt.key) {
 			m.hoverHide()
 		}
 
