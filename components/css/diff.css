@@ -198,3 +198,8 @@ cells, leaving the divider and number gutters available to this button. */
 .expand-btn.expand-all {
   font-weight: 600;
 }
+
+.agent-hunk-ctl { display: inline-flex; gap: 6px; align-items: center; margin-left: 8px; }
+.agent-hunk-btn { position: static; opacity: 1; }
+.agent-hunk-ctl.state-accepted .dhunk, .agent-hunk-ctl.state-rejected .dhunk { opacity: .7; }
+.agent-hunk-note { color: var(--danger, #f85149); font-size: 11px; }

@@ -117,6 +117,15 @@ type diffRow struct {
 	EditStartL int
 	Expand     *diffExpandRow
 	ScrollX    int
+	// Agent* mark a hunk header of an agent proposal in the "agent" diff
+	// source. AgentHunk is the hunk ID; the booleans gate the controls.
+	AgentHunk   string
+	AgentFile   string
+	AgentState  string
+	AgentNote   string
+	AgentAccept bool
+	AgentReject bool
+	AgentRevert bool
 }
 
 // clipDiffRows trims long diff text so a cell cannot paint into its neighbour.

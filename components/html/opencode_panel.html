@@ -71,7 +71,7 @@
       {{if .OpenCodePanel.AgentProposals}}
       <section class="opencode-proposals opencode-agent-proposals" aria-label="Agent proposals"><header><b>Agent proposals</b><span>Not applied until you accept</span></header>
         {{range .OpenCodePanel.AgentProposals}}
-        <article class="opencode-proposal-file" id="{{.ID}}"><h3><span>{{.Change}}</span>{{.Path}}</h3><pre>{{.Diff}}</pre>{{if .Note}}<span class="opencode-message-note">{{.Note}}</span>{{end}}<div class="opencode-prompt-tools"><button class="settings-btn" id="{{.ID}}-reject" data-action="opencode-proposal-reject:{{.ID}}" type="button">Reject</button><button class="settings-btn primary" id="{{.ID}}-accept" data-action="opencode-proposal-accept:{{.ID}}" type="button">Accept</button></div></article>
+        <article class="opencode-proposal-file" id="{{.ID}}"><h3><span>{{.Change}}</span>{{.Path}}</h3><pre>{{.Diff}}</pre>{{if .Note}}<span class="opencode-message-note">{{.Note}}</span>{{end}}<div class="opencode-prompt-tools"><button class="settings-btn" id="{{.ID}}-review" data-action="opencode-proposal-review:{{.ID}}" type="button">Review hunks</button><button class="settings-btn" id="{{.ID}}-reject" data-action="opencode-proposal-reject:{{.ID}}" type="button">Reject</button><button class="settings-btn primary" id="{{.ID}}-accept" data-action="opencode-proposal-accept:{{.ID}}" type="button">Accept</button></div></article>
         {{end}}
       </section>
       {{end}}
@@ -88,6 +88,22 @@
       <button class="settings-btn" id="opencode-approval-deny" data-action="opencode-session-deny:{{.OpenCodePanel.Approval.CallID}}" type="button">Deny</button>
       <button class="settings-btn primary" id="opencode-approval-approve" data-action="opencode-session-approve:{{.OpenCodePanel.Approval.CallID}}" type="button">Approve</button>
     </div>
+  </section>
+  {{end}}
+  {{with .OpenCodePanel.Inline}}
+  <section class="opencode-proposals opencode-inline-card" id="opencode-inline-card" aria-label="Inline edit">
+    <header><b>Inline edit</b><span>{{.Path}} &middot; {{.Range}}</span></header>
+    {{if .Draft}}<div class="opencode-chips" id="opencode-inline-chips" aria-label="Context sent">{{range $.OpenCodePanel.InlineChips}}<span class="opencode-chip" id="opencode-inline-chip-{{.ID}}"><b>{{.Label}}</b><i>{{.Detail}}{{if .Truncated}} (truncated){{end}}</i>{{if ne .ID "selection"}}<button class="opencode-chip-x" id="opencode-inline-chip-remove-{{.ID}}" data-action="opencode-panel-inline-ctx-remove:{{.ID}}" type="button" aria-label="Remove {{.Label}} from context">×</button>{{end}}</span>{{end}}</div>
+    <pre class="opencode-context-preview" id="opencode-inline-preview" aria-label="Exact context that will be sent">{{.Preview}}</pre>
+    <textarea class="opencode-prompt" id="opencode-inline-instruction" rows="2" maxlength="4000" aria-label="Inline edit instruction" placeholder="What should change?">{{.Instruction}}</textarea>
+    <div class="opencode-prompt-tools"><button class="settings-btn" id="opencode-inline-dismiss" data-action="opencode-panel-inline-dismiss" type="button">Cancel</button><button class="settings-btn primary" id="opencode-inline-send" data-action="opencode-panel-inline-send" type="button">Send</button></div>
+    {{else if .Running}}<pre id="opencode-inline-response">{{.Response}}</pre>
+    <div class="opencode-prompt-tools"><button class="settings-btn" id="opencode-inline-stop" data-action="opencode-panel-inline-stop" type="button">Stop</button></div>
+    {{else if .Ready}}<pre id="opencode-inline-diff">{{.Diff}}</pre><span class="opencode-message-note">{{.Note}}</span>
+    <div class="opencode-prompt-tools"><button class="settings-btn" id="opencode-inline-reject" data-action="opencode-panel-inline-reject" type="button">Reject</button><button class="settings-btn" id="opencode-inline-retry" data-action="opencode-panel-inline-retry" type="button">Retry</button><button class="settings-btn primary" id="opencode-inline-accept" data-action="opencode-panel-inline-accept" type="button">Accept</button></div>
+    {{else}}<span class="opencode-message-note" id="opencode-inline-note">{{.Note}}</span>
+    <div class="opencode-prompt-tools"><button class="settings-btn" id="opencode-inline-dismiss" data-action="opencode-panel-inline-dismiss" type="button">Dismiss</button><button class="settings-btn" id="opencode-inline-refresh" data-action="opencode-panel-inline-refresh" type="button">Refresh</button><button class="settings-btn primary" id="opencode-inline-rerun" data-action="opencode-panel-inline-rerun" type="button">Rerun</button></div>
+    {{end}}
   </section>
   {{end}}
   <footer class="opencode-prompt-area">

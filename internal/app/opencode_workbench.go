@@ -63,12 +63,18 @@ type openCodeRuntime struct {
 	agentProposals map[string][]*openCodeAgentProposal
 	// agentReview holds per-hunk accept/reject state per session and file.
 	agentReview *agentreview.Registry
+	// agentBaseline is what the user had before each session's latest turn
+	// (git status, hashes, dirty buffers); agentHunkNotes holds the last
+	// refusal per hunk so the diff view can show conflict/ambiguous errors.
+	agentBaseline  map[string]*agentreview.Baseline
+	agentHunkNotes map[string]string
 	// runs holds one run context per local session, keyed by session ID.
 	// Cancellation and event routing never cross sessions.
 	runs         map[string]*openCodeRun
 	retryText    string
 	recoveryNote string
 	testProvider agent.Provider
+	inline       *openCodeInline
 	// scroll is the transcript scroll model (follow only while at the end).
 	scroll openCodeTranscriptScroll
 	// allSessions are the stored rows from every workspace, used for session
@@ -87,6 +93,7 @@ type openCodePendingSwitch struct {
 
 type openCodeReply struct {
 	run               *openCodeRunEvent
+	inline            *openCodeInlineEvent
 	token             uint64
 	operation         openCodeOperation
 	consoleClient     *opencode.ConsoleClient
@@ -186,6 +193,12 @@ func (a *App) receiveOpenCode(ctx context.Context) bool {
 	for {
 		select {
 		case reply := <-a.openCode.results:
+			if reply.inline != nil {
+				if a.handleOpenCodeInlineEvent(reply.inline) {
+					changed = true
+				}
+				continue
+			}
 			if reply.run != nil {
 				if a.handleOpenCodeRunEvent(reply.run) {
 					changed = true

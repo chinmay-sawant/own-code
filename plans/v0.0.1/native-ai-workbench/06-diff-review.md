@@ -6,23 +6,25 @@
 
 **Hunk model slice (2026-11-28):** `internal/agentreview` adds the pure hunk model (diff, apply, revert, per-session/file state, baseline capture, path mapping, change classification) and `internal/app/opencode_hunks.go` wires accept/reject/revert to disk or the open editor buffer (via `replaceEditRanges`, so undo/dirty apply). Not yet done: panel/diff-view controls and session/file identity in the unified/split views, wiring `CaptureBaseline`/`Classify` into turn start and staging (rename/delete/binary), buffer-path tests, persistence. Checked rows below are model-level only.
 
+**UI and attribution slice (2026-11-28):** Proposals open in the existing unified and split diff views through a new `diffSource` "agent" (`opencode_diffview.go`, "Review hunks" on each proposal). Hunk headers carry session, file, and state, with Accept/Reject/Revert buttons (`agent-hunk:` actions into `reviewOpenCodeHunk`) and the last conflict/ambiguous refusal. `CaptureBaseline` runs at the start of `executeOpenCodeTurn` (off the UI thread, dirty buffers passed in) and is stored per session; proposals touching paths the user already had changed carry an attribution note. `Classify` runs in `recordAgentReview`: binary and oversized proposals show an explicit "hunk review unavailable" note; delete and rename have no agent tool and are reported as unsupported, never applied. Hunk state is still in-memory: proposals themselves are not persisted, so an agentstore v6 migration would store state for nothing and was not added. Not done: live OpenCode run against a real model, Git-side comparison of the baseline against later user edits, hunk controls styling polish, cancellation test.
+
 ## Phase 1: Isolate proposed edits
 
 - [x] Choose an isolation mechanism before connecting agent writes to the main workspace: a private worktree or another patch-backed staging area.
 - [x] Keep agent writes away from the user's checked-out files until the review contract is proven.
-- [ ] Capture the pre-agent worktree, index, and open dirty buffers so the review can distinguish user changes from agent changes.
+- [x] Capture the pre-agent worktree, index, and open dirty buffers so the review can distinguish user changes from agent changes. (`CaptureBaseline` at turn start in `executeOpenCodeTurn`; `TestAgentProposalClassificationAndBaselineAttribution`. Attribution is surfaced as a note only.)
 - [x] Map every agent-produced path to a file under the selected workspace. Reject traversal, symlink escape, and out-of-root changes. (`agentreview.MapPath`, `TestReviewMapPathRejectsEscapes`; used by `recordAgentReview`.)
-- [ ] Handle create, delete, rename, binary, and oversized files explicitly.
+- [ ] Handle create, delete, rename, binary, and oversized files explicitly. (Create/binary/oversized tested; delete/rename reported unsupported, no agent tool produces them.)
 
 **Gate:** A fake agent edit cannot alter the main workspace before review. Pre-existing staged, unstaged, and dirty-buffer changes remain attributable to the user.
 
 ## Phase 2: Reuse native diff views
 
-- [ ] Show agent proposals in the existing unified and split diff views with session and file identity.
-- [ ] Add per-hunk accept and reject controls that apply only agent-owned lines.
+- [x] Show agent proposals in the existing unified and split diff views with session and file identity. (`TestAgentDiffViewUnifiedAndSplitControlsAndErrors`.)
+- [x] Add per-hunk accept and reject controls that apply only agent-owned lines. (Same test; accept keeps user lines per `TestHunkReviewAcceptRejectRevertOnDiskKeepsUserLines`.)
 - [x] Add revert for an accepted agent hunk while preserving adjacent user changes. (Model-level; `TestReviewRevertKeepsAdjacentUserChange`, `TestHunkReviewAcceptRejectRevertOnDiskKeepsUserLines`. No UI control yet.)
 - [x] Track accepted, rejected, and pending hunks independently for each session and file. (In-memory `agentreview.Registry`; `TestReviewStateTransitions`, `TestReviewOverlappingSessionsOnOneFile`. Not persisted.)
 - [x] Keep Git stage/unstage actions separate from agent accept/reject actions. (Hunk actions never run git; the app test asserts the index stays empty.)
-- [ ] Apply accepted hunks into an open editor buffer through its normal undo and dirty-state model.
+- [x] Apply accepted hunks into an open editor buffer through its normal undo and dirty-state model. (`TestAgentHunkAppliesToOpenBufferThroughUndoAndDirty`.)
 
 **Gate:** Tests cover partial accept/reject/revert, overlapping edits, multiple sessions touching one file, staged changes, dirty buffers, undo, and cancellation. A live OpenCode edit appears in the native diff and remains unchanged when rejected.

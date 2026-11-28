@@ -265,6 +265,9 @@ type App struct {
 	changesDragAt    int
 	changesScale     float64
 	diffSource       string
+	agentChanges     changeSet // "agent" source: the session's proposals as diffs
+	agentPath        string
+	agentSession     string
 	selected         map[string]bool
 
 	// Merge editor state. The result text is the source of truth; parsed
@@ -1650,6 +1653,8 @@ func (a *App) diffViewPath() string {
 		return a.commitFile
 	case "branch":
 		return a.branchPath
+	case "agent":
+		return a.agentPath
 	default:
 		return a.diffPath
 	}
@@ -1661,12 +1666,15 @@ func (a *App) fillDiff(v *View) {
 	if a.diffSource == "branch" {
 		active = a.branchChanges
 	}
+	if a.diffSource == "agent" {
+		active = a.agentChanges
+	}
 
 	// Working-tree sections keep staged rows above unstaged rows. Branch and
 	// commit diffs keep the single combined list.
 	stagedAll := active.Staged
 	unstagedAll := active.Unstaged
-	sectioned := a.diffSource != "branch" && a.diffSource != "commit"
+	sectioned := a.diffSource != "branch" && a.diffSource != "commit" && a.diffSource != "agent"
 	if sectioned && len(stagedAll) == 0 && len(unstagedAll) == 0 {
 		unstagedAll = active.Files
 	}
@@ -1698,6 +1706,9 @@ func (a *App) fillDiff(v *View) {
 	}
 	if a.diffSource == "branch" {
 		selected = a.branchPath
+	}
+	if a.diffSource == "agent" {
+		selected = a.agentPath
 	}
 	if a.diffSource == "commit" {
 		selected = a.commitFile
@@ -1862,6 +1873,9 @@ func (a *App) fillDiff(v *View) {
 }
 
 func (a *App) sidebarChangeFiles() []changedFile {
+	if a.diffSource == "agent" {
+		return a.agentChanges.Files
+	}
 	if a.diffSource == "branch" {
 		return a.branchChanges.Files
 	}
@@ -3616,6 +3630,10 @@ func (a *App) rebuildDiffRows() {
 	file := findFile(a.changes.Files, a.diffPath)
 	if a.diffSource == "branch" {
 		file = findFile(a.branchChanges.Files, a.branchPath)
+	}
+	if a.diffSource == "agent" {
+		a.rebuildAgentDiffRows()
+		return
 	}
 	if file == nil {
 		return

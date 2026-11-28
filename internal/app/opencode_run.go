@@ -12,6 +12,7 @@ import (
 
 	"github.com/chinmay-sawant/own-code/internal/agent"
 	"github.com/chinmay-sawant/own-code/internal/agentbridge"
+	"github.com/chinmay-sawant/own-code/internal/agentreview"
 	"github.com/chinmay-sawant/own-code/internal/agentstore"
 	"github.com/chinmay-sawant/own-code/internal/agenttools"
 	"github.com/chinmay-sawant/own-code/internal/opencode"
@@ -33,6 +34,7 @@ const (
 	openCodeRunProposal
 	openCodeRunToolStart
 	openCodeRunToolDone
+	openCodeRunBaseline
 )
 
 // openCodeRunEvent is routed by session and turn ID. The UI thread drops any
@@ -46,6 +48,7 @@ type openCodeRunEvent struct {
 	retryText         string
 	status            string
 	proposal          *agenttools.Proposal
+	baseline          *agentreview.Baseline
 	toolID, toolName  string // tool events; text carries the status on done
 }
 
@@ -221,6 +224,8 @@ type openCodeTurnParams struct {
 	backend agent.ProviderDescriptor
 	// configDir holds the private per-session proposal directories.
 	configDir string
+	// dirty lists unsaved editor buffers (workspace-relative) at turn start.
+	dirty []string
 }
 
 func (a *App) submitOpenCodePrompt(prompt string) error {
@@ -283,6 +288,7 @@ func (a *App) submitOpenCodePrompt(prompt string) error {
 		results: a.openCode.results, lifeCtx: a.openCode.lifeCtx,
 		sessionID: sessionID, turnID: turnID, directory: directory, prompt: prompt,
 		client: a.openCode.testProvider, configDir: filepath.Dir(a.settingsPath),
+		dirty: a.dirtyRelPaths(directory),
 	}
 	go executeOpenCodeTurn(runCtx, params)
 	return nil
@@ -305,6 +311,12 @@ func executeOpenCodeTurn(ctx context.Context, p openCodeTurnParams) {
 		defer cancel()
 		rows, retry, _ := loadOpenCodeTranscript(wctx, p.store, p.sessionID)
 		send(p.lifeCtx, openCodeRunEvent{kind: openCodeRunDone, messages: rows, retryText: retry, status: status})
+	}
+
+	// Record what the user had before the agent runs so review can tell user
+	// changes from agent changes. Read-only; failure only loses attribution.
+	if base, berr := agentreview.CaptureBaseline(ctx, p.directory, p.dirty); berr == nil {
+		send(ctx, openCodeRunEvent{kind: openCodeRunBaseline, baseline: base})
 	}
 
 	// Request-time checks. Nothing is persisted if any of them fails.
@@ -501,6 +513,13 @@ func (a *App) handleOpenCodeRunEvent(ev *openCodeRunEvent) bool {
 		}
 	case openCodeRunToolDone:
 		run.toolDone(ev.toolID, ev.toolName, ev.text)
+	case openCodeRunBaseline:
+		if ev.baseline != nil {
+			if a.openCode.agentBaseline == nil {
+				a.openCode.agentBaseline = map[string]*agentreview.Baseline{}
+			}
+			a.openCode.agentBaseline[ev.sessionID] = ev.baseline
+		}
 	case openCodeRunProposal:
 		if ev.proposal == nil {
 			return false

@@ -61,9 +61,9 @@ func (a *App) addAgentProposal(sessionID string, p agenttools.Proposal) {
 	if a.openCode.agentProposals == nil {
 		a.openCode.agentProposals = map[string][]*openCodeAgentProposal{}
 	}
-	a.recordAgentReview(sessionID, p)
+	note := a.recordAgentReview(sessionID, p)
 	list := a.openCode.agentProposals[sessionID]
-	entry := &openCodeAgentProposal{ID: openCodeAgentProposalID(p), Proposal: p}
+	entry := &openCodeAgentProposal{ID: openCodeAgentProposalID(p), Proposal: p, Note: note}
 	for i, e := range list {
 		if e.Proposal.Path == p.Path {
 			list[i] = entry

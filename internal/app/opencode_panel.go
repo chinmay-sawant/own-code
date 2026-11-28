@@ -32,6 +32,8 @@ type openCodePanelView struct {
 	CanReview       bool
 	Proposals       []openCodePanelProposalRow
 	AgentProposals  []openCodePanelAgentProposalRow
+	Inline          *openCodeInlineCard
+	InlineChips     []openCodeChipRow
 	Running         bool
 	CanRetry        bool
 	Approval        *openCodePanelApproval
@@ -185,6 +187,7 @@ func (a *App) openCodePanelView() openCodePanelView {
 		})
 	}
 	v.AgentProposals = a.agentProposalRows(v.SelectedID)
+	v.Inline, v.InlineChips = a.openCodeInlineView()
 	a.fillOpenCodeChrome(&v)
 	a.openCodeComposerView(&v)
 	return v
@@ -302,6 +305,8 @@ func (a *App) opencodePanelAction(ctx context.Context, action string) error {
 		a.openCode.panelOpen = false
 		a.refresh()
 		return nil
+	case strings.HasPrefix(action, "opencode-panel-inline-"):
+		return a.openCodeInlineAction(ctx, action)
 	case strings.HasPrefix(action, "opencode-panel-mention:"):
 		if i, err := strconv.Atoi(strings.TrimPrefix(action, "opencode-panel-mention:")); err == nil {
 			return a.pickOpenCodeMention(i)
@@ -351,6 +356,15 @@ func (a *App) opencodePanelAction(ctx context.Context, action string) error {
 		return a.resolveOpenCodeApproval(strings.TrimPrefix(action, "opencode-session-approve:"), true)
 	case strings.HasPrefix(action, "opencode-proposal-accept:"):
 		return a.acceptOpenCodeProposal(strings.TrimPrefix(action, "opencode-proposal-accept:"))
+	case strings.HasPrefix(action, "opencode-proposal-review:"):
+		_, _, e := a.findAgentProposal(strings.TrimPrefix(action, "opencode-proposal-review:"))
+		if e == nil {
+			a.openCode.panelStatus = "That proposal is no longer pending."
+			a.refresh()
+			return nil
+		}
+		a.openAgentDiff(e.Proposal.Path)
+		return nil
 	case strings.HasPrefix(action, "opencode-proposal-reject:"):
 		return a.rejectOpenCodeProposal(strings.TrimPrefix(action, "opencode-proposal-reject:"))
 	case strings.HasPrefix(action, "opencode-session-deny:"):

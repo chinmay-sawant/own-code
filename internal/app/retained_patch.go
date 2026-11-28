@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"html"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -212,6 +213,8 @@ func canPatchOpenCodePanel(prev, next openCodePanelView) bool {
 		prev.SelectedID != next.SelectedID ||
 		!sameOpenCodeComposer(prev, next) ||
 		prev.CanReview != next.CanReview ||
+		!sameOpenCodeInline(prev.Inline, next.Inline) ||
+		!slices.Equal(prev.InlineChips, next.InlineChips) ||
 		prev.Running != next.Running ||
 		prev.CanRetry != next.CanRetry ||
 		prev.Notice != next.Notice ||

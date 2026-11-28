@@ -31,6 +31,7 @@ func openCodeActionRows() []paletteRow {
 		{Cmd: paletteCmdOCExplainProblem, Name: "OpenCode: Explain Problem", Dir: "Attach only the Problem at the caret (or the first in this file)"},
 		{Cmd: paletteCmdOCFixProblem, Name: "OpenCode: Fix Problem", Dir: "Attach only that Problem; edits still arrive as reviewable proposals"},
 		{Cmd: paletteCmdOCReviewChanges, Name: "OpenCode: Review Pending Changes", Dir: "Attach only the working-tree diff (tracked and untracked)"},
+		{Cmd: paletteCmdOCInlineEdit, Name: "OpenCode: Edit Selection Inline…", Dir: "Ask the selected model to change the selection or caret; review before applying"},
 		{Cmd: paletteCmdOCInterrupt, Name: "OpenCode: Interrupt Run", Dir: "Stop the running turn of the selected session"},
 	}
 }
@@ -167,6 +168,8 @@ func (a *App) runOpenCodeAction(ctx context.Context, cmd string) error {
 		a.openCode.panelStatus = "Choose a saved session."
 		a.refresh()
 		return nil
+	case paletteCmdOCInlineEdit:
+		return a.beginOpenCodeInline(ctx)
 	case paletteCmdOCInterrupt:
 		if a.openCodeRunFor(a.openCode.selectedSessionID) == nil {
 			a.openCode.panelStatus = "No turn is running in this session."

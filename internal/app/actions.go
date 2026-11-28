@@ -786,6 +786,10 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		}
 	case strings.HasPrefix(action, "discard-file:"):
 		a.openDiscardConfirm("discard-file", []string{strings.TrimPrefix(action, "discard-file:")})
+	case strings.HasPrefix(action, "agent-hunk:"):
+		if err := a.agentHunkAction(strings.TrimPrefix(action, "agent-hunk:")); err != nil {
+			return err
+		}
 	case strings.HasPrefix(action, "revert-hunk:"):
 		if idx, ok := actionIndex(action, "revert-hunk:"); ok {
 			if err := a.revertClickedBlock(ctx, idx, box.ID); err != nil {

@@ -20,35 +20,91 @@ func (a *App) agentReviewRegistry() *agentreview.Registry {
 }
 
 // recordAgentReview builds the per-hunk model for a proposal against the
-// baseline file it was made on. If the file already changed, no hunk review
-// is offered and whole-proposal accept (which re-checks the hash) still rules.
-func (a *App) recordAgentReview(sid string, p agenttools.Proposal) {
+// baseline file it was made on and returns a user-facing note: why hunk review
+// is unavailable (binary, oversized, delete, rename, changed baseline), or an
+// attribution warning when the user already had changes at that path before
+// the turn. Whole-proposal accept (which re-checks the hash) still rules.
+func (a *App) recordAgentReview(sid string, p agenttools.Proposal) string {
 	if a.ws == nil || a.ws.Sample {
-		return
+		return ""
 	}
 	root, err := canonicalWorkspaceRoot(a.ws.Root)
 	if err != nil {
-		return
+		return ""
 	}
 	abs, rel, err := agentreview.MapPath(root, p.Path)
 	if err != nil {
-		return
+		return "Hunk review unavailable: path is outside the workspace."
 	}
-	base := ""
+	var data []byte
 	if p.BaselineExists {
-		data, err := os.ReadFile(abs)
+		data, err = os.ReadFile(abs)
 		sum := sha256.Sum256(data)
 		if err != nil || hex.EncodeToString(sum[:]) != p.BaselineHash {
-			return
+			return "Hunk review unavailable: the file changed since the proposal was made."
 		}
-		if agentreview.Classify(true, true, data, []byte(p.NewContent), "") != agentreview.Modify {
-			return
-		}
-		base = string(data)
-	} else if agentreview.Classify(false, true, nil, []byte(p.NewContent), "") != agentreview.Create {
-		return
 	}
-	a.agentReviewRegistry().Put(sid, rel, base, p.NewContent)
+	kind := agentreview.Classify(p.BaselineExists, true, data, []byte(p.NewContent), "")
+	want := agentreview.Create
+	if p.BaselineExists {
+		want = agentreview.Modify
+	}
+	if kind != want {
+		a.agentReviewRegistry().Forget(sid, rel)
+		return unsupportedChangeNote(kind)
+	}
+	a.agentReviewRegistry().Put(sid, rel, string(data), p.NewContent)
+	return a.userOwnedNote(sid, rel)
+}
+
+// unsupportedChangeNote explains why a change kind has no hunk review. Delete
+// and rename have no agent tool today, so they could only appear through a
+// future one; they are shown as unsupported rather than applied.
+func unsupportedChangeNote(k agentreview.Kind) string {
+	switch k {
+	case agentreview.Binary:
+		return "Hunk review unavailable: binary or non-UTF-8 content. Accept or reject the whole proposal."
+	case agentreview.Oversized:
+		return "Hunk review unavailable: the file is over the review size limit. Accept or reject the whole proposal."
+	case agentreview.Delete:
+		return "Unsupported: deleting files is not applied by hunk review."
+	case agentreview.Rename:
+		return "Unsupported: renames are not applied by hunk review."
+	}
+	return "Hunk review unavailable for this change."
+}
+
+// userOwnedNote tells the user when they already had changes at rel before the
+// session's latest turn, so agent and user lines stay distinguishable.
+func (a *App) userOwnedNote(sid, rel string) string {
+	b := a.openCode.agentBaseline[sid]
+	if b == nil || !b.UserOwned(rel) {
+		return ""
+	}
+	if b.StagedByUser(rel) {
+		return "You had staged changes here before this turn. Hunk actions apply only agent lines and never touch the index."
+	}
+	return "You had unsaved or uncommitted changes here before this turn. Hunk actions apply only agent lines."
+}
+
+// dirtyRelPaths lists open dirty editor buffers as workspace-relative slash paths.
+func (a *App) dirtyRelPaths(root string) []string {
+	var out []string
+	for key, d := range a.dirty {
+		if !d {
+			continue
+		}
+		k := filepath.Clean(filepath.FromSlash(key))
+		if filepath.IsAbs(k) {
+			r, err := filepath.Rel(root, k)
+			if err != nil || strings.HasPrefix(r, "..") {
+				continue
+			}
+			k = r
+		}
+		out = append(out, filepath.ToSlash(k))
+	}
+	return out
 }
 
 func (a *App) forgetAgentReview(sid, rel string) {
@@ -138,6 +194,10 @@ func (a *App) reviewOpenCodeHunk(op agentHunkOp, path, hunkID string) error {
 	sid := a.openCode.selectedSessionID
 	status := func(msg string) error {
 		a.openCode.panelStatus = msg
+		a.setAgentHunkNote(sid, path, hunkID, msg)
+		if a.diffSource == "agent" {
+			a.rebuildDiffRows()
+		}
 		a.refresh()
 		return nil
 	}
