@@ -29,6 +29,7 @@ const (
 )
 
 var ErrNotFound = errors.New("agent store: record not found")
+var ErrProfileOwned = errors.New("agent store: profile is already open in another process")
 
 type SessionStatus string
 
@@ -52,6 +53,8 @@ type Session struct {
 	Title             string
 	Agent             string
 	Model             string
+	ProviderID        string
+	ModelID           string
 	Status            SessionStatus
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
@@ -87,8 +90,9 @@ type Checkpoint struct {
 }
 
 type Store struct {
-	db   *sql.DB
-	path string
+	db          *sql.DB
+	path        string
+	profileLock *profileLock
 }
 
 // OpenUserConfig stores the workbench database below a private child directory
@@ -97,7 +101,24 @@ func OpenUserConfig(ctx context.Context, configDir string) (*Store, error) {
 	if strings.TrimSpace(configDir) == "" {
 		return nil, errors.New("agent store: config directory is required")
 	}
-	return Open(ctx, filepath.Join(configDir, "agent-workbench", "sessions.sqlite"))
+	dir := filepath.Join(configDir, "agent-workbench")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, fmt.Errorf("agent store: create profile directory: %w", err)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return nil, fmt.Errorf("agent store: restrict profile directory: %w", err)
+	}
+	lock, err := acquireProfileLock(filepath.Join(dir, "runtime.lock"))
+	if err != nil {
+		return nil, err
+	}
+	store, err := Open(ctx, filepath.Join(dir, "sessions.sqlite"))
+	if err != nil {
+		_ = lock.Close()
+		return nil, err
+	}
+	store.profileLock = lock
+	return store, nil
 }
 
 // Open opens or creates a database at path. The parent directory is restricted
@@ -147,7 +168,22 @@ func Open(ctx context.Context, path string) (*Store, error) {
 
 func (s *Store) Path() string { return s.path }
 
-func (s *Store) Close() error { return s.db.Close() }
+func (s *Store) Close() error {
+	if s == nil {
+		return nil
+	}
+	var closeErr error
+	if s.db != nil {
+		closeErr = s.db.Close()
+	}
+	if s.profileLock != nil {
+		if err := s.profileLock.Close(); closeErr == nil {
+			closeErr = err
+		}
+		s.profileLock = nil
+	}
+	return closeErr
+}
 
 // CreateSession inserts a local session and its workspace in one transaction.
 // Repeating a create for the same server/session pair returns the existing row.
@@ -169,6 +205,8 @@ func (s *Store) CreateSession(ctx context.Context, session Session) (Session, er
 	session.Title = bounded(session.Title, maxTitleBytes)
 	session.Agent = bounded(session.Agent, maxAgentBytes)
 	session.Model = bounded(session.Model, maxModelBytes)
+	session.ProviderID = bounded(session.ProviderID, maxModelBytes)
+	session.ModelID = bounded(session.ModelID, maxModelBytes)
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -203,12 +241,12 @@ func (s *Store) CreateSession(ctx context.Context, session Session) (Session, er
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO agent_sessions (
 			id, workspace_root, worktree_root, baseline_commit, server_id, opencode_session_id, title, agent, model,
-			status, created_at, updated_at, last_event_sequence
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			status, created_at, updated_at, last_event_sequence, provider_id, model_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(server_id, opencode_session_id) DO NOTHING`,
 		session.ID, session.WorkspaceRoot, session.WorktreeRoot, session.BaselineCommit, session.ServerID, session.OpenCodeSessionID,
 		session.Title, session.Agent, session.Model, string(session.Status),
-		created.UnixMilli(), updated.UnixMilli(), sequence); err != nil {
+		created.UnixMilli(), updated.UnixMilli(), sequence, session.ProviderID, session.ModelID); err != nil {
 		return Session{}, fmt.Errorf("agent store: create session: %w", err)
 	}
 
@@ -243,12 +281,16 @@ func (s *Store) UpdateSessionMetadata(ctx context.Context, session Session) (Ses
 		SET title = CASE WHEN ? = '' THEN title ELSE ? END,
 			agent = CASE WHEN ? = '' THEN agent ELSE ? END,
 			model = CASE WHEN ? = '' THEN model ELSE ? END,
+			provider_id = CASE WHEN ? = '' THEN provider_id ELSE ? END,
+			model_id = CASE WHEN ? = '' THEN model_id ELSE ? END,
 			status = CASE WHEN ? = '' THEN status ELSE ? END,
 			updated_at = CASE WHEN updated_at < ? THEN ? ELSE updated_at END
 		WHERE id = ? AND workspace_root = ? AND server_id = ? AND opencode_session_id = ?`,
 		bounded(session.Title, maxTitleBytes), bounded(session.Title, maxTitleBytes),
 		bounded(session.Agent, maxAgentBytes), bounded(session.Agent, maxAgentBytes),
 		bounded(session.Model, maxModelBytes), bounded(session.Model, maxModelBytes),
+		bounded(session.ProviderID, maxModelBytes), bounded(session.ProviderID, maxModelBytes),
+		bounded(session.ModelID, maxModelBytes), bounded(session.ModelID, maxModelBytes),
 		string(session.Status), string(session.Status), updated.UnixMilli(), updated.UnixMilli(),
 		session.ID, session.WorkspaceRoot, session.ServerID, session.OpenCodeSessionID)
 	if err != nil {
@@ -458,7 +500,7 @@ func (s *Store) GetCheckpoint(ctx context.Context, sessionID string) (Checkpoint
 
 const sessionSelect = `
 	SELECT id, workspace_root, worktree_root, baseline_commit, server_id, opencode_session_id, title, agent, model,
-		status, created_at, updated_at, last_event_sequence
+		status, created_at, updated_at, last_event_sequence, provider_id, model_id
 	FROM agent_sessions`
 
 type rowScanner interface {
@@ -472,7 +514,7 @@ func scanSession(row rowScanner) (Session, error) {
 	err := row.Scan(
 		&session.ID, &session.WorkspaceRoot, &session.WorktreeRoot, &session.BaselineCommit, &session.ServerID, &session.OpenCodeSessionID,
 		&session.Title, &session.Agent, &session.Model, &session.Status,
-		&created, &updated, &sequence)
+		&created, &updated, &sequence, &session.ProviderID, &session.ModelID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Session{}, ErrNotFound

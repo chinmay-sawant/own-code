@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 3
+const schemaVersion = 4
 
 func migrate(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, `PRAGMA max_page_count = 65536`); err != nil {
@@ -55,6 +55,14 @@ func migrate(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 		if err := recordMigration(ctx, tx, 3); err != nil {
+			return err
+		}
+	}
+	if current < 4 {
+		if err := applySchemaV4(ctx, tx); err != nil {
+			return err
+		}
+		if err := recordMigration(ctx, tx, 4); err != nil {
 			return err
 		}
 	}
@@ -141,6 +149,73 @@ func applySchemaV2(ctx context.Context, tx *sql.Tx) error {
 func applySchemaV3(ctx context.Context, tx *sql.Tx) error {
 	if _, err := tx.ExecContext(ctx, `ALTER TABLE agent_sessions ADD COLUMN baseline_commit TEXT NOT NULL DEFAULT '' CHECK(length(baseline_commit) <= 128)`); err != nil {
 		return fmt.Errorf("agent store: apply schema v3: %w", err)
+	}
+	return nil
+}
+
+// applySchemaV4 adds the Console runtime's durable turn model. Legacy columns
+// (server_id, opencode_session_id, last_event_sequence) and tables stay in
+// place so old server-backed transcripts remain readable; new code must not
+// treat them as Console session state.
+func applySchemaV4(ctx context.Context, tx *sql.Tx) error {
+	statements := []string{
+		`ALTER TABLE agent_sessions ADD COLUMN provider_id TEXT NOT NULL DEFAULT '' CHECK(length(provider_id) <= 256)`,
+		`ALTER TABLE agent_sessions ADD COLUMN model_id TEXT NOT NULL DEFAULT '' CHECK(length(model_id) <= 256)`,
+		`UPDATE agent_sessions SET model_id = model WHERE model_id = ''`,
+		`ALTER TABLE agent_messages ADD COLUMN turn_id TEXT NOT NULL DEFAULT '' CHECK(length(turn_id) <= 256)`,
+		`CREATE TABLE agent_turns (
+			session_id TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
+			id TEXT NOT NULL CHECK(length(id) > 0 AND length(id) <= 256),
+			ordinal INTEGER NOT NULL CHECK(ordinal >= 0),
+			user_message_id TEXT NOT NULL DEFAULT '' CHECK(length(user_message_id) <= 256),
+			provider_id TEXT NOT NULL DEFAULT '' CHECK(length(provider_id) <= 256),
+			model_id TEXT NOT NULL DEFAULT '' CHECK(length(model_id) <= 256),
+			status TEXT NOT NULL CHECK(status IN ('running', 'completed', 'failed', 'interrupted')),
+			error TEXT NOT NULL DEFAULT '' CHECK(length(error) <= 4096),
+			started_at INTEGER NOT NULL,
+			ended_at INTEGER,
+			PRIMARY KEY(session_id, id),
+			UNIQUE(session_id, ordinal)
+		)`,
+		`CREATE TABLE message_parts (
+			session_id TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
+			message_id TEXT NOT NULL REFERENCES agent_messages(id) ON DELETE CASCADE,
+			id TEXT NOT NULL CHECK(length(id) > 0 AND length(id) <= 256),
+			ordinal INTEGER NOT NULL CHECK(ordinal >= 0),
+			kind TEXT NOT NULL CHECK(kind IN ('text', 'tool_call')),
+			text TEXT NOT NULL DEFAULT '' CHECK(length(text) <= 262144),
+			tool_call_id TEXT NOT NULL DEFAULT '' CHECK(length(tool_call_id) <= 256),
+			status TEXT NOT NULL CHECK(status IN ('streaming', 'complete', 'interrupted')),
+			updated_at INTEGER NOT NULL,
+			PRIMARY KEY(session_id, message_id, id)
+		)`,
+		`CREATE INDEX message_parts_order ON message_parts(session_id, message_id, ordinal)`,
+		`CREATE TABLE agent_tool_calls (
+			session_id TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
+			id TEXT NOT NULL CHECK(length(id) > 0 AND length(id) <= 256),
+			message_id TEXT NOT NULL CHECK(length(message_id) <= 256),
+			turn_id TEXT NOT NULL DEFAULT '' CHECK(length(turn_id) <= 256),
+			ordinal INTEGER NOT NULL CHECK(ordinal >= 0),
+			tool_name TEXT NOT NULL CHECK(length(tool_name) > 0 AND length(tool_name) <= 128),
+			input TEXT NOT NULL CHECK(length(input) <= 65536),
+			status TEXT NOT NULL CHECK(status IN ('requested', 'approved', 'denied', 'running', 'succeeded', 'failed', 'interrupted', 'unknown')),
+			approval TEXT NOT NULL DEFAULT '' CHECK(length(approval) <= 64),
+			approval_at INTEGER,
+			dispatch_started_at INTEGER,
+			result TEXT NOT NULL DEFAULT '' CHECK(length(result) <= 65536),
+			result_truncated INTEGER NOT NULL DEFAULT 0,
+			is_error INTEGER NOT NULL DEFAULT 0,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL,
+			PRIMARY KEY(session_id, id)
+		)`,
+		`CREATE INDEX agent_tool_calls_status ON agent_tool_calls(status)`,
+		`CREATE INDEX agent_turns_status ON agent_turns(status)`,
+	}
+	for _, statement := range statements {
+		if _, err := tx.ExecContext(ctx, statement); err != nil {
+			return fmt.Errorf("agent store: apply schema v4: %w", err)
+		}
 	}
 	return nil
 }

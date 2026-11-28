@@ -59,8 +59,7 @@ func (a *App) findOpenCodeModel(selection string) (providerID, modelID string, o
 		return "", "", false
 	}
 	for _, model := range a.openCode.consoleModels {
-		isChatModel := model.Type == "" || strings.EqualFold(model.Type, "chat")
-		if isChatModel && model.ProviderID == providerID && model.ID == modelID {
+		if model.SupportsAgentRuntime() && model.ProviderID == providerID && model.ID == modelID {
 			return providerID, modelID, true
 		}
 	}

@@ -45,6 +45,23 @@ type ConsoleModelAPI struct {
 	BaseURL string
 }
 
+// SupportsAgentRuntime reports whether the catalog explicitly advertises a
+// supported tool-capable chat protocol for this model.
+func (m ConsoleModel) SupportsAgentRuntime() bool {
+	if !strings.EqualFold(strings.TrimSpace(m.Type), "chat") || !m.ToolsKnown || !m.ToolsSupported {
+		return false
+	}
+	for protocol, api := range m.APIs {
+		if protocol != "chat-completions" && protocol != "responses" {
+			continue
+		}
+		if strings.TrimSpace(api.BaseURL) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // ConsoleHTTPError reports only the response status, never the request headers.
 type ConsoleHTTPError struct {
 	StatusCode int

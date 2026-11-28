@@ -170,8 +170,8 @@ func TestOpenMigratesV1DatabaseAndPreservesOptionalWorktreeRoot(t *testing.T) {
 	if err := store.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil {
 		t.Fatalf("read migrated version: %v", err)
 	}
-	if version != 2 {
-		t.Fatalf("migrated schema version = %d, want 2", version)
+	if version != schemaVersion {
+		t.Fatalf("migrated schema version = %d, want %d", version, schemaVersion)
 	}
 	legacySessions, err := store.ListSessions(ctx, "/legacy/workspace")
 	if err != nil {

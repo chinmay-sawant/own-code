@@ -77,7 +77,7 @@ type openCodeModelRow struct {
 func openCodeModelRows(models []opencode.ConsoleModel) []openCodeModelRow {
 	rows := make([]openCodeModelRow, 0, len(models))
 	for _, model := range models {
-		if model.Type != "" && !strings.EqualFold(model.Type, "chat") {
+		if !model.SupportsAgentRuntime() {
 			continue
 		}
 		providerID := strings.TrimSpace(model.ProviderID)
@@ -100,14 +100,7 @@ func openCodeModelRows(models []opencode.ConsoleModel) []openCodeModelRow {
 		if model.OutputLimit > 0 {
 			details += " · " + strconv.Itoa(model.OutputLimit) + " output"
 		}
-		switch {
-		case model.ToolsKnown && model.ToolsSupported:
-			details += " · tools"
-		case model.ToolsKnown:
-			details += " · no tools"
-		default:
-			details += " · tool support unknown"
-		}
+		details += " · tools"
 		rows = append(rows, openCodeModelRow{
 			Value:   providerID + "/" + modelID,
 			Label:   providerName + " · " + modelName,
