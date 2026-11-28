@@ -716,7 +716,7 @@ func NewWithLimit(root string, limit int) (*App, error) {
 	page, err := ownframe.New(ownframe.Config{
 		DevTools:         true,
 		Title:            "Code Review",
-		HTML:             buildHTML(),
+		Render:           renderAppPage,
 		RetainState:      true,
 		Width:            defaultWidth,
 		Height:           defaultHeight,
