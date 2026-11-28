@@ -50,6 +50,8 @@ type openCodeRuntime struct {
 	includeSelection  bool
 	reviewable        bool
 	proposals         []openCodeProposalFile
+	// agentProposals holds pending write_file/edit_file proposals per session.
+	agentProposals map[string][]*openCodeAgentProposal
 	// runs holds one run context per local session, keyed by session ID.
 	// Cancellation and event routing never cross sessions.
 	runs         map[string]*openCodeRun

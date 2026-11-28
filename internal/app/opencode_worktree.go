@@ -172,7 +172,7 @@ func (m *openCodeWorktreeManager) Create(ctx context.Context, workspaceRoot stri
 	worktree := &openCodeWorktree{
 		manager:       m,
 		path:          canonicalPath,
-		workspaceRoot: workspace,
+		workspaceRoot: canonicalPath, // the isolated checkout, never the user's directory
 		gitRoot:       gitRoot,
 		workspaceRel:  workspaceRel,
 		baseCommit:    commit,
@@ -293,11 +293,17 @@ func (m *openCodeWorktreeManager) Remove(ctx context.Context, worktree *openCode
 }
 
 func (m *openCodeWorktreeManager) registeredWorktree(ctx context.Context, gitRoot, target string) (bool, error) {
+	sep := []byte{0}
 	data, err := m.gitOutput(ctx, gitRoot, "worktree", "list", "--porcelain", "-z")
+	if err != nil {
+		// Git before 2.36 has no -z for worktree list; fall back to lines.
+		sep = []byte{'\n'}
+		data, err = m.gitOutput(ctx, gitRoot, "worktree", "list", "--porcelain")
+	}
 	if err != nil {
 		return false, errors.New("could not verify OpenCode worktree ownership")
 	}
-	for _, record := range bytes.Split(data, []byte{0}) {
+	for _, record := range bytes.Split(data, sep) {
 		if !bytes.HasPrefix(record, []byte("worktree ")) {
 			continue
 		}

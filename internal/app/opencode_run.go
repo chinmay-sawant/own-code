@@ -20,7 +20,7 @@ import (
 const (
 	openCodeApprovalTimeout = 5 * time.Minute
 	openCodeApprovalNotice  = "This command runs with your user's filesystem and network access. The worktree directory is not a sandbox."
-	openCodeSystemPrompt    = "You are a coding assistant working in an isolated Git worktree of the user's project. Use the provided tools to read and search files. Shell commands require the user's approval and may be denied."
+	openCodeSystemPrompt    = "You are a coding assistant working in an isolated Git worktree of the user's project. Use the provided tools to read and search files. write_file and edit_file only propose changes for the user to review. Shell commands require the user's approval and may be denied."
 	openCodeToolTextLimit   = 2000
 )
 
@@ -30,6 +30,7 @@ const (
 	openCodeRunDelta openCodeRunEventKind = iota + 1
 	openCodeRunApproval
 	openCodeRunDone
+	openCodeRunProposal
 )
 
 // openCodeRunEvent is routed by session and turn ID. The UI thread drops any
@@ -42,6 +43,7 @@ type openCodeRunEvent struct {
 	messages          []openCodeTranscriptMessage
 	retryText         string
 	status            string
+	proposal          *agenttools.Proposal
 }
 
 // openCodeRun is the per-session, per-turn run context owned by the UI thread.
@@ -160,6 +162,8 @@ type openCodeTurnParams struct {
 	prompt    string
 	// client, when set, replaces the Console client built from the saved key.
 	client agent.Provider
+	// configDir holds the private per-session proposal directories.
+	configDir string
 }
 
 func (a *App) submitOpenCodePrompt(prompt string) error {
@@ -213,7 +217,7 @@ func (a *App) submitOpenCodePrompt(prompt string) error {
 		models:  append([]opencode.ConsoleModel(nil), a.openCode.consoleModels...),
 		results: a.openCode.results, lifeCtx: a.openCode.lifeCtx,
 		sessionID: sessionID, turnID: turnID, directory: directory, prompt: prompt,
-		client: a.openCode.testProvider,
+		client: a.openCode.testProvider, configDir: filepath.Dir(a.settingsPath),
 	}
 	go executeOpenCodeTurn(runCtx, params)
 	return nil
@@ -267,7 +271,19 @@ func executeOpenCodeTurn(ctx context.Context, p openCodeTurnParams) {
 		finish("The isolated worktree could not be resolved.")
 		return
 	}
-	registry, err := agentbridge.NewRegistry(root)
+	proposalDir, err := openCodeProposalDir(p.configDir, p.sessionID)
+	if err != nil {
+		finish("The private proposal directory could not be prepared.")
+		return
+	}
+	registry, err := agentbridge.NewRegistryWith(root,
+		agenttools.WithProposalRoot(proposalDir),
+		agenttools.WithProposalSink(func(sctx context.Context, prop agenttools.Proposal) error {
+			if !send(sctx, openCodeRunEvent{kind: openCodeRunProposal, proposal: &prop}) {
+				return errors.New("proposal could not be delivered")
+			}
+			return nil
+		}))
 	if err != nil {
 		finish("Agent tools could not be prepared for the worktree.")
 		return
@@ -402,6 +418,14 @@ func (a *App) handleOpenCodeRunEvent(ev *openCodeRunEvent) bool {
 		run.text += ev.text
 		if selected {
 			a.openCode.panelStatus = "Streaming response…"
+		}
+	case openCodeRunProposal:
+		if ev.proposal == nil {
+			return false
+		}
+		a.addAgentProposal(ev.sessionID, *ev.proposal)
+		if selected {
+			a.openCode.panelStatus = "Proposal ready for review: " + ev.proposal.Path
 		}
 	case openCodeRunApproval:
 		run.approval = ev.approval

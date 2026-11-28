@@ -35,6 +35,13 @@
         {{end}}
       </section>
       {{end}}
+      {{if .OpenCodePanel.AgentProposals}}
+      <section class="opencode-proposals opencode-agent-proposals" aria-label="Agent proposals"><header><b>Agent proposals</b><span>Not applied until you accept</span></header>
+        {{range .OpenCodePanel.AgentProposals}}
+        <article class="opencode-proposal-file" id="{{.ID}}"><h3><span>{{.Change}}</span>{{.Path}}</h3><pre>{{.Diff}}</pre>{{if .Note}}<span class="opencode-message-note">{{.Note}}</span>{{end}}<div class="opencode-prompt-tools"><button class="settings-btn" id="{{.ID}}-reject" data-action="opencode-proposal-reject:{{.ID}}" type="button">Reject</button><button class="settings-btn primary" id="{{.ID}}-accept" data-action="opencode-proposal-accept:{{.ID}}" type="button">Accept</button></div></article>
+        {{end}}
+      </section>
+      {{end}}
     </div>
   </div>
   {{if .OpenCodePanel.Approval}}

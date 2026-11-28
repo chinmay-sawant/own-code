@@ -29,6 +29,7 @@ type openCodePanelView struct {
 	ContextAvailable   bool
 	CanReview          bool
 	Proposals          []openCodePanelProposalRow
+	AgentProposals     []openCodePanelAgentProposalRow
 	Running            bool
 	CanRetry           bool
 	Approval           *openCodePanelApproval
@@ -129,6 +130,7 @@ func (a *App) openCodePanelView() openCodePanelView {
 			Path: proposal.Path, Change: proposal.Change, Diff: proposal.Diff,
 		})
 	}
+	v.AgentProposals = a.agentProposalRows(v.SelectedID)
 	if v.IncludeSelection {
 		if snapshot, err := a.currentOpenCodeContext(); err == nil {
 			v.ContextAvailable = true
@@ -259,6 +261,10 @@ func (a *App) opencodePanelAction(ctx context.Context, action string) error {
 		return a.retryOpenCodeTurn()
 	case strings.HasPrefix(action, "opencode-session-approve:"):
 		return a.resolveOpenCodeApproval(strings.TrimPrefix(action, "opencode-session-approve:"), true)
+	case strings.HasPrefix(action, "opencode-proposal-accept:"):
+		return a.acceptOpenCodeProposal(strings.TrimPrefix(action, "opencode-proposal-accept:"))
+	case strings.HasPrefix(action, "opencode-proposal-reject:"):
+		return a.rejectOpenCodeProposal(strings.TrimPrefix(action, "opencode-proposal-reject:"))
 	case strings.HasPrefix(action, "opencode-session-deny:"):
 		return a.resolveOpenCodeApproval(strings.TrimPrefix(action, "opencode-session-deny:"), false)
 	default:

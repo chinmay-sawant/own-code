@@ -220,7 +220,8 @@ func canPatchOpenCodePanel(prev, next openCodePanelView) bool {
 		return false
 	}
 	return sameOpenCodeSessions(prev.Sessions, next.Sessions) &&
-		sameOpenCodeProposals(prev.Proposals, next.Proposals)
+		sameOpenCodeProposals(prev.Proposals, next.Proposals) &&
+		sameOpenCodeAgentProposals(prev.AgentProposals, next.AgentProposals)
 }
 
 func sameOpenCodeApproval(a, b *openCodePanelApproval) bool {
@@ -243,6 +244,18 @@ func sameOpenCodeSessions(a, b []openCodePanelSessionRow) bool {
 }
 
 func sameOpenCodeMessages(a, b []openCodePanelMessageRow) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func sameOpenCodeAgentProposals(a, b []openCodePanelAgentProposalRow) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -316,6 +329,26 @@ func renderOpenCodeTranscriptHTML(v openCodePanelView) string {
 			b.WriteString(`</h3><pre>`)
 			b.WriteString(html.EscapeString(p.Diff))
 			b.WriteString(`</pre></article>`)
+		}
+		b.WriteString(`</section>`)
+	}
+	if len(v.AgentProposals) > 0 {
+		b.WriteString(`<section class="opencode-proposals opencode-agent-proposals" aria-label="Agent proposals"><header><b>Agent proposals</b><span>Not applied until you accept</span></header>`)
+		for _, p := range v.AgentProposals {
+			id := html.EscapeString(p.ID)
+			b.WriteString(`<article class="opencode-proposal-file" id="` + id + `"><h3><span>`)
+			b.WriteString(html.EscapeString(p.Change))
+			b.WriteString(`</span>`)
+			b.WriteString(html.EscapeString(p.Path))
+			b.WriteString(`</h3><pre>`)
+			b.WriteString(html.EscapeString(p.Diff))
+			b.WriteString(`</pre>`)
+			if p.Note != "" {
+				b.WriteString(`<span class="opencode-message-note">`)
+				b.WriteString(html.EscapeString(p.Note))
+				b.WriteString(`</span>`)
+			}
+			b.WriteString(`<div class="opencode-prompt-tools"><button class="settings-btn" id="` + id + `-reject" data-action="opencode-proposal-reject:` + id + `" type="button">Reject</button><button class="settings-btn primary" id="` + id + `-accept" data-action="opencode-proposal-accept:` + id + `" type="button">Accept</button></div></article>`)
 		}
 		b.WriteString(`</section>`)
 	}
