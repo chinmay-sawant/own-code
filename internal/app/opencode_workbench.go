@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chinmay-sawant/own-code/internal/agent"
 	"github.com/chinmay-sawant/own-code/internal/agentstore"
 	"github.com/chinmay-sawant/own-code/internal/opencode"
 )
@@ -49,9 +50,16 @@ type openCodeRuntime struct {
 	includeSelection  bool
 	reviewable        bool
 	proposals         []openCodeProposalFile
+	// runs holds one run context per local session, keyed by session ID.
+	// Cancellation and event routing never cross sessions.
+	runs         map[string]*openCodeRun
+	retryText    string
+	recoveryNote string
+	testProvider agent.Provider
 }
 
 type openCodeReply struct {
+	run               *openCodeRunEvent
 	token             uint64
 	operation         openCodeOperation
 	consoleClient     *opencode.ConsoleClient
@@ -66,6 +74,7 @@ type openCodeReply struct {
 	inProgress        bool
 	reviewable        bool
 	proposals         []openCodeProposalFile
+	retryText         string
 }
 
 type openCodeModelRow struct {
@@ -76,10 +85,7 @@ type openCodeModelRow struct {
 
 func openCodeModelRows(models []opencode.ConsoleModel) []openCodeModelRow {
 	rows := make([]openCodeModelRow, 0, len(models))
-	for _, model := range models {
-		if !model.SupportsAgentRuntime() {
-			continue
-		}
+	for _, model := range agent.FilterEligible(models) {
 		providerID := strings.TrimSpace(model.ProviderID)
 		modelID := strings.TrimSpace(model.ID)
 		if providerID == "" || modelID == "" {
@@ -151,6 +157,12 @@ func (a *App) receiveOpenCode(ctx context.Context) bool {
 	for {
 		select {
 		case reply := <-a.openCode.results:
+			if reply.run != nil {
+				if a.handleOpenCodeRunEvent(reply.run) {
+					changed = true
+				}
+				continue
+			}
 			if reply.token != a.openCode.token {
 				continue
 			}
@@ -215,6 +227,7 @@ func (a *App) closeOpenCodeRuntime() {
 		return
 	}
 	a.cancelOpenCodeOperation()
+	a.cancelAllOpenCodeRuns()
 	if a.openCode.lifeCancel != nil {
 		a.openCode.lifeCancel()
 		a.openCode.lifeCancel = nil

@@ -1022,6 +1022,8 @@ func (a *App) switchProject(ctx context.Context, root string) error {
 	// OpenCode work is scoped to a workspace. Retire pending network replies
 	// and clear the previous workspace's session state before publishing ws.
 	a.cancelOpenCodeOperation()
+	a.cancelAllOpenCodeRuns()
+	a.openCode.retryText = ""
 	a.openCode.token++
 	a.openCode.operation = openCodeOperationNone
 	a.openCode.sessions = nil

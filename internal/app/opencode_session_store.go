@@ -250,6 +250,11 @@ type openCodeTranscriptMessage struct {
 	Text      string
 	Ordinal   int64
 	CreatedAt time.Time
+	// TurnID, Kind ("text", "tool", "notice") and Note come from the Console
+	// runtime projection; legacy rows leave them empty.
+	TurnID string
+	Kind   string
+	Note   string
 }
 
 type openCodeMessageEnvelope struct {

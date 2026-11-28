@@ -87,3 +87,16 @@ func (t ModelTarget) endpoint() (string, error) {
 	}
 	return u.String(), nil
 }
+
+// FilterEligible returns, in order, the models that may be selected for agent
+// runs (chat models with advertised tool support and a supported protocol).
+// The input slice is not modified.
+func FilterEligible(models []opencode.ConsoleModel) []opencode.ConsoleModel {
+	out := make([]opencode.ConsoleModel, 0, len(models))
+	for _, m := range models {
+		if Eligible(m) {
+			out = append(out, m)
+		}
+	}
+	return out
+}

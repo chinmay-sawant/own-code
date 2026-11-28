@@ -302,7 +302,7 @@ func TestUnknownInvalidAndOversizedNeverExecute(t *testing.T) {
 				t.Fatalf("model saw %q", msg)
 			}
 			c := e.calls(t, "s1")[0]
-			if c.Status != agentstore.ToolDenied || len(c.Input) > 1024 {
+			if c.Status != agentstore.ToolFailed || !c.IsError || !strings.HasPrefix(c.Result, "Rejected:") || !c.DispatchStartedAt.IsZero() || len(c.Input) > 1024 {
 				t.Fatalf("call = %+v", c)
 			}
 		})

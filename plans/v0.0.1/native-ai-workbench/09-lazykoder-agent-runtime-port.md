@@ -39,8 +39,8 @@ LazyCoder is MIT licensed. Preserve its copyright and license notice in files th
 - [ ] Set the first model scope to chat models that advertise tool support and use `chat-completions` or `responses`. Hide models with other API families until own-code has a tested adapter. Use the catalog's `api` key and `base_url`; reject missing or unknown metadata at both selection and request time. Never route by model name.
 - [x] Define provider-neutral request, event, cancellation, and result types under `internal/agent`. Keep them independent of `internal/app` and OwnFrame. Put protocol-specific encoding and decoding behind provider adapters.
 - [ ] Keep `internal/agentstore` as the only runtime database. Map LazyCoder's session/message/part/tool-call records to own-code's schema. Store provider and model IDs in separate fields; do not pack them into the current `Model` value.
-- [ ] Establish one runtime owner for the user's agent store. Acquire an OS-backed profile lock before startup recovery. If another app process owns the profile, do not alter its active turns.
-- [ ] Define one run context per local session. Scope cancellation and event routing by local session ID and turn ID. Replace the app's current process-wide OpenCode operation token before allowing runs in different sessions to overlap.
+- [x] Establish one runtime owner for the user's agent store. Acquire an OS-backed profile lock before startup recovery. If another app process owns the profile, do not alter its active turns.
+- [x] Define one run context per local session. Scope cancellation and event routing by local session ID and turn ID. Replace the app's current process-wide OpenCode operation token before allowing runs in different sessions to overlap.
 - [ ] Choose the first tool set. Start with workspace-scoped read and search. Write and edit tools may change only the session worktree and must produce proposals for a native accept/reject review path. The current proposal snapshot is read-only, so build that bridge before claiming edits can be accepted. Require approval for each shell command, show its full command and worktree directory, and state that the process has the app user's filesystem and network access. A worktree directory does not sandbox shell commands.
 - [ ] Record every copied source file and any substantive edits. Preserve the MIT notice where required.
 
@@ -70,8 +70,8 @@ LazyCoder is MIT licensed. Preserve its copyright and license notice in files th
 
 ## Phase 4: Add native permission prompts
 
-- [ ] Audit LazyCoder's `internal/policy` rules against own-code's workspace and shell security requirements. Port the policy behavior only after recording the allow/ask/deny matrix for each initial tool.
-- [ ] Add a native OwnFrame approval view through the app's existing asynchronous result path. Do not port the Bubble Tea confirmation view.
+- [x] Audit LazyCoder's `internal/policy` rules against own-code's workspace and shell security requirements. Port the policy behavior only after recording the allow/ask/deny matrix for each initial tool. Matrix and decision: [09a-policy-audit.md](09a-policy-audit.md); nothing ported.
+- [x] Add a native OwnFrame approval view through the app's existing asynchronous result path. Do not port the Bubble Tea confirmation view.
 - [ ] Require an explicit decision for shell commands and workspace mutations in the first version. Treat dismissal, timeout, missing policy, and cancellation as denial.
 - [ ] Bind each approval to one session, turn, tool-call ID, worktree root, and complete validated argument set. Reject stale approvals after the session, worktree, or arguments change.
 - [ ] Persist the decision before dispatch and show denied calls in session history without running them.
@@ -94,9 +94,9 @@ LazyCoder is MIT licensed. Preserve its copyright and license notice in files th
 ## Phase 6: Connect runtime events to session history
 
 - [ ] Extend the existing OpenCode panel to show messages, streamed output, tool activity, approval requests, errors, and interrupted/completed status from own-code events.
-- [ ] Keep HTTP requests, SQLite writes, and tool execution outside the OwnFrame render loop. Ignore stale events whose session or turn ID no longer matches the active view.
+- [x] Keep HTTP requests, SQLite writes, and tool execution outside the OwnFrame render loop. Ignore stale events whose session or turn ID no longer matches the active view.
 - [ ] Restore the local session list and transcript offline. Resume by rebuilding the request from persisted history after checking the workspace and selected model.
-- [ ] Add Stop and retry controls. Retry must not repeat a previously completed side effect without a new model request and approval.
+- [x] Add Stop and retry controls. Retry must not repeat a previously completed side effect without a new model request and approval.
 - [ ] Keep local session IDs as the primary identifiers. Never use provider-issued IDs to retrieve or reconstruct remote session history.
 - [ ] Connect worktree snapshots to a native accept/reject flow. Recheck the proposal baseline, target paths, symlinks, and dirty editor state when applying a decision. Preserve staged and unstaged user changes.
 

@@ -20,6 +20,8 @@ const (
 	ToolListFiles   = "list_files"
 	ToolSearchFiles = "search_files"
 	ToolRunShell    = "run_shell"
+	ToolWriteFile   = "write_file"
+	ToolEditFile    = "edit_file"
 
 	// MaxArgsBytes bounds raw tool arguments before any parsing.
 	MaxArgsBytes = 16 * 1024
@@ -45,6 +47,9 @@ type Output struct {
 	Truncated bool
 	ExitCode  *int
 	Duration  time.Duration
+	// Proposal is set by write_file and edit_file: the change that was staged
+	// in the proposal worktree. The user's checkout is never modified.
+	Proposal *Proposal
 }
 
 // Prepared is a fully validated call. Execute is the only way to run it.
@@ -81,17 +86,58 @@ type tool struct {
 }
 
 type registry struct {
-	root  string // symlink-resolved absolute worktree root, captured once
-	tools map[string]tool
+	root         string // symlink-resolved absolute worktree root, captured once
+	proposalRoot string // symlink-resolved proposal worktree; empty disables write tools
+	sink         func(ctx context.Context, p Proposal) error
+	tools        map[string]tool
+}
+
+// Option configures a registry.
+type Option func(*registry) error
+
+// WithProposalRoot enables write_file and edit_file. They change only files
+// under dir (a session proposal worktree distinct from the registry root, i.e.
+// not the user's checkout) and always return a Proposal. dir must exist, and
+// must neither equal, contain, nor sit inside the registry root.
+func WithProposalRoot(dir string) Option {
+	return func(r *registry) error {
+		if dir == "" {
+			return errors.New("agenttools: empty proposal root")
+		}
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			return err
+		}
+		real, err := filepath.EvalSymlinks(abs)
+		if err != nil {
+			return fmt.Errorf("agenttools: proposal root: %w", err)
+		}
+		if st, err := os.Stat(real); err != nil || !st.IsDir() {
+			return errors.New("agenttools: proposal root is not a directory")
+		}
+		if within(r.root, real) || within(real, r.root) {
+			return errors.New("agenttools: proposal root must be separate from the worktree root")
+		}
+		r.proposalRoot = real
+		return nil
+	}
+}
+
+// WithProposalSink registers a callback that persists each Proposal before the
+// tool reports success. If it returns an error the tool call fails (the staged
+// file in the proposal worktree is left in place for inspection).
+func WithProposalSink(f func(ctx context.Context, p Proposal) error) Option {
+	return func(r *registry) error { r.sink = f; return nil }
 }
 
 // NewRegistry captures the worktree root (absolute, symlinks resolved) and
 // returns the default tool set: read_file, list_files, search_files, run_shell.
-func NewRegistry(worktreeRoot string) (Registry, error) {
-	return newRegistry(worktreeRoot)
+// Options may add write_file and edit_file (see WithProposalRoot).
+func NewRegistry(worktreeRoot string, opts ...Option) (Registry, error) {
+	return newRegistry(worktreeRoot, opts...)
 }
 
-func newRegistry(worktreeRoot string) (*registry, error) {
+func newRegistry(worktreeRoot string, opts ...Option) (*registry, error) {
 	if worktreeRoot == "" {
 		return nil, errors.New("agenttools: empty worktree root")
 	}
@@ -109,6 +155,16 @@ func newRegistry(worktreeRoot string) (*registry, error) {
 	r := &registry{root: real, tools: map[string]tool{}}
 	for _, t := range []tool{readFileTool(), listFilesTool(), searchFilesTool(), runShellTool()} {
 		r.tools[t.spec.Name] = t
+	}
+	for _, o := range opts {
+		if err := o(r); err != nil {
+			return nil, err
+		}
+	}
+	if r.proposalRoot != "" {
+		for _, t := range []tool{writeFileTool(), editFileTool()} {
+			r.tools[t.spec.Name] = t
+		}
 	}
 	return r, nil
 }

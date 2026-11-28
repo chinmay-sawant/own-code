@@ -578,6 +578,45 @@ func (s *Store) RecordToolApproval(ctx context.Context, sessionID, callID string
 	})
 }
 
+// RejectToolCall records that a requested call failed validation (unknown
+// tool, invalid or oversized arguments) before any approval or dispatch. The
+// call moves requested -> failed with a durable, redacted, bounded message so
+// the model and the transcript see why. Repeating it on an already failed call
+// is a no-op; any other state returns ErrConflict.
+func (s *Store) RejectToolCall(ctx context.Context, sessionID, callID, message string, at time.Time) error {
+	message, _ = boundedMarked(redactSecrets(message), maxToolResult)
+	return s.updateToolCall(ctx, sessionID, callID, func(call ToolCall) (string, []any, error) {
+		if call.Status == ToolFailed && call.DispatchStartedAt.IsZero() {
+			return "", nil, nil
+		}
+		if call.Status != ToolRequested {
+			return "", nil, ErrConflict
+		}
+		return `status = 'failed', result = ?, is_error = 1, updated_at = ?`, []any{message, millis(at)}, nil
+	})
+}
+
+// ListCallsNeedingInspection returns the session's calls whose outcome is
+// unknown (dispatch may have begun) or that were interrupted. The user must
+// inspect the side effects; a retry is never automatic and must be a new call
+// ID with fresh approval (a stored call can never be dispatched again).
+func (s *Store) ListCallsNeedingInspection(ctx context.Context, sessionID string) ([]ToolCall, error) {
+	rows, err := s.db.QueryContext(ctx, toolCallSelect+` WHERE session_id = ? AND status IN ('unknown', 'interrupted') ORDER BY ordinal, id`, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("agent store: list calls needing inspection: %w", err)
+	}
+	defer rows.Close()
+	var out []ToolCall
+	for rows.Next() {
+		call, err := scanToolCall(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, call)
+	}
+	return out, rows.Err()
+}
+
 // BeginToolDispatch atomically claims an approved call (approved -> running).
 // Any other state, including an earlier claim, returns ErrAlreadyDispatched so
 // a retry can never execute the call twice.

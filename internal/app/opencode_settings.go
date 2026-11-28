@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/chinmay-sawant/own-code/internal/agent"
 	"github.com/chinmay-sawant/own-code/internal/opencode"
 	"github.com/chinmay-sawant/own-code/internal/secretstore"
 )
@@ -58,8 +59,8 @@ func (a *App) findOpenCodeModel(selection string) (providerID, modelID string, o
 	if !found || providerID == "" || modelID == "" {
 		return "", "", false
 	}
-	for _, model := range a.openCode.consoleModels {
-		if model.SupportsAgentRuntime() && model.ProviderID == providerID && model.ID == modelID {
+	for _, model := range agent.FilterEligible(a.openCode.consoleModels) {
+		if model.ProviderID == providerID && model.ID == modelID {
 			return providerID, modelID, true
 		}
 	}

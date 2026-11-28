@@ -34,15 +34,16 @@ type Policy struct {
 //	list_files   allow  (workspace-scoped, read-only)
 //	search_files allow  (workspace-scoped, read-only)
 //	run_shell    ask    (explicit approval for every command)
-//	write/edit   deny   (no direct writes; proposals come later)
+//	write_file   ask    (stages a proposal in the proposal worktree only)
+//	edit_file    ask    (stages a proposal in the proposal worktree only)
 func DefaultPolicy() *Policy {
 	return &Policy{rules: map[string]Decision{
 		ToolReadFile:    DecisionAllow,
 		ToolListFiles:   DecisionAllow,
 		ToolSearchFiles: DecisionAllow,
 		ToolRunShell:    DecisionAsk,
-		"write_file":    DecisionDeny,
-		"edit_file":     DecisionDeny,
+		ToolWriteFile:   DecisionAsk,
+		ToolEditFile:    DecisionAsk,
 	}}
 }
 

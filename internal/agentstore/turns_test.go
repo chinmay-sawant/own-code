@@ -304,3 +304,66 @@ func TestOpenUserConfigRejectsSecondOwner(t *testing.T) {
 	}
 	mustNil(t, again.Close())
 }
+
+func TestRejectToolCallAndInspectionList(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+	consoleSession(t, store, "s1")
+	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	if _, err := store.BeginTurn(ctx, Turn{SessionID: "s1", ID: "turn1", StartedAt: at}); err != nil {
+		t.Fatal(err)
+	}
+	mustNil(t, store.SaveTurnMessage(ctx, TurnMessage{ID: "a1", SessionID: "s1", TurnID: "turn1", Role: "assistant", CreatedAt: at}))
+	save := func(id string) {
+		t.Helper()
+		if _, err := store.SaveToolCall(ctx, ToolCall{SessionID: "s1", ID: id, MessageID: "a1", TurnID: "turn1", Ordinal: -1, ToolName: "run_shell", Input: `{}`}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	save("rej")
+	mustNil(t, store.RejectToolCall(ctx, "s1", "rej", "Rejected: unknown tool", at))
+	mustNil(t, store.RejectToolCall(ctx, "s1", "rej", "Rejected: unknown tool", at)) // idempotent
+	got, err := store.GetToolCall(ctx, "s1", "rej")
+	if err != nil || got.Status != ToolFailed || !got.IsError || got.Result != "Rejected: unknown tool" || !got.DispatchStartedAt.IsZero() {
+		t.Fatalf("rejected call = %+v, %v", got, err)
+	}
+	if err := store.BeginToolDispatch(ctx, "s1", "rej", at); !errors.Is(err, ErrAlreadyDispatched) {
+		t.Fatalf("dispatch of rejected call = %v", err)
+	}
+	// A call that already progressed cannot be rejected.
+	save("run")
+	mustNil(t, store.RecordToolApproval(ctx, "s1", "run", ApprovalApproved, at))
+	if err := store.RejectToolCall(ctx, "s1", "run", "x", at); !errors.Is(err, ErrConflict) {
+		t.Fatalf("reject approved call = %v", err)
+	}
+	mustNil(t, store.BeginToolDispatch(ctx, "s1", "run", at))
+	save("pending")
+	mustNil(t, store.RecordToolApproval(ctx, "s1", "pending", ApprovalApproved, at))
+	if list, _ := store.ListCallsNeedingInspection(ctx, "s1"); len(list) != 0 {
+		t.Fatalf("before recovery = %+v", list)
+	}
+	if _, err := store.RecoverInterrupted(ctx, at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	list, err := store.ListCallsNeedingInspection(ctx, "s1")
+	if err != nil || len(list) != 2 || list[0].ID != "run" || list[0].Status != ToolUnknown || list[1].ID != "pending" || list[1].Status != ToolInterrupted {
+		t.Fatalf("needing inspection = %+v, %v", list, err)
+	}
+	// A retry must be a new call ID with fresh approval: the old call can
+	// never be approved or dispatched again.
+	_ = store.RecordToolApproval(ctx, "s1", "run", ApprovalApproved, at) // repeat is a no-op
+	if c, _ := store.GetToolCall(ctx, "s1", "run"); c.Status != ToolUnknown {
+		t.Fatalf("re-approval changed status to %q", c.Status)
+	}
+	if err := store.BeginToolDispatch(ctx, "s1", "run", at); !errors.Is(err, ErrAlreadyDispatched) {
+		t.Fatalf("re-dispatch unknown call = %v", err)
+	}
+	save("run-retry")
+	fresh, _ := store.GetToolCall(ctx, "s1", "run-retry")
+	if fresh.Status != ToolRequested || fresh.Approval != "" {
+		t.Fatalf("retry must start unapproved: %+v", fresh)
+	}
+	if err := store.BeginToolDispatch(ctx, "s1", "run-retry", at); !errors.Is(err, ErrAlreadyDispatched) {
+		t.Fatalf("dispatch without fresh approval = %v", err)
+	}
+}

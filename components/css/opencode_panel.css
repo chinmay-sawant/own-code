@@ -35,3 +35,9 @@
 .opencode-prompt-tools span { flex: 1 1 auto; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .opencode-prompt-tools button { min-height: 23px; padding: 0 9px; font-size: 10px; }
 .opencode-prompt-tools button:disabled, .opencode-prompt:disabled { opacity: .5; }
+.opencode-message.role-tool > b, .opencode-message.role-system > b { color: var(--muted); }
+.opencode-message-note { display: block; margin-top: 3px; color: var(--warn, var(--muted)); font-size: 10px; }
+.opencode-approval { flex: 0 0 auto; padding: 8px 10px; border-top: 1px solid var(--line-soft); background-color: var(--panel-2); font-size: 11px; }
+.opencode-approval > b { display: block; margin-bottom: 4px; }
+.opencode-approval pre { margin: 0 0 4px; font-family: var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 120px; overflow: auto; }
+.opencode-approval-notice { margin: 4px 0; color: var(--muted); }

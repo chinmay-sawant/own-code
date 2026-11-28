@@ -310,3 +310,22 @@ func TestCancelStopsDeltas(t *testing.T) {
 		t.Fatalf("%+v %v", res, err)
 	}
 }
+
+func TestFilterEligible(t *testing.T) {
+	ok := opencode.ConsoleModel{ProviderID: "p", ID: "good", Type: "chat", ToolsKnown: true, ToolsSupported: true,
+		APIs: map[string]opencode.ConsoleModelAPI{ProtocolChatCompletions: {BaseURL: "https://x.example/v1"}}}
+	noTools := ok
+	noTools.ID, noTools.ToolsSupported = "notools", false
+	badAPI := ok
+	badAPI.ID, badAPI.APIs = "badapi", map[string]opencode.ConsoleModelAPI{"anthropic": {BaseURL: "https://x.example"}}
+	emb := ok
+	emb.ID, emb.Type = "emb", "embedding"
+	in := []opencode.ConsoleModel{noTools, ok, badAPI, emb}
+	got := FilterEligible(in)
+	if len(got) != 1 || got[0].ID != "good" || len(in) != 4 {
+		t.Fatalf("FilterEligible = %+v", got)
+	}
+	if got := FilterEligible(nil); got == nil || len(got) != 0 {
+		t.Fatalf("nil input = %#v", got)
+	}
+}

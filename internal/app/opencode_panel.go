@@ -29,6 +29,18 @@ type openCodePanelView struct {
 	ContextAvailable   bool
 	CanReview          bool
 	Proposals          []openCodePanelProposalRow
+	Running            bool
+	CanRetry           bool
+	Approval           *openCodePanelApproval
+}
+
+// openCodePanelApproval is the native approval view for one pending call.
+type openCodePanelApproval struct {
+	CallID    string
+	Tool      string
+	Command   string
+	Directory string
+	Notice    string
 }
 
 type openCodePanelSessionRow struct {
@@ -42,6 +54,7 @@ type openCodePanelMessageRow struct {
 	ID   string
 	Role string
 	Text string
+	Note string
 }
 
 type openCodePanelProposalRow struct {
@@ -54,7 +67,6 @@ func (a *App) openCodePanelView() openCodePanelView {
 	v := openCodePanelView{
 		Open:               a.openCode.panelOpen,
 		Busy:               a.openCode.operation >= openCodeOperationSessions,
-		CanInterrupt:       a.openCode.operation == openCodeOperationPrompt && a.openCode.connected && a.openCode.selectedSessionID != "",
 		WorkspaceAvailable: a.ws != nil && !a.ws.Sample,
 		Connected:          a.openCode.connected,
 		Status:             a.openCode.panelStatus,
@@ -62,11 +74,20 @@ func (a *App) openCodePanelView() openCodePanelView {
 		IncludeSelection:   a.openCode.includeSelection,
 		CanReview:          a.openCode.reviewable && a.openCode.selectedSessionID != "" && a.openCode.operation == openCodeOperationNone,
 	}
+	run := a.openCodeRunFor(v.SelectedID)
+	v.Running = run != nil
+	v.CanInterrupt = v.Running
+	v.CanPrompt = v.WorkspaceAvailable && v.Connected && v.SelectedID != "" && !v.Running
+	v.CanRetry = !v.Running && v.SelectedID != "" && v.Connected && a.openCode.retryText != "" && !v.Busy
+	v.Approval = openCodePanelApprovalFor(run)
 	if !v.WorkspaceAvailable {
 		v.Status = "Open a project folder to use OpenCode sessions."
 	} else if v.Status == "" {
 		if v.SelectedID != "" {
-			v.Status = "Local session is read-only until agent execution is implemented."
+			v.Status = "Local session ready. Send a message to start a turn."
+			if !v.Connected {
+				v.Status = "Saved local history. Connect to OpenCode Console to send messages."
+			}
 		} else if !v.Connected {
 			v.Status = "Connect OpenCode Console in Settings to create a session."
 		} else {
@@ -92,7 +113,7 @@ func (a *App) openCodePanelView() openCodePanelView {
 			Status: status,
 		})
 	}
-	for _, message := range a.openCode.messages {
+	for _, message := range openCodeVisibleMessages(a.openCode.messages, run) {
 		if strings.TrimSpace(message.Text) == "" {
 			continue
 		}
@@ -100,6 +121,7 @@ func (a *App) openCodePanelView() openCodePanelView {
 			ID:   message.ID,
 			Role: message.Role,
 			Text: message.Text,
+			Note: message.Note,
 		})
 	}
 	for _, proposal := range a.openCode.proposals {
@@ -116,6 +138,35 @@ func (a *App) openCodePanelView() openCodePanelView {
 		}
 	}
 	return v
+}
+
+// openCodeVisibleMessages overlays the live turn on the persisted transcript:
+// the turn's persisted assistant text is replaced by the streamed text, and the
+// user message is shown immediately.
+func openCodeVisibleMessages(persisted []openCodeTranscriptMessage, run *openCodeRun) []openCodeTranscriptMessage {
+	if run == nil {
+		return persisted
+	}
+	out := make([]openCodeTranscriptMessage, 0, len(persisted)+2)
+	hasUser := false
+	for _, m := range persisted {
+		if m.TurnID == run.turnID {
+			if m.Role == "user" {
+				hasUser = true
+			}
+			if m.Role == "assistant" && m.Kind == "text" {
+				continue
+			}
+		}
+		out = append(out, m)
+	}
+	if !hasUser {
+		out = append(out, openCodeTranscriptMessage{ID: "live-user-" + run.turnID, Role: "user", Text: run.prompt, TurnID: run.turnID, Kind: "text"})
+	}
+	if run.text != "" {
+		out = append(out, openCodeTranscriptMessage{ID: "live-" + run.turnID, Role: "assistant", Text: run.text, TurnID: run.turnID, Kind: "text"})
+	}
+	return out
 }
 
 func formatOpenCodeContext(snapshot agentContextSnapshot) string {
@@ -173,6 +224,7 @@ func (a *App) opencodePanelAction(ctx context.Context, action string) error {
 	switch {
 	case action == "opencode-panel-toggle":
 		if a.openCode.panelOpen {
+			a.denyOpenCodeApprovals()
 			a.openCode.panelOpen = false
 			a.refresh()
 			return nil
@@ -181,6 +233,7 @@ func (a *App) opencodePanelAction(ctx context.Context, action string) error {
 	case action == "opencode-panel-open":
 		return a.openOpenCodePanel(ctx)
 	case action == "opencode-panel-hide":
+		a.denyOpenCodeApprovals() // dismissal is denial
 		a.openCode.panelOpen = false
 		a.refresh()
 		return nil
@@ -202,6 +255,12 @@ func (a *App) opencodePanelAction(ctx context.Context, action string) error {
 		return a.submitOpenCodePrompt(prompt)
 	case action == "opencode-session-interrupt":
 		return a.interruptOpenCodeSession()
+	case action == "opencode-session-retry":
+		return a.retryOpenCodeTurn()
+	case strings.HasPrefix(action, "opencode-session-approve:"):
+		return a.resolveOpenCodeApproval(strings.TrimPrefix(action, "opencode-session-approve:"), true)
+	case strings.HasPrefix(action, "opencode-session-deny:"):
+		return a.resolveOpenCodeApproval(strings.TrimPrefix(action, "opencode-session-deny:"), false)
 	default:
 		return nil
 	}
@@ -247,8 +306,29 @@ func (a *App) ensureOpenCodeStore() error {
 	if err != nil {
 		return err
 	}
+	// This process now owns the profile lock, so unfinished turns from a
+	// previous process are safe to finalize. Nothing is replayed.
+	rctx, rcancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer rcancel()
+	report, err := store.RecoverInterrupted(rctx, time.Now().UTC())
+	if err != nil {
+		_ = store.Close()
+		return err
+	}
+	a.openCode.recoveryNote = openCodeRecoveryNote(report)
 	a.openCode.store = store
 	return nil
+}
+
+func openCodeRecoveryNote(r agentstore.RecoveryReport) string {
+	if r.TurnsInterrupted == 0 && r.CallsInterrupted == 0 && r.CallsUnknown == 0 {
+		return ""
+	}
+	note := fmt.Sprintf("Recovered %d interrupted turn(s).", r.TurnsInterrupted)
+	if r.CallsUnknown > 0 {
+		note += fmt.Sprintf(" %d tool call(s) have an unknown outcome and need inspection.", r.CallsUnknown)
+	}
+	return note
 }
 
 func (a *App) loadOpenCodeSessions() error {
@@ -268,6 +348,7 @@ func (a *App) loadOpenCodeSessions() error {
 	token, baseCtx := a.beginOpenCodeOperation(openCodeOperationSessions)
 	store, directory := a.openCode.store, a.ws.Root
 	connected, result := a.openCode.connected, a.openCode.results
+	recovery := a.openCode.recoveryNote
 	a.openCode.panelStatus = "Loading local sessions…"
 	a.refresh()
 	go func() {
@@ -282,6 +363,9 @@ func (a *App) loadOpenCodeSessions() error {
 			status = "Local session history could not be loaded."
 		} else if len(sessions) == 0 {
 			status = "No local sessions are saved for this workspace."
+		}
+		if recovery != "" && err == nil {
+			status += " " + recovery
 		}
 		a.sendOpenCodeReply(baseCtx, result, openCodeReply{
 			token: token, operation: openCodeOperationSessions,
@@ -327,6 +411,8 @@ func (a *App) createOpenCodeSession() error {
 	}
 	token, baseCtx := a.beginOpenCodeOperation(openCodeOperationCreateSession)
 	store, result := a.openCode.store, a.openCode.results
+	manager, _ := a.openCodeWorktreeManager()
+	a.openCode.retryText = ""
 	a.openCode.reviewable = false
 	a.openCode.proposals = nil
 	a.openCode.messages = nil
@@ -334,11 +420,27 @@ func (a *App) createOpenCodeSession() error {
 	a.openCode.panelStatus = "Saving a local session to SQLite…"
 	a.refresh()
 	go func() {
+		// Each session gets its own isolated worktree; agent tools never touch
+		// the user's checkout. Non-Git folders still get a (history-only) session.
+		worktreePath, baseline, worktreeNote := "", "", ""
+		if manager != nil {
+			wctx, wcancel := context.WithTimeout(baseCtx, 60*time.Second)
+			if wt, werr := manager.Create(wctx, directory); werr == nil {
+				worktreePath, baseline = wt.Path(), wt.baseCommit
+			} else {
+				worktreeNote = " No isolated worktree could be created, so the agent cannot run in this session."
+			}
+			wcancel()
+		}
 		ctx, cancel := context.WithTimeout(baseCtx, 3*time.Second)
 		defer cancel()
 		local, err := store.CreateSession(ctx, agentstore.Session{
 			ID:                sessionID,
 			WorkspaceRoot:     directory,
+			WorktreeRoot:      worktreePath,
+			BaselineCommit:    baseline,
+			ProviderID:        settings.ProviderID,
+			ModelID:           settings.ModelID,
 			ServerID:          openCodeConsoleBackendID,
 			OpenCodeSessionID: sessionID,
 			Title:             "New OpenCode session",
@@ -347,7 +449,7 @@ func (a *App) createOpenCodeSession() error {
 			Status:            agentstore.SessionQueued,
 		})
 		var sessions []opencode.Session
-		status := "Local session saved to SQLite. Prompting remains paused until the safe agent loop is implemented."
+		status := "Local session saved. Send a message to start." + worktreeNote
 		selectedID := ""
 		if err == nil {
 			selectedID = local.ID
@@ -427,7 +529,8 @@ func (a *App) selectOpenCodeSession(sessionID string) error {
 				err = agentstore.ErrNotFound
 			}
 		}
-		var messages []agentstore.Message
+		var messages []openCodeTranscriptMessage
+		retry := ""
 		reviewStatus := ""
 		reviewable := false
 		if err == nil && local.WorktreeRoot != "" {
@@ -438,14 +541,10 @@ func (a *App) selectOpenCodeSession(sessionID string) error {
 			}
 		}
 		if err == nil {
-			messages, err = store.ListMessages(ctx, local.ID)
+			messages, retry, err = loadOpenCodeTranscript(ctx, store, local.ID)
 		}
-		projected := make([]openCodeTranscriptMessage, 0, len(messages))
-		for _, message := range messages {
-			projected = append(projected, openCodeTranscriptMessage{
-				ID: message.OpenCodeMessageID, Role: message.Role, Text: message.Body,
-				Ordinal: message.Ordinal, CreatedAt: message.CreatedAt,
-			})
+		if messages == nil {
+			messages = make([]openCodeTranscriptMessage, 0)
 		}
 		status := "Local session ready."
 		if err != nil {
@@ -456,15 +555,9 @@ func (a *App) selectOpenCodeSession(sessionID string) error {
 		a.sendOpenCodeReply(baseCtx, result, openCodeReply{
 			token: token, operation: openCodeOperationLoadMessages,
 			selectedSessionID: sessionID, reviewable: reviewable,
-			messages: projected, panelStatus: status, err: err,
+			messages: messages, retryText: retry, panelStatus: status, err: err,
 		})
 	}()
-	return nil
-}
-
-func (a *App) submitOpenCodePrompt(_ string) error {
-	a.openCode.panelStatus = "Prompts are paused until safe tool access and proposal acceptance are ready."
-	a.refresh()
 	return nil
 }
 
@@ -542,12 +635,6 @@ func (a *App) reviewOpenCodeProposal() error {
 	return nil
 }
 
-func (a *App) interruptOpenCodeSession() error {
-	a.openCode.panelStatus = "There is no active local agent execution to stop."
-	a.refresh()
-	return nil
-}
-
 func boolPointer(value bool) *bool { return &value }
 
 func (a *App) sendOpenCodeReply(ctx context.Context, result chan<- openCodeReply, reply openCodeReply) {
@@ -565,6 +652,7 @@ func (a *App) receiveOpenCodePanelReply(reply openCodeReply) {
 		a.openCode.reviewable = reply.reviewable
 	}
 	if reply.operation == openCodeOperationLoadMessages || reply.operation == openCodeOperationCreateSession {
+		a.openCode.retryText = reply.retryText
 		a.openCode.reviewable = reply.reviewable
 		a.openCode.proposals = nil
 	}

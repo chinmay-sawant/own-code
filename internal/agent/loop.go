@@ -341,16 +341,13 @@ func (t *turnRun) handleCalls(ctx context.Context, step int, messageID string, c
 		if err != nil {
 			return err
 		}
-		deny := func(decision agentstore.ApprovalDecision, reason string) error {
+		deny := func(decision agentstore.ApprovalDecision) error {
 			sw, cancel := wctx()
 			defer cancel()
-			if reason != "" {
-				t.overrides[id] = reason
-			}
 			return cfg.Store.RecordToolApproval(sw, t.in.SessionID, id, decision, cfg.Now())
 		}
 		if ctx.Err() != nil {
-			if err := deny(agentstore.ApprovalCanceled, ""); err != nil {
+			if err := deny(agentstore.ApprovalCanceled); err != nil {
 				return err
 			}
 			continue
@@ -374,7 +371,10 @@ func (t *turnRun) handleCalls(ctx context.Context, step int, messageID string, c
 			}
 		}
 		if reason != "" {
-			if err := deny(agentstore.ApprovalDenied, reason); err != nil {
+			sw, cancel := wctx()
+			err := cfg.Store.RejectToolCall(sw, t.in.SessionID, id, reason, cfg.Now())
+			cancel()
+			if err != nil {
 				return err
 			}
 			continue
@@ -386,7 +386,7 @@ func (t *turnRun) handleCalls(ctx context.Context, step int, messageID string, c
 			decision, appr = t.ask(ctx, id, prepared, appr)
 		}
 		if decision != agentstore.ApprovalApproved {
-			if err := deny(decision, ""); err != nil {
+			if err := deny(decision); err != nil {
 				return err
 			}
 			continue

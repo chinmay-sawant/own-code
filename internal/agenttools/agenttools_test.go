@@ -38,7 +38,7 @@ func prepShell(t *testing.T, r *registry, cmd string) Prepared {
 func TestPolicyMatrix(t *testing.T) {
 	p := DefaultPolicy()
 	want := map[string]Decision{ToolReadFile: DecisionAllow, ToolListFiles: DecisionAllow, ToolSearchFiles: DecisionAllow,
-		ToolRunShell: DecisionAsk, "write_file": DecisionDeny, "edit_file": DecisionDeny, "mystery": DecisionDeny}
+		ToolRunShell: DecisionAsk, "write_file": DecisionAsk, "edit_file": DecisionAsk, "mystery": DecisionDeny}
 	for k, v := range want {
 		if got := p.Decide(k); got != v {
 			t.Errorf("%s: got %s want %s", k, got, v)

@@ -213,11 +213,21 @@ func canPatchOpenCodePanel(prev, next openCodePanelView) bool {
 		prev.IncludeSelection != next.IncludeSelection ||
 		prev.ContextPreview != next.ContextPreview ||
 		prev.ContextAvailable != next.ContextAvailable ||
-		prev.CanReview != next.CanReview {
+		prev.CanReview != next.CanReview ||
+		prev.Running != next.Running ||
+		prev.CanRetry != next.CanRetry ||
+		!sameOpenCodeApproval(prev.Approval, next.Approval) {
 		return false
 	}
 	return sameOpenCodeSessions(prev.Sessions, next.Sessions) &&
 		sameOpenCodeProposals(prev.Proposals, next.Proposals)
+}
+
+func sameOpenCodeApproval(a, b *openCodePanelApproval) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 func sameOpenCodeSessions(a, b []openCodePanelSessionRow) bool {
@@ -263,7 +273,7 @@ func renderOpenCodeTranscriptHTML(v openCodePanelView) string {
 	if len(v.Messages) == 0 {
 		b.WriteString(`<div class="opencode-transcript-empty">`)
 		if v.SelectedID != "" {
-			b.WriteString(`No saved messages yet. Prompting remains paused until the local agent loop is ready.`)
+			b.WriteString(`No saved messages yet. Send a message to start.`)
 		} else {
 			b.WriteString(`Choose or create a local session.`)
 		}
@@ -275,14 +285,25 @@ func renderOpenCodeTranscriptHTML(v openCodePanelView) string {
 			b.WriteString(`" id="opencode-message-`)
 			b.WriteString(html.EscapeString(m.ID))
 			b.WriteString(`"><b>`)
-			if m.Role == "assistant" {
+			switch m.Role {
+			case "assistant":
 				b.WriteString(`OpenCode`)
-			} else {
+			case "tool":
+				b.WriteString(`Tool`)
+			case "system":
+				b.WriteString(`Notice`)
+			default:
 				b.WriteString(`You`)
 			}
 			b.WriteString(`</b><pre>`)
 			b.WriteString(html.EscapeString(m.Text))
-			b.WriteString(`</pre></article>`)
+			b.WriteString(`</pre>`)
+			if m.Note != "" {
+				b.WriteString(`<span class="opencode-message-note">`)
+				b.WriteString(html.EscapeString(m.Note))
+				b.WriteString(`</span>`)
+			}
+			b.WriteString(`</article>`)
 		}
 	}
 	if len(v.Proposals) > 0 {
