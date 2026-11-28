@@ -174,7 +174,7 @@
     </div>
     {{else if eq .Mode "changes"}}
       {{if .Diff.HasFiles}}
-      <div class="track{{if .Diff.Split}} split-track{{end}}" style="top:{{.Diff.TrackTop}}px">
+      <div class="track{{if .Diff.Split}} split-track{{end}}" id="diff-track" style="top:{{.Diff.TrackTop}}px"><div id="diff-rows">
         {{range .Diff.Rows}}
           {{if eq .Kind "hunk"}}
           <div class="drow hunk{{if .Current}} current{{end}}{{if .Cont}} cont{{end}}"><span class="dhunk">{{.Hunk}}</span>{{if .AgentHunk}}<span class="agent-hunk-ctl state-{{.AgentState}}">{{if .AgentAccept}}<button class="line-revert agent-hunk-btn" id="agent-hunk-accept-{{.AgentHunk}}" data-action="agent-hunk:accept:{{.AgentHunk}}" type="button" title="Apply this hunk to your file or open buffer">Accept</button>{{end}}{{if .AgentReject}}<button class="line-revert agent-hunk-btn" id="agent-hunk-reject-{{.AgentHunk}}" data-action="agent-hunk:reject:{{.AgentHunk}}" type="button" title="Dismiss this hunk without changing files">Reject</button>{{end}}{{if .AgentRevert}}<button class="line-revert agent-hunk-btn" id="agent-hunk-revert-{{.AgentHunk}}" data-action="agent-hunk:revert:{{.AgentHunk}}" type="button" title="Undo this accepted hunk, keeping your other edits">Revert</button>{{end}}{{if .AgentNote}}<span class="agent-hunk-note" role="alert">{{.AgentNote}}</span>{{end}}</span>{{end}}</div>
@@ -217,7 +217,7 @@
           </div>
           {{end}}
         {{end}}
-      </div>
+      </div></div>
       {{else}}
       <div class="empty">
         <span class="empty-mark ok">✅</span>

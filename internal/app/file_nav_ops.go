@@ -256,8 +256,10 @@ func (a *App) openChangedPath(path string) {
 	a.refresh()
 }
 
-// jumpToFirstChange selects the first change even when it is the only one.
-func (a *App) jumpToFirstChange(path string) bool {
+// jumpToFirstChangeNoRefresh moves scroll and changeNav to the first change
+// without calling refresh(), so callers can choose retained PatchElements or
+// a single full refresh.
+func (a *App) jumpToFirstChangeNoRefresh(path string) bool {
 	rows := a.fileNavChangeRows(path)
 	if len(rows) == 0 {
 		return false
@@ -273,6 +275,14 @@ func (a *App) jumpToFirstChange(path string) bool {
 		scroll = a.scrollGroup[group]
 	}
 	a.changeNav = changeNavigation{path: path, mode: a.mode, group: group, row: rows[0], scroll: scroll, valid: true}
+	return true
+}
+
+// jumpToFirstChange selects the first change even when it is the only one.
+func (a *App) jumpToFirstChange(path string) bool {
+	if !a.jumpToFirstChangeNoRefresh(path) {
+		return false
+	}
 	a.refresh()
 	return true
 }

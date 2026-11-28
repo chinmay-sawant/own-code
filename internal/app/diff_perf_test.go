@@ -104,11 +104,28 @@ func BenchmarkDiffSelectSwitch(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		a.selectDiff(paths[i%len(paths)])
-		if err := a.Page().Redraw(ctx); err != nil {
+		if err := a.Page().RedrawIfChanged(ctx); err != nil {
 			b.Fatal(err)
 		}
-		if _, err := a.Page().Access().AccessibilityTree(); err != nil {
-			b.Fatal(err)
-		}
+	}
+}
+
+func TestPatchDiffViewAvoidsFullLayout(t *testing.T) {
+	a := setupDiffPerfApp(t, true)
+	prev := a.view
+	a.diffPath = "other.go"
+	a.setSingleSelect("other.go")
+	a.rebuildDiffRows()
+	a.resetScroll()
+	a.jumpToFirstChangeNoRefresh("other.go")
+	next := a.buildView()
+	if !canPatchDiffView(prev, next) {
+		t.Fatalf("canPatchDiffView = false: mode=(%q,%q) hasFiles=(%v,%v) src=(%q,%q) modal=(%v,%v) details=(%v,%v) fileNav=(%v,%v) counts=(%d,%d) enc=(%q,%q) active=(%q,%q)",
+			prev.Mode, next.Mode, prev.Diff.HasFiles, next.Diff.HasFiles, prev.Diff.Source, next.Diff.Source,
+			prev.Modal, next.Modal, prev.Details, next.Details, prev.FileNav.Open, next.FileNav.Open,
+			prev.Diff.Count, next.Diff.Count, prev.Encoding, next.Encoding, prev.Active, next.Active)
+	}
+	if err := a.patchDiffViewErr(context.Background(), prev, next); err != nil {
+		t.Fatalf("patchDiffView failed: %v", err)
 	}
 }

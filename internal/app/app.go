@@ -3910,8 +3910,22 @@ func (a *App) pickBranch(ctx context.Context, ref string) {
 	a.refresh()
 }
 
+// refreshDiffOrPatch publishes a diff view update via retained PatchElements
+// when possible, falling back cleanly to a full refresh() when structural
+// chrome changed or ownframe refuses the patch.
+func (a *App) refreshDiffOrPatch(prev View) {
+	next := a.buildView()
+	a.view = next
+	if !a.patchDiffView(context.Background(), prev, next) {
+		a.publishPreviewImages()
+		a.page.SetData(&a.view)
+	}
+	a.persistSession()
+}
+
 // selectDiff shows one file's working-tree diff.
 func (a *App) selectDiff(path string) {
+	prev := a.view
 	if a.mode == "merge" {
 		a.leaveMergeMode()
 	}
@@ -3935,9 +3949,8 @@ func (a *App) selectDiff(path string) {
 	}
 	a.rebuildDiffRows()
 	a.resetScroll()
-	if !a.jumpToFirstChange(path) {
-		a.refresh()
-	}
+	a.jumpToFirstChangeNoRefresh(path)
+	a.refreshDiffOrPatch(prev)
 }
 
 // toggleDiff previews one file while flipping its multi-select state for
@@ -4268,10 +4281,11 @@ func (a *App) rebuildCommitRows() {
 
 // setSplit switches between unified and split diff rows.
 func (a *App) setSplit(split bool) {
+	prev := a.view
 	a.diffSplit = split
 	a.rebuildDiffRows()
 	a.resetScroll()
-	a.refresh()
+	a.refreshDiffOrPatch(prev)
 }
 
 // jumpHunk moves to the previous or next change block in the current diff.

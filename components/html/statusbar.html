@@ -10,8 +10,8 @@
   {{if .Dirty}}<span class="sb-item sb-dirty" id="sb-dirty" title="{{.Dirty}} unsaved files">{{.Dirty}} unsaved</span>{{end}}
   {{if .ScanBudget}}<span class="sb-item sb-scan" id="sb-scan" title="{{.ScanBudget}}">{{.ScanBudget}}</span>{{end}}
   {{if eq .Mode "changes"}}
-  <span class="sb-item sb-extra">{{.Diff.Add}} additions</span>
-  <span class="sb-item sb-extra">{{.Diff.Del}} deletions</span>
+  <span class="sb-item sb-extra" id="sb-diff-add">{{.Diff.Add}} additions</span>
+  <span class="sb-item sb-extra" id="sb-diff-del">{{.Diff.Del}} deletions</span>
   {{else if eq .Mode "merge"}}
   <span class="sb-item sb-extra">{{if .Merge.Total}}Conflict {{.Merge.Index}} of {{.Merge.Total}}{{else}}Resolved{{end}}</span>
   {{if .Merge.Dirty}}<span class="sb-item sb-dirty">unsaved merge result</span>{{end}}
@@ -20,8 +20,8 @@
   <span class="sb-item sb-extra">{{.LangLabel}}</span>
   {{end}}
   {{if .Active}}{{if not .Image.On}}
-  <span class="sb-item sb-extra">{{.Encoding}}</span>
-  <span class="sb-item sb-extra">{{.Indent}}</span>
+  <span class="sb-item sb-extra" id="sb-encoding">{{.Encoding}}</span>
+  <span class="sb-item sb-extra" id="sb-indent">{{.Indent}}</span>
   {{end}}{{end}}
   <button class="sb-item sb-dev{{if .DevOn}} on{{end}}" id="sb-devtools" data-action="devtools" type="button" title="Toggle developer tools" aria-pressed="{{if .DevOn}}true{{else}}false{{end}}"{{if .Modal}} tabindex="-1"{{end}}>
     <span class="sb-dot"></span>DevTools {{if .DevOn}}on{{else}}off{{end}}
