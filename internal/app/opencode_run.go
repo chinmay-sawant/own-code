@@ -243,14 +243,15 @@ func (a *App) submitOpenCodePrompt(prompt string) error {
 	switch {
 	case a.ws == nil || a.ws.Sample:
 		return fail("Open a project folder to use OpenCode sessions.")
-	case a.openCode.selectedSessionID == "":
-		return fail("Choose or create a local session first.")
 	case !a.openCode.connected:
 		return fail("Connect to OpenCode Console in Settings to send a message.")
 	case prompt == "":
 		return fail("Type a message first.")
 	case len(openCodeTypedPart(prompt)) > 12000:
 		return fail("The message is too long.")
+	case a.openCode.selectedSessionID == "":
+		a.openCode.pendingPrompt = prompt
+		return a.createOpenCodeSession()
 	case a.openCodeRunFor(a.openCode.selectedSessionID) != nil:
 		return fail("This session already has a running turn.")
 	}
@@ -381,7 +382,7 @@ func executeOpenCodeTurn(ctx context.Context, p openCodeTurnParams) {
 	}
 	provider := p.client
 	if provider == nil {
-		key, kerr := loadOpenCodeConsoleAPIKey()
+		key, kerr := loadOpenCodeKeyForDir(p.directory)
 		if kerr != nil {
 			finish("Could not read the OpenCode Console API key.")
 			return

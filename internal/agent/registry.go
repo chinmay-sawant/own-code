@@ -119,6 +119,7 @@ type ModelChoice struct {
 	ProviderName string
 	ModelID      string
 	Name         string
+	Free         bool
 }
 
 // Key is the stable "provider/model" selection value.
@@ -132,29 +133,47 @@ type ModelGroup struct {
 }
 
 // GroupEligible filters a catalog and groups it by provider, preserving the
-// catalog order of first appearance.
+// catalog order of first appearance. Free models are placed in their own
+// dedicated "Free" group so they are never mixed with default/paid models.
 func GroupEligible(backendID string, models []opencode.ConsoleModel) []ModelGroup {
 	var groups []ModelGroup
+	var freeModels []ModelChoice
 	index := map[string]int{}
 	for _, m := range FilterEligible(models) {
-		i, ok := index[m.ProviderID]
-		if !ok {
-			name := strings.TrimSpace(m.ProviderName)
-			if name == "" {
-				name = m.ProviderID
-			}
-			groups = append(groups, ModelGroup{ProviderID: m.ProviderID, ProviderName: name})
-			i = len(groups) - 1
-			index[m.ProviderID] = i
+		providerName := strings.TrimSpace(m.ProviderName)
+		if providerName == "" {
+			providerName = m.ProviderID
 		}
 		name := strings.TrimSpace(m.Name)
 		if name == "" {
 			name = m.ID
 		}
-		groups[i].Models = append(groups[i].Models, ModelChoice{
-			BackendID: backendID, ProviderID: m.ProviderID, ProviderName: groups[i].ProviderName,
-			ModelID: m.ID, Name: name,
-		})
+		choice := ModelChoice{
+			BackendID: backendID, ProviderID: m.ProviderID, ProviderName: providerName,
+			ModelID: m.ID, Name: name, Free: m.IsFree(),
+		}
+		if choice.Free {
+			freeModels = append(freeModels, choice)
+			continue
+		}
+		i, ok := index[m.ProviderID]
+		if !ok {
+			groups = append(groups, ModelGroup{ProviderID: m.ProviderID, ProviderName: providerName})
+			i = len(groups) - 1
+			index[m.ProviderID] = i
+		}
+		groups[i].Models = append(groups[i].Models, choice)
+	}
+	if len(freeModels) > 0 {
+		freeGroup := ModelGroup{ProviderID: "free", ProviderName: "Free", Models: freeModels}
+		if len(groups) <= 1 {
+			groups = append(groups, freeGroup)
+		} else {
+			out := make([]ModelGroup, 0, len(groups)+1)
+			out = append(out, groups[0], freeGroup)
+			out = append(out, groups[1:]...)
+			groups = out
+		}
 	}
 	return groups
 }

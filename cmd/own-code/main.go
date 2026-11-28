@@ -60,6 +60,7 @@ func main() {
 	defer a.Close()
 
 	a.EnableSession()
+	a.AutoConnectOpenCode()
 
 	fpsSet := false
 	flag.Visit(func(f *flag.Flag) {

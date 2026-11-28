@@ -379,7 +379,7 @@ func executeOpenCodeInline(ctx context.Context, id string, req agent.Request, pr
 		}
 	}
 	if provider == nil {
-		key, err := loadOpenCodeConsoleAPIKey()
+		key, err := loadOpenCodeKeyForDir("")
 		if err != nil {
 			send(openCodeInlineEvent{kind: "error", text: "Could not read the OpenCode Console API key."})
 			return

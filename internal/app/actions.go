@@ -571,7 +571,10 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.settingsTab = strings.TrimPrefix(action, "settings-tab:")
 		a.resetSettingsScroll()
 		return a.redrawSettings(ctx)
-	case strings.HasPrefix(action, "opencode-panel-") || strings.HasPrefix(action, "opencode-session-"):
+	case strings.HasPrefix(action, "opencode-panel-") ||
+		strings.HasPrefix(action, "opencode-session-") ||
+		strings.HasPrefix(action, "opencode-switch-") ||
+		strings.HasPrefix(action, "opencode-proposal-"):
 		return a.opencodePanelAction(ctx, action)
 	case strings.HasPrefix(action, "opencode-"):
 		return a.opencodeAction(ctx, action)
@@ -1833,6 +1836,10 @@ func (a *App) onDragStart(ctx context.Context, box ownframe.Box) (bool, error) {
 		return a.startSettingsThumbDrag(), nil
 	}
 
+	if (box.ID == openCodeModelThumbID || box.ID == openCodeModelRailID) && a.openCode.modelMenuOpen {
+		return a.startOpenCodeModelThumbDrag(), nil
+	}
+
 	if box.ID == "drawer-resize" {
 		a.drawerDrag = true
 		a.drawerDragExtra = a.drawerExtra
@@ -1886,6 +1893,14 @@ func (a *App) onDragMove(ctx context.Context, dx, dy float64) error {
 	}
 	if a.openCode.dockDrag {
 		a.moveOpenCodeDockDrag(dx)
+		a.refresh()
+
+		return a.page.Redraw(ctx)
+	}
+	if a.openCode.modelMenuDrag {
+		if !a.moveOpenCodeModelThumbDrag(dy) {
+			return nil
+		}
 		a.refresh()
 
 		return a.page.Redraw(ctx)
@@ -2073,6 +2088,11 @@ func (a *App) onDragEnd(ctx context.Context) error {
 		a.refresh()
 
 		return a.page.Redraw(ctx)
+	}
+	if a.openCode.modelMenuDrag {
+		a.openCode.modelMenuDrag = false
+		a.openCode.modelMenuDragScale = 0
+		return nil
 	}
 
 	if a.termDrag {
@@ -2445,6 +2465,18 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 	// so it works from the editor. Rebinding kills the old chord.
 	if a.ctrl && a.shift && key == "l" && a.keymapAllows(actionAgentChat, key) {
 		return a.toggleAgentChat(ctx)
+	}
+
+	// OpenCode text inputs own all normal typing (including bare letters like
+	// f, w, r, 1-3) so typing in "Ask the agent" never triggers the Explorer
+	// filter, closes tabs, or leaks into the code editor.
+	if isOpenCodeTextFocus(a.page.Form().FocusID()) {
+		if key == "escape" && (a.openCode.modelMenuOpen || a.openCode.historyOpen) {
+			a.openCode.modelMenuOpen, a.openCode.historyOpen = false, false
+			a.refresh()
+			return a.page.Redraw(ctx)
+		}
+		return nil
 	}
 
 	// The goto and symbol overlays open while editing, so their navigation

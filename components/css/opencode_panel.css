@@ -1,31 +1,38 @@
-/* Right-docked chat (VS Code chat style). Width is Go-owned inline geometry:
-   the editor subtracts it, so no CSS width override lives here. */
-.opencode-panel { position: fixed; top: var(--titlebar-h); right: 0; bottom: var(--status-h); z-index: 21; display: flex; flex-direction: column; overflow: hidden; border-left: 1px solid var(--line); background-color: var(--panel); }
+/* Right-docked chat (VS Code chat style). Width is Go-owned inline geometry;
+   the explicit height makes the fixed dock fill the native viewport too. */
+.opencode-panel { position: fixed; top: var(--titlebar-h); right: 0; bottom: var(--status-h); height: calc(100vh - var(--titlebar-h) - var(--status-h)); z-index: 21; display: flex; flex-direction: column; overflow: hidden; border-left: 1px solid var(--line); background-color: var(--panel); box-shadow: none; }
 .opencode-dock-resize { position: absolute; top: 0; left: 0; bottom: 0; z-index: 6; width: 5px; padding: 0; border: 0; background-color: transparent; cursor: ew-resize; }
 .opencode-dock-resize:hover { background-color: var(--accent-soft); }
 .opencode-dock-resize:focus, .opencode-dock-resize:focus-visible { outline: 0; }
-.opencode-head { flex: 0 0 34px; height: 34px; display: flex; align-items: center; gap: 4px; padding: 0 6px 0 12px; border-bottom: 1px solid var(--line-soft); background-color: var(--panel-2); }
-.opencode-head .term-tools { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; }
+.opencode-head { flex: 0 0 42px; height: 42px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--line-soft); background-color: var(--panel-2); }
+.opencode-head .term-tools { flex: 0 0 auto; display: flex; align-items: center; gap: 3px; padding: 0; }
 .opencode-head .term-tool.on { background-color: var(--panel-3); color: var(--text); }
-.opencode-history-menu { position: absolute; top: 34px; left: 0; right: 0; z-index: 5; max-height: 55%; overflow: hidden; border-bottom: 1px solid var(--line); background-color: var(--panel-2); box-shadow: 0 6px 14px rgba(0, 0, 0, .35); }
+.opencode-head #opencode-session-review { width: auto; height: 24px; flex: 0 0 auto; padding: 0 8px; border: 1px solid var(--line-soft); font-size: 10px; font-weight: 500; }
+.opencode-history-menu { position: absolute; top: 42px; left: 0; right: 0; z-index: 5; max-height: 55%; overflow: hidden; border-bottom: 1px solid var(--line); background-color: var(--panel-2); box-shadow: none; }
 .opencode-history-inner { position: relative; padding: 6px; }
-.opencode-model-row { position: relative; display: flex; align-items: center; min-height: 24px; }
-.opencode-model-btn { max-width: 100%; min-height: 22px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border: 1px solid var(--line); border-radius: 11px; background-color: var(--panel); color: var(--text); font-size: 10px; }
+.opencode-model-row { position: relative; display: flex; align-items: center; margin-top: 6px; min-height: 24px; }
+.opencode-model-btn { max-width: 100%; height: 24px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid var(--line); border-radius: 12px; background-color: var(--panel); color: var(--text); font-size: 10px; line-height: 1; }
 .opencode-model-btn:hover { background-color: var(--panel-3); }
 .opencode-model-btn:disabled { opacity: .5; }
 .opencode-model-btn.state-missing-key, .opencode-model-btn.state-no-models, .opencode-model-btn.state-unavailable { border-color: var(--amber); color: var(--amber); }
-.opencode-model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.opencode-model-note { padding: 2px 2px 0; color: var(--amber); font-size: 9px; line-height: 1.4; }
-.opencode-model-menu { position: absolute; left: 0; right: 0; bottom: 100%; z-index: 7; max-height: 240px; overflow: hidden; margin-bottom: 4px; border: 1px solid var(--line); border-radius: 5px; background-color: var(--panel-2); box-shadow: 0 -6px 14px rgba(0, 0, 0, .35); }
+.opencode-model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.2; }
+.opencode-model-caret { flex: 0 0 auto; color: var(--muted); font-size: 9px; line-height: 1; }
+.opencode-model-note { padding: 3px 2px 0; color: var(--amber); font-size: 9px; line-height: 1.4; }
+.opencode-model-menu { width: 100%; max-height: 240px; overflow: hidden; margin: 6px 0 4px; border: 1px solid var(--line); border-radius: 6px; background-color: var(--panel-2); box-shadow: none; }
 .opencode-model-inner { position: relative; padding: 4px; }
-.opencode-model-group { padding: 6px 8px 2px; color: var(--muted); font-size: 9px; text-transform: uppercase; }
-.opencode-model-item { width: 100%; min-height: 24px; display: block; padding: 0 8px; overflow: hidden; border: 0; border-radius: 3px; background: transparent; color: var(--text); font-size: 10px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.opencode-model-inner.has-scroll { padding-right: 14px; }
+.opencode-model-group { padding: 7px 8px 3px; color: var(--muted); font-size: 9px; font-weight: 600; letter-spacing: 0.04em; line-height: 1.2; text-transform: uppercase; }
+.opencode-model-item { width: 100%; height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 8px; overflow: hidden; border: 0; border-radius: 4px; background: transparent; color: var(--text); font-size: 10.5px; line-height: 1; text-align: left; }
 .opencode-model-item:hover { background-color: var(--panel-3); }
-.opencode-model-item.active { color: var(--accent); }
+.opencode-model-item.active { background-color: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.opencode-model-item-label { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; }
+.opencode-model-check { flex: 0 0 auto; color: var(--accent); font-size: 10px; line-height: 1; }
 .opencode-model-empty { padding: 8px; color: var(--muted); font-size: 10px; line-height: 1.45; }
-.opencode-panel-heading { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1px; overflow: hidden; }
-.opencode-panel-heading b { overflow: hidden; color: var(--text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.opencode-panel-heading span { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.opencode-model-rail { position: fixed; z-index: 25; width: 8px; display: block; padding: 0; border: 0; background-color: transparent; color: var(--thumb); cursor: pointer; }
+.opencode-model-thumb { position: absolute; left: 1px; width: 6px; min-height: 18px; display: block; border-radius: 3px; background-color: var(--thumb); color: var(--thumb); }
+.opencode-panel-heading { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; overflow: hidden; }
+.opencode-panel-heading b { overflow: hidden; color: var(--text); font-size: 11px; font-weight: 600; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.opencode-panel-heading span { overflow: hidden; color: var(--muted); font-size: 9.5px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
 .opencode-panel-main { flex: 1 1 auto; min-height: 0; display: flex; overflow: hidden; }
 .opencode-session { width: 100%; min-height: 43px; display: flex; flex-direction: column; justify-content: center; gap: 3px; margin-bottom: 3px; padding: 5px 8px; overflow: hidden; border-radius: 4px; text-align: left; }
 .opencode-session b { overflow: hidden; color: var(--text); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
@@ -46,16 +53,16 @@
 .opencode-message > b { display: block; margin-bottom: 3px; color: var(--accent); font-size: 10px; }
 .opencode-message.role-user > b { color: var(--muted); }
 .opencode-message pre { margin: 0; color: var(--text); font-family: var(--mono); font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
-.opencode-prompt-area { flex: 0 0 auto; padding: 6px 10px 8px; border-top: 1px solid var(--line-soft); background-color: var(--panel-2); }
+.opencode-prompt-area { flex: 0 0 auto; padding: 8px 10px 10px; border-top: 1px solid var(--line-soft); background-color: var(--panel-2); }
 .opencode-context-tools { min-height: 24px; display: flex; align-items: center; gap: 8px; overflow: hidden; }
 .opencode-context-tools .settings-toggle { min-height: 22px; padding: 0 4px; color: var(--muted); font-size: 9px; }
 .opencode-context-tools > span { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .opencode-context-tools .opencode-context-error { color: var(--amber); }
 .opencode-context-preview { max-height: 88px; overflow: auto; margin: 0 0 4px; padding: 5px 7px; border: 1px solid var(--line); border-radius: 4px; background-color: var(--panel); color: var(--muted); font: 9px/1.35 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .opencode-prompt { width: 100%; min-height: 43px; max-height: 90px; resize: vertical; padding: 7px 9px; border: 1px solid var(--line); border-radius: 5px; background-color: var(--panel); color: var(--text); font: 11px/1.4 var(--mono); }
-.opencode-prompt:focus { border-color: var(--accent); outline: 1px solid var(--accent-soft); }
+.opencode-prompt:focus { border-color: var(--accent); outline: 0; box-shadow: none; }
 .opencode-prompt-tools { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding-top: 5px; }
-.opencode-prompt-tools span { flex: 1 1 auto; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.opencode-guidance { padding-top: 5px; color: var(--muted); font-size: 9px; line-height: 1.4; }
 .opencode-prompt-tools button { min-height: 23px; padding: 0 9px; font-size: 10px; }
 .opencode-prompt-tools button:disabled, .opencode-prompt:disabled { opacity: .5; }
 .opencode-message.role-tool > b, .opencode-message.role-system > b { color: var(--muted); }

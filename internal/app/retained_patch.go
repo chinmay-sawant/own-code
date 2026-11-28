@@ -226,6 +226,12 @@ func canPatchOpenCodePanel(prev, next openCodePanelView) bool {
 		prev.HistoryTop != next.HistoryTop ||
 		prev.ModelMenuOpen != next.ModelMenuOpen ||
 		prev.ModelMenuTop != next.ModelMenuTop ||
+		prev.ModelScroll != next.ModelScroll ||
+		prev.ModelRailLeft != next.ModelRailLeft ||
+		prev.ModelRailTop != next.ModelRailTop ||
+		prev.ModelTrackH != next.ModelTrackH ||
+		prev.ModelThumbTop != next.ModelThumbTop ||
+		prev.ModelThumbH != next.ModelThumbH ||
 		prev.ModelLabel != next.ModelLabel ||
 		prev.ModelState != next.ModelState ||
 		prev.ModelNote != next.ModelNote ||
@@ -366,7 +372,7 @@ func renderOpenCodeTranscriptHTML(v openCodePanelView) string {
 				b.WriteString(html.EscapeString(p.Note))
 				b.WriteString(`</span>`)
 			}
-			b.WriteString(`<div class="opencode-prompt-tools"><button class="settings-btn" id="` + id + `-reject" data-action="opencode-proposal-reject:` + id + `" type="button">Reject</button><button class="settings-btn primary" id="` + id + `-accept" data-action="opencode-proposal-accept:` + id + `" type="button">Accept</button></div></article>`)
+			b.WriteString(`<div class="opencode-prompt-tools"><button class="settings-btn" id="` + id + `-review" data-action="opencode-proposal-review:` + id + `" type="button">Review hunks</button><button class="settings-btn" id="` + id + `-reject" data-action="opencode-proposal-reject:` + id + `" type="button">Reject</button><button class="settings-btn primary" id="` + id + `-accept" data-action="opencode-proposal-accept:` + id + `" type="button">Accept</button></div></article>`)
 		}
 		b.WriteString(`</section>`)
 	}

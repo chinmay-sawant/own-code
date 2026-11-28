@@ -53,6 +53,12 @@ type openCodePanelView struct {
 	HistoryTop    int
 	ModelMenuOpen bool
 	ModelMenuTop  int
+	ModelScroll   bool
+	ModelRailLeft int
+	ModelRailTop  int
+	ModelTrackH   int
+	ModelThumbTop int
+	ModelThumbH   int
 	ModelLabel    string
 	ModelState    string
 	ModelNote     string
@@ -121,7 +127,7 @@ func (a *App) openCodePanelView() openCodePanelView {
 	run := a.openCodeRunFor(v.SelectedID)
 	v.Running = run != nil
 	v.CanInterrupt = v.Running
-	v.CanPrompt = v.WorkspaceAvailable && v.Connected && v.SelectedID != "" && !v.Running
+	v.CanPrompt = v.WorkspaceAvailable && v.Connected && !v.Running
 	v.CanRetry = !v.Running && v.SelectedID != "" && v.Connected && a.openCode.retryText != "" && !v.Busy
 	v.Approval = openCodePanelApprovalFor(run)
 	v.Offline = !v.Connected
@@ -134,14 +140,14 @@ func (a *App) openCodePanelView() openCodePanelView {
 		v.Status = "Open a project folder to use OpenCode sessions."
 	} else if v.Status == "" {
 		if v.SelectedID != "" {
-			v.Status = "Local session ready. Send a message to start a turn."
+			v.Status = "Ready"
 			if !v.Connected {
-				v.Status = "Saved local history. Connect to OpenCode Console to send messages."
+				v.Status = "Saved history · offline"
 			}
 		} else if !v.Connected {
-			v.Status = "Connect OpenCode Console in Settings to create a session."
+			v.Status = "Connect in Settings to chat"
 		} else {
-			v.Status = "Choose a local session or create one for this workspace."
+			v.Status = "Ready to chat"
 		}
 	}
 	for _, session := range a.openCode.sessions {
@@ -509,36 +515,53 @@ func (a *App) loadOpenCodeSessions() error {
 	return nil
 }
 
+func (a *App) restorePendingOpenCodePrompt() {
+	if a.openCode.pendingPrompt == "" {
+		return
+	}
+	a.openCode.composer.text = a.openCode.pendingPrompt
+	if a.page != nil {
+		a.page.Form().SetFormValue("opencode-prompt", a.openCode.pendingPrompt)
+	}
+	a.openCode.pendingPrompt = ""
+}
+
 func (a *App) createOpenCodeSession() error {
 	if a.ws == nil || a.ws.Sample {
+		a.restorePendingOpenCodePrompt()
 		a.openCode.panelStatus = "Open a project folder to create an OpenCode session."
 		a.refresh()
 		return nil
 	}
 	if !a.openCode.connected || a.openCode.consoleClient == nil {
+		a.restorePendingOpenCodePrompt()
 		a.openCode.panelStatus = "Connect to OpenCode Console in Settings before creating a session."
 		a.refresh()
 		return nil
 	}
 	settings := openCodeSettingsValue(a.settings.OpenCode)
 	if _, _, ok := a.findOpenCodeModel(openCodeModelSelection(settings.ProviderID, settings.ModelID)); !ok {
-		a.openCode.panelStatus = "Choose and save an available OpenCode model in Settings before creating a session."
+		a.restorePendingOpenCodePrompt()
+		a.openCode.panelStatus = "Choose an available model before starting a chat."
 		a.refresh()
 		return nil
 	}
 	if err := a.ensureOpenCodeStore(); err != nil {
+		a.restorePendingOpenCodePrompt()
 		a.openCode.panelStatus = "Local session history is unavailable; a session cannot be saved."
 		a.refresh()
 		return nil
 	}
 	directory, err := canonicalWorkspaceRoot(a.ws.Root)
 	if err != nil {
+		a.restorePendingOpenCodePrompt()
 		a.openCode.panelStatus = "Could not resolve the selected workspace for a local session."
 		a.refresh()
 		return nil
 	}
 	sessionID, err := newOpenCodeLocalSessionID()
 	if err != nil {
+		a.restorePendingOpenCodePrompt()
 		a.openCode.panelStatus = "Could not create a local OpenCode session ID."
 		a.refresh()
 		return nil
@@ -705,8 +728,17 @@ func (a *App) selectOpenCodeSession(sessionID string) error {
 }
 
 func (a *App) reviewOpenCodeProposal() error {
-	if a.ws == nil || a.ws.Sample || !a.openCode.reviewable || a.openCode.selectedSessionID == "" {
-		a.openCode.panelStatus = "Select an isolated session with a verified proposal baseline first."
+	if a.ws == nil || a.ws.Sample || a.openCode.selectedSessionID == "" {
+		a.openCode.panelStatus = "Start or select a chat to review changes."
+		a.refresh()
+		return nil
+	}
+	if !a.openCode.reviewable {
+		if rows := a.agentProposalRows(a.openCode.selectedSessionID); len(rows) > 0 {
+			a.openAgentDiff(rows[0].Path)
+			return nil
+		}
+		a.openCode.panelStatus = "No isolated changes to review in this session."
 		a.refresh()
 		return nil
 	}
@@ -816,6 +848,9 @@ func (a *App) receiveOpenCodePanelReply(reply openCodeReply) {
 		a.openCode.proposals = reply.proposals
 	}
 	if reply.err != nil && !reply.inProgress {
+		if reply.operation == openCodeOperationCreateSession {
+			a.restorePendingOpenCodePrompt()
+		}
 		a.openCode.panelStatus = reply.panelStatus
 		if a.openCode.panelStatus == "" {
 			a.openCode.panelStatus = openCodeFailureStatus(reply.err)
@@ -869,5 +904,10 @@ func (a *App) receiveOpenCodePanelReply(reply openCodeReply) {
 	if !reply.inProgress {
 		a.openCode.operation = openCodeOperationNone
 		a.cancelOpenCodeOperation()
+	}
+	if reply.operation == openCodeOperationCreateSession && reply.selectedSessionID != "" && a.openCode.pendingPrompt != "" {
+		pending := a.openCode.pendingPrompt
+		a.openCode.pendingPrompt = ""
+		_ = a.submitOpenCodePrompt(pending)
 	}
 }

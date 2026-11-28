@@ -37,7 +37,29 @@ type ConsoleModel struct {
 	OutputLimit    int
 	ToolsSupported bool
 	ToolsKnown     bool
+	Free           bool
+	FreeKnown      bool
 	APIs           map[string]ConsoleModelAPI
+}
+
+// IsFree reports whether this model is a zero-cost / free-tier model.
+func (m ConsoleModel) IsFree() bool {
+	if m.FreeKnown {
+		return m.Free
+	}
+	return isFreeModelLabel(m.ID, m.Name)
+}
+
+func isFreeModelLabel(id, name string) bool {
+	lid := strings.ToLower(strings.TrimSpace(id))
+	if lid == "free" || strings.HasSuffix(lid, "-free") || strings.HasSuffix(lid, ":free") || strings.HasSuffix(lid, "_free") || strings.HasSuffix(lid, "/free") {
+		return true
+	}
+	lname := strings.ToLower(strings.TrimSpace(name))
+	if lname == "free" || strings.HasSuffix(lname, " free") || strings.Contains(lname, "(free)") || strings.Contains(lname, "[free]") || strings.HasSuffix(lname, "-free") {
+		return true
+	}
+	return false
 }
 
 // ConsoleModelAPI describes one inference protocol exposed for a model.
@@ -176,6 +198,15 @@ func (c *ConsoleClient) Models(ctx context.Context) ([]ConsoleModel, error) {
 			}
 			toolsKnown := model.Capabilities.Tools.Supported != nil
 			toolsSupported := toolsKnown && *model.Capabilities.Tools.Supported
+			freeKnown, isFree := false, false
+			switch {
+			case model.Free != nil:
+				freeKnown, isFree = true, *model.Free
+			case model.IsFree != nil:
+				freeKnown, isFree = true, *model.IsFree
+			case model.Cost != nil && model.Cost.Input != nil && model.Cost.Output != nil:
+				freeKnown, isFree = true, *model.Cost.Input == 0 && *model.Cost.Output == 0
+			}
 			models = append(models, ConsoleModel{
 				ProviderID:     providerID,
 				ProviderName:   strings.TrimSpace(provider.Name),
@@ -187,6 +218,8 @@ func (c *ConsoleClient) Models(ctx context.Context) ([]ConsoleModel, error) {
 				OutputLimit:    model.Limit.Output,
 				ToolsSupported: toolsSupported,
 				ToolsKnown:     toolsKnown,
+				Free:           isFree,
+				FreeKnown:      freeKnown,
 				APIs:           apis,
 			})
 		}
@@ -216,7 +249,13 @@ type consoleModel struct {
 	Name        string `json:"name"`
 	Type        string `json:"type"`
 	Description string `json:"description"`
-	Limit       struct {
+	Free        *bool  `json:"free"`
+	IsFree      *bool  `json:"is_free"`
+	Cost        *struct {
+		Input  *float64 `json:"input"`
+		Output *float64 `json:"output"`
+	} `json:"cost"`
+	Limit struct {
 		Context int `json:"context"`
 		Output  int `json:"output"`
 	} `json:"limit"`

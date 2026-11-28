@@ -2,12 +2,14 @@ package app
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/chinmay-sawant/own-code/internal/agent"
 	"github.com/chinmay-sawant/own-code/internal/agentstore"
 	"github.com/chinmay-sawant/own-code/internal/opencode"
+	"github.com/chinmay-sawant/ownframe"
 )
 
 func menuModel(provider, providerName, id string, eligible bool) opencode.ConsoleModel {
@@ -172,4 +174,248 @@ func TestDockGeometryAndRender(t *testing.T) {
 	if a.agentDockWidth() != 0 {
 		t.Fatal("closed panel keeps a dock")
 	}
+}
+
+func TestModelMenuSeparatesDefaultAndFreeGroups(t *testing.T) {
+	freeByCost := menuModel("opencode", "Default / OpenCode", "big-pickle", true)
+	freeByCost.Name = "Big Pickle"
+	freeByCost.FreeKnown, freeByCost.Free = true, true
+
+	freeByName := menuModel("opencode", "Default / OpenCode", "glm-4.7-free", true)
+	freeByName.Name = "GLM 4.7 Free"
+
+	paid := menuModel("opencode", "Default / OpenCode", "claude-sonnet-4", true)
+	paid.Name = "Claude Sonnet 4"
+	paid.FreeKnown, paid.Free = true, false
+
+	groups := agent.GroupEligible("opencode", []opencode.ConsoleModel{paid, freeByCost, freeByName})
+	if len(groups) != 2 {
+		t.Fatalf("expected 2 groups (Default and Free), got %d: %+v", len(groups), groups)
+	}
+	if groups[0].ProviderName != "Default / OpenCode" || len(groups[0].Models) != 1 || groups[0].Models[0].ModelID != "claude-sonnet-4" {
+		t.Fatalf("default group = %+v", groups[0])
+	}
+	if groups[1].ProviderName != "Free" || len(groups[1].Models) != 2 {
+		t.Fatalf("free group = %+v", groups[1])
+	}
+	if groups[1].Models[0].Key() != "opencode/big-pickle" || groups[1].Models[1].Key() != "opencode/glm-4.7-free" {
+		t.Fatalf("free model keys = %+v", groups[1].Models)
+	}
+}
+
+func TestModelMenuScrollbarAndNewChatPromptClickable(t *testing.T) {
+	a := newRunTestApp(t)
+	ctx := context.Background()
+	a.openCode.panelOpen = true
+	a.openCode.connected = true
+
+	// Build enough default + free models to overflow the 240px dropdown.
+	var models []opencode.ConsoleModel
+	for i := 0; i < 8; i++ {
+		m := menuModel("opencode", "Default / OpenCode", "paid-"+string(rune('a'+i)), true)
+		m.Name = "Paid Model " + string(rune('A'+i))
+		m.FreeKnown, m.Free = true, false
+		models = append(models, m)
+	}
+	for i := 0; i < 6; i++ {
+		m := menuModel("opencode", "Default / OpenCode", "model-"+string(rune('a'+i))+"-free", true)
+		m.Name = "Free Model " + string(rune('A'+i)) + " Free"
+		models = append(models, m)
+	}
+	a.openCode.consoleModels = models
+
+	// In New Chat state (SelectedID == ""), the Ask the Agent box must be enabled.
+	v := a.openCodePanelView()
+	if !v.CanPrompt {
+		t.Fatal("expected CanPrompt=true in New Chat state when connected")
+	}
+
+	// Clicking Review in New Chat state gives a clear status message.
+	if err := a.onClick(ctx, ownframe.Box{Action: "opencode-session-review"}); err != nil {
+		t.Fatal(err)
+	}
+	if a.openCode.panelStatus == "" {
+		t.Fatal("expected Review click in New Chat to report status")
+	}
+
+	// Workspace switch cancel must route through onClick to opencodePanelAction.
+	a.openCode.pendingSwitch = &openCodePendingSwitch{SessionID: "other", Title: "Other", Root: t.TempDir()}
+	if err := a.onClick(ctx, ownframe.Box{Action: "opencode-switch-cancel"}); err != nil {
+		t.Fatal(err)
+	}
+	if a.openCode.pendingSwitch != nil {
+		t.Fatal("opencode-switch-cancel was not handled by onClick")
+	}
+
+	// Open the model picker and verify the visible vertical scrollbar renders and settles.
+	if err := a.opencodePanelAction(ctx, "opencode-panel-model-toggle"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.page.Redraw(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !a.openCodeMenuMetrics() {
+		t.Fatal("expected initial model menu measurement to report changed")
+	}
+	a.refresh()
+	if err := a.page.Redraw(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Second measurement must settle (return false) to avoid per-frame refresh loops.
+	if a.openCodeMenuMetrics() {
+		t.Fatal("model menu metrics did not settle after layout")
+	}
+	if !a.view.OpenCodePanel.ModelScroll {
+		t.Fatalf("expected ModelScroll=true for overflowing model list, view=%+v", a.view.OpenCodePanel)
+	}
+	for _, id := range []string{openCodeModelRailID, openCodeModelThumbID} {
+		if _, ok := findBoxID(a.page.Boxes(), id); !ok {
+			t.Errorf("missing scrollbar element %q", id)
+		}
+	}
+
+	// Wheel scrolling moves both the list and the thumb.
+	beforeThumb := a.view.OpenCodePanel.ModelThumbTop
+	vp, ok := findBoxID(a.page.Boxes(), openCodeModelMenuID)
+	if !ok {
+		t.Fatal("missing model menu box")
+	}
+	if !a.openCodeMenuWheel(vp.X+10, vp.Y+10, -3) {
+		t.Fatal("expected wheel event on model menu to be handled")
+	}
+	if a.view.OpenCodePanel.ModelThumbTop <= beforeThumb {
+		t.Fatalf("thumb did not move after scrolling: before=%d after=%d", beforeThumb, a.view.OpenCodePanel.ModelThumbTop)
+	}
+
+	// Picking a model sets a concise status using the friendly model name.
+	if err := a.pickOpenCodeModel("opencode/paid-a"); err != nil {
+		t.Fatal(err)
+	}
+	if a.openCode.panelStatus != "Model: Paid Model A" {
+		t.Fatalf("panelStatus = %q, want %q", a.openCode.panelStatus, "Model: Paid Model A")
+	}
+}
+
+func TestOpenCodePromptTypingDoesNotTriggerExplorerFilter(t *testing.T) {
+	a := newRunTestApp(t)
+	ctx := context.Background()
+	a.openCode.panelOpen = true
+	a.openCode.connected = true
+	a.refresh()
+	if err := a.page.Redraw(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.page.Form().Focus(ctx, "opencode-prompt"); err != nil {
+		t.Fatal(err)
+	}
+	// Typing bare shortcut letters like f (focus-filter), w (close-tab), 2 (changes)
+	// must stay inside the Ask the agent box and never steal focus to the Explorer filter.
+	for _, key := range []string{"f", "i", "x", "w", "2", "r", "z"} {
+		if err := a.onKeyDown(ctx, key); err != nil {
+			t.Fatal(err)
+		}
+		if got := a.page.Form().FocusID(); got != "opencode-prompt" {
+			t.Fatalf("key %q stole focus from opencode-prompt to %q", key, got)
+		}
+	}
+	if a.mode != "explorer" {
+		t.Fatalf("typing '2' in opencode-prompt switched mode to %q", a.mode)
+	}
+}
+
+func TestOpenCodeEnvFileKeyPersistence(t *testing.T) {
+	dir := t.TempDir()
+	envPath := dir + "/.env"
+	if err := os.WriteFile(envPath, []byte("# existing comment\nOTHER_VAR=keep\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const sampleKey = "oc_sk_test_1234567890abcdef"
+	if err := saveOpenCodeKeyToEnvFile(envPath, sampleKey); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := loadOpenCodeKeyFromEnvFile(envPath)
+	if !ok || got != sampleKey {
+		t.Fatalf("loadOpenCodeKeyFromEnvFile() = (%q, %t), want (%q, true)", got, ok, sampleKey)
+	}
+	raw, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "OTHER_VAR=keep") {
+		t.Fatalf("saving key clobbered unrelated env vars: %s", string(raw))
+	}
+	if err := deleteOpenCodeKeyFromEnvFile(envPath); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := loadOpenCodeKeyFromEnvFile(envPath); ok {
+		t.Fatal("expected key to be cleared after deleteOpenCodeKeyFromEnvFile")
+	}
+}
+
+func TestScreenshotOpenCodePanelUI(t *testing.T) {
+	if os.Getenv("OWNFRAME_CODE_VIEW_SCREENSHOT") != "1" {
+		t.Skip("set OWNFRAME_CODE_VIEW_SCREENSHOT=1 to capture screenshots")
+	}
+	a := newRunTestApp(t)
+	ctx := context.Background()
+	a.Page().SetSize(1440, 900)
+	a.openCode.panelOpen = true
+	a.openCode.connected = true
+	a.settings.OpenCode = &opencodeSettings{ProviderID: "opencode", ModelID: "claude-sonnet-4"}
+
+	var models []opencode.ConsoleModel
+	for _, pair := range [][2]string{
+		{"claude-sonnet-4", "Claude Sonnet 4"},
+		{"claude-opus-4", "Claude Opus 4"},
+		{"gpt-5", "GPT-5"},
+		{"gpt-5-mini", "GPT-5 Mini"},
+		{"gemini-2.5-pro", "Gemini 2.5 Pro"},
+		{"deepseek-v4", "DeepSeek V4"},
+	} {
+		m := menuModel("opencode", "Default / OpenCode", pair[0], true)
+		m.Name = pair[1]
+		m.FreeKnown, m.Free = true, false
+		models = append(models, m)
+	}
+	for _, pair := range [][2]string{
+		{"big-pickle", "Big Pickle"},
+		{"glm-4.7-free", "GLM 4.7 Free"},
+		{"minimax-m2.5-free", "MiniMax M2.5 Free"},
+		{"kimi-k2.5-free", "Kimi K2.5 Free"},
+		{"trinity-large-free", "Trinity Large Free"},
+	} {
+		m := menuModel("opencode", "Default / OpenCode", pair[0], true)
+		m.Name = pair[1]
+		m.FreeKnown, m.Free = true, true
+		models = append(models, m)
+	}
+	a.openCode.consoleModels = models
+	a.refresh()
+	if err := a.Page().Redraw(ctx); err != nil {
+		t.Fatal(err)
+	}
+	writeShot(t, a, "opencode-new-chat")
+
+	// Open the model picker and measure for scrollbar.
+	if err := a.opencodePanelAction(ctx, "opencode-panel-model-toggle"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Page().Redraw(ctx); err != nil {
+		t.Fatal(err)
+	}
+	a.openCodeMenuMetrics()
+	a.refresh()
+	if err := a.Page().Redraw(ctx); err != nil {
+		t.Fatal(err)
+	}
+	writeShot(t, a, "opencode-model-picker-top")
+
+	// Scroll down into the Free group.
+	if vp, ok := findBoxID(a.Page().Boxes(), openCodeModelMenuID); ok {
+		a.openCodeMenuWheel(vp.X+20, vp.Y+20, -4)
+		if err := a.Page().Redraw(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeShot(t, a, "opencode-model-picker-scrolled")
 }

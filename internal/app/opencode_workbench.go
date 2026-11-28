@@ -48,10 +48,16 @@ type openCodeRuntime struct {
 	registry                   *agent.ProviderRegistry
 	modelMenuOpen, historyOpen bool
 	modelScroll, historyScroll openCodeTranscriptScroll
+	modelMenuX, modelMenuY     int
+	modelMenuW, modelMenuH     int
+	modelMenuDrag              bool
+	modelMenuDragAt            int
+	modelMenuDragScale         float64
 	dockWidth                  int // base px; 0 = default
 	dockDrag                   bool
 	dockDragStart              int
 	dockDragDx                 float64
+	pendingPrompt              string
 	panelStatus                string
 	sessions                   []opencode.Session
 	selectedSessionID          string

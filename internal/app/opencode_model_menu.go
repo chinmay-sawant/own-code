@@ -22,6 +22,11 @@ const (
 
 	openCodeModelMenuID        = "opencode-model-menu"
 	openCodeModelMenuInnerID   = "opencode-model-menu-inner"
+	openCodeModelRailID        = "opencode-model-rail"
+	openCodeModelThumbID       = "opencode-model-thumb"
+	openCodeModelThumbMin      = 18
+	openCodeModelRailPad       = 3
+	openCodeModelRailW         = 8
 	openCodeHistoryMenuID      = "opencode-history-menu"
 	openCodeHistoryMenuInnerID = "opencode-history-menu-inner"
 	openCodeDockGripID         = "opencode-dock-resize"
@@ -88,6 +93,7 @@ func (a *App) fillOpenCodeChrome(v *openCodePanelView) {
 	v.HistoryTop = -a.openCode.historyScroll.offset()
 	v.ModelMenuOpen = a.openCode.modelMenuOpen
 	v.ModelMenuTop = -a.openCode.modelScroll.offset()
+	a.fillOpenCodeModelRail(v)
 	v.SessionTitle = "New chat"
 	for _, s := range v.Sessions {
 		if s.Active {
@@ -148,7 +154,8 @@ func (a *App) dismissOpenCodeDropdowns(box ownframe.Box) {
 	if a == nil || a.page == nil || !(a.openCode.historyOpen || a.openCode.modelMenuOpen) {
 		return
 	}
-	if strings.HasPrefix(box.Action, "opencode-panel-model-") || strings.HasPrefix(box.Action, "opencode-panel-history-") ||
+	if box.ID == openCodeModelRailID || box.ID == openCodeModelThumbID ||
+		strings.HasPrefix(box.Action, "opencode-panel-model-") || strings.HasPrefix(box.Action, "opencode-panel-history-") ||
 		strings.HasPrefix(box.Action, "opencode-session-pick:") {
 		return
 	}
@@ -175,6 +182,8 @@ func (a *App) openCodeChromeAction(action string) error {
 		a.openCode.modelMenuOpen = !a.openCode.modelMenuOpen
 		a.openCode.historyOpen = false
 		a.openCode.modelScroll = openCodeTranscriptScroll{detached: true}
+		a.openCode.modelMenuDrag = false
+		a.openCode.modelMenuX, a.openCode.modelMenuY, a.openCode.modelMenuW, a.openCode.modelMenuH = 0, 0, 0, 0
 		a.refresh()
 		return nil
 	case action == "opencode-panel-history-toggle":
@@ -200,11 +209,15 @@ func (a *App) pickOpenCodeModel(key string) error {
 		return nil
 	}
 	providerID, modelID, ok := a.findOpenCodeModel(key)
+	modelName := modelID
 	if ok {
 		for _, m := range a.openCode.consoleModels {
 			if m.ProviderID == providerID && m.ID == modelID {
 				_, err := a.openCodeBackend().Resolve(m)
 				ok = err == nil
+				if n := strings.TrimSpace(m.Name); n != "" {
+					modelName = n
+				}
 			}
 		}
 	}
@@ -218,7 +231,8 @@ func (a *App) pickOpenCodeModel(key string) error {
 	a.settings.OpenCode = &st
 	a.persistSettings()
 	a.openCode.modelMenuOpen = false
-	a.openCode.panelStatus = "Model set to " + providerID + "/" + modelID + "."
+	a.openCode.modelMenuDrag = false
+	a.openCode.panelStatus = "Model: " + modelName
 	if sid != "" {
 		a.storeOpenCodeSessionModel(sid, providerID, modelID)
 	}
@@ -299,11 +313,83 @@ func (a *App) moveOpenCodeDockDrag(dx float64) {
 
 // --- dropdown scrolling ------------------------------------------------------
 
+func (a *App) fillOpenCodeModelRail(v *openCodePanelView) {
+	if !v.ModelMenuOpen {
+		return
+	}
+	viewH, contentH := a.openCode.modelScroll.viewH, a.openCode.modelScroll.contentH
+	maxOffset := a.openCode.modelScroll.maxTop()
+	if contentH <= viewH || viewH <= 0 || maxOffset <= 0 || a.openCode.modelMenuW <= 0 {
+		return
+	}
+	pad := a.zx(openCodeModelRailPad)
+	track := viewH - 2*pad
+	if track <= 0 {
+		return
+	}
+	thumb := track * viewH / contentH
+	if minT := a.zx(openCodeModelThumbMin); thumb < minT {
+		thumb = minT
+	}
+	if thumb > track {
+		thumb = track
+	}
+	top := 0
+	if room := track - thumb; room > 0 {
+		top = a.openCode.modelScroll.offset() * room / maxOffset
+	}
+	sx, sy := 0, 0
+	if a.page != nil {
+		sx, sy = a.page.Scroll().ScrollOffset()
+	}
+	railW := a.zx(openCodeModelRailW)
+	v.ModelScroll = true
+	v.ModelRailLeft = a.openCode.modelMenuX - sx + a.openCode.modelMenuW - railW - pad
+	v.ModelRailTop = a.openCode.modelMenuY - sy + pad
+	v.ModelTrackH = track
+	v.ModelThumbTop = top
+	v.ModelThumbH = thumb
+}
+
+func (a *App) startOpenCodeModelThumbDrag() bool {
+	if !a.openCode.panelOpen || !a.openCode.modelMenuOpen || !a.view.OpenCodePanel.ModelScroll {
+		return false
+	}
+	a.openCodeMenuMetrics()
+	maxOffset := a.openCode.modelScroll.maxTop()
+	travel := a.view.OpenCodePanel.ModelTrackH - a.view.OpenCodePanel.ModelThumbH
+	if maxOffset <= 0 || travel <= 0 {
+		return false
+	}
+	a.openCode.modelMenuDrag = true
+	a.openCode.modelMenuDragAt = a.openCode.modelScroll.offset()
+	a.openCode.modelMenuDragScale = float64(maxOffset) / float64(travel)
+	return true
+}
+
+func (a *App) moveOpenCodeModelThumbDrag(dy float64) bool {
+	maxOffset := a.openCode.modelScroll.maxTop()
+	next := min(max(a.openCode.modelMenuDragAt+int(dy*a.openCode.modelMenuDragScale+roundHalf), 0), maxOffset)
+	if next == a.openCode.modelScroll.offset() {
+		return false
+	}
+	a.openCode.modelScroll.top = next
+	a.openCode.modelScroll.detached = true
+	return true
+}
+
 func (a *App) openCodeMenuMetrics() bool {
 	boxes := a.page.Boxes()
 	changed := false
 	if a.openCode.modelMenuOpen {
 		changed = measureOpenCodeMenu(boxes, openCodeModelMenuID, openCodeModelMenuInnerID, &a.openCode.modelScroll) || changed
+		if vp, ok := findBoxID(boxes, openCodeModelMenuID); ok {
+			x, y, w, h := int(vp.X), int(vp.Y), int(vp.W), int(vp.H)
+			if x != a.openCode.modelMenuX || y != a.openCode.modelMenuY || w != a.openCode.modelMenuW || h != a.openCode.modelMenuH {
+				a.openCode.modelMenuX, a.openCode.modelMenuY, a.openCode.modelMenuW, a.openCode.modelMenuH = x, y, w, h
+				changed = true
+			}
+		}
 	}
 	if a.openCode.historyOpen {
 		changed = measureOpenCodeMenu(boxes, openCodeHistoryMenuID, openCodeHistoryMenuInnerID, &a.openCode.historyScroll) || changed

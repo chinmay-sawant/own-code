@@ -123,44 +123,23 @@ func (a *App) opencodeAction(ctx context.Context, action string) error {
 		provided := key != ""
 		if !provided {
 			var err error
-			key, err = loadOpenCodeConsoleAPIKey()
+			key, err = a.loadOpenCodeKey()
 			if err != nil {
 				if errors.Is(err, secretstore.ErrNotFound) {
-					a.openCode.status = "Enter a workspace API key, save one first, or set OPENCODE_API_KEY."
+					a.openCode.status = "Enter a workspace API key, save one first, or set OPENCODE_API_KEY in .env."
 				} else {
 					a.openCode.status = "Could not read the saved OpenCode Console API key."
 				}
 				return a.redrawSettings(ctx)
 			}
 		}
-		client, err := opencode.NewConsoleClient(key)
-		if err != nil {
+		if err := a.startOpenCodeConnect(key, provided); err != nil {
 			a.openCode.status = "The OpenCode Console API key is invalid."
 			return a.redrawSettings(ctx)
 		}
-		a.retireOpenCodeConnection()
-		token, baseCtx := a.beginOpenCodeOperation(openCodeOperationCheck)
-		a.openCode.connected = false
-		a.openCode.status = "Loading the OpenCode Console model catalog…"
-		a.refresh()
-		result := a.openCode.results
-		go func() {
-			ctx, cancel := context.WithTimeout(baseCtx, openCodeRequestTimeout)
-			defer cancel()
-			reply := openCodeReply{token: token, operation: openCodeOperationCheck, consoleClient: client}
-			reply.consoleModels, reply.err = client.Models(ctx)
-			client.Forget() // the app keeps the client only as a connected marker
-			if reply.err == nil && provided {
-				reply.apiKeySaveErr = saveOpenCodeConsoleAPIKey(key)
-			}
-			if reply.err == nil {
-				reply.safeStatus = "Connected to OpenCode Console. Loaded " + strconv.Itoa(len(reply.consoleModels)) + " models."
-			}
-			a.sendOpenCodeReply(baseCtx, result, reply)
-		}()
 		return a.redrawSettings(ctx)
 	case "opencode-key-clear":
-		if err := deleteOpenCodeConsoleAPIKey(); err != nil {
+		if err := a.deleteOpenCodeKey(); err != nil {
 			a.openCode.status = "Could not clear the saved OpenCode Console API key."
 			return a.redrawSettings(ctx)
 		}
@@ -170,4 +149,46 @@ func (a *App) opencodeAction(ctx context.Context, action string) error {
 	default:
 		return nil
 	}
+}
+
+// AutoConnectOpenCode checks for a persisted Console API key (.env, user
+// secret store, or process environment) and connects in the background so the
+// user does not have to re-enter the key on every launch.
+func (a *App) AutoConnectOpenCode() {
+	if a == nil || a.openCode.connected || a.openCode.operation != openCodeOperationNone {
+		return
+	}
+	key, err := a.loadOpenCodeKey()
+	if err != nil || strings.TrimSpace(key) == "" {
+		return
+	}
+	_ = a.startOpenCodeConnect(key, false)
+}
+
+func (a *App) startOpenCodeConnect(key string, save bool) error {
+	client, err := opencode.NewConsoleClient(key)
+	if err != nil {
+		return err
+	}
+	a.retireOpenCodeConnection()
+	token, baseCtx := a.beginOpenCodeOperation(openCodeOperationCheck)
+	a.openCode.connected = false
+	a.openCode.status = "Loading the OpenCode Console model catalog…"
+	a.refresh()
+	result := a.openCode.results
+	go func() {
+		ctx, cancel := context.WithTimeout(baseCtx, openCodeRequestTimeout)
+		defer cancel()
+		reply := openCodeReply{token: token, operation: openCodeOperationCheck, consoleClient: client}
+		reply.consoleModels, reply.err = client.Models(ctx)
+		client.Forget() // the app keeps the client only as a connected marker
+		if reply.err == nil && save {
+			reply.apiKeySaveErr = a.saveOpenCodeKey(key)
+		}
+		if reply.err == nil {
+			reply.safeStatus = "Connected to OpenCode Console. Loaded " + strconv.Itoa(len(reply.consoleModels)) + " models."
+		}
+		a.sendOpenCodeReply(baseCtx, result, reply)
+	}()
+	return nil
 }

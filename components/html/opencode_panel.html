@@ -6,7 +6,7 @@
     <div class="term-tools">
       <button class="term-tool term-add" id="opencode-session-new" data-action="opencode-session-new" type="button" title="New chat in this workspace" aria-label="New chat"{{if or (not .OpenCodeConnected) .OpenCodePanel.Busy (not .OpenCodePanel.WorkspaceAvailable)}} disabled{{end}}>+</button>
       <button class="term-tool{{if .OpenCodePanel.HistoryOpen}} on{{end}}" id="opencode-history-toggle" data-action="opencode-panel-history-toggle" type="button" title="Session history" aria-label="Session history" aria-expanded="{{if .OpenCodePanel.HistoryOpen}}true{{else}}false{{end}}">&#9662;</button>
-      <button class="term-tool" id="opencode-session-review" data-action="opencode-session-review" type="button" title="Review isolated changes" aria-label="Review isolated changes"{{if or (not .OpenCodePanel.CanReview) .OpenCodePanel.Busy}} disabled{{end}}>Review</button>
+      <button class="term-tool" id="opencode-session-review" data-action="opencode-session-review" type="button" title="{{if .OpenCodePanel.CanReview}}Review isolated changes{{else if .OpenCodePanel.Busy}}OpenCode is busy{{else if .OpenCodePanel.SelectedID}}This session has no verified isolated changes to review{{else}}Select or create a chat before reviewing isolated changes{{end}}" aria-label="Review isolated changes"{{if .OpenCodePanel.Busy}} disabled{{end}}>Review</button>
       <button class="term-tool" id="opencode-session-refresh" data-action="opencode-panel-refresh" type="button" title="Refresh local sessions" aria-label="Refresh sessions"{{if not .OpenCodePanel.WorkspaceAvailable}} disabled{{end}}>&#8635;</button>
       <button class="term-tool" id="opencode-panel-hide" data-action="opencode-panel-hide" type="button" title="Close chat" aria-label="Close chat panel">&times;</button>
     </div>
@@ -110,29 +110,34 @@
     {{if .OpenCodePanel.Chips}}<div class="opencode-chips" id="opencode-chips" aria-label="Attached context">{{range .OpenCodePanel.Chips}}<span class="opencode-chip{{if .Truncated}} truncated{{end}}" id="opencode-chip-{{.ID}}" title="{{.Title}}"><b>{{.Label}}</b><i>{{.Detail}}{{if .Truncated}} (truncated){{end}}</i><button class="opencode-chip-x" id="opencode-chip-remove-{{.ID}}" data-action="opencode-panel-chip-remove:{{.ID}}" type="button" aria-label="Remove {{.Label}} from context">×</button></span>{{end}}</div>
     <pre class="opencode-context-preview" id="opencode-composer-preview" aria-label="Exact context that will be sent">{{.OpenCodePanel.ComposerPreview}}</pre>{{end}}
     {{if .OpenCodePanel.Mentions}}<div class="opencode-mentions" id="opencode-mentions" role="listbox" aria-label="Attach context">{{range .OpenCodePanel.Mentions}}<button class="opencode-mention{{if .Active}} active{{end}}" id="opencode-mention-{{.Index}}" data-action="opencode-panel-mention:{{.Index}}" type="button" role="option" aria-selected="{{if .Active}}true{{else}}false{{end}}"><b>{{.Label}}</b><span>{{.Detail}}</span></button>{{end}}</div>{{end}}
-    <textarea class="opencode-prompt" id="opencode-prompt" data-bind="OpenCodePrompt" rows="2" maxlength="12000" aria-label="Message the agent" placeholder="Ask the agent"{{if or (not .OpenCodePanel.CanPrompt) (not .OpenCodeConnected) (not .OpenCodePanel.SelectedID) .OpenCodePanel.Busy}} disabled{{end}}>{{.OpenCodePrompt}}</textarea>
+    <textarea class="opencode-prompt" id="opencode-prompt" data-bind="OpenCodePrompt" rows="2" maxlength="12000" aria-label="Message the agent" placeholder="Ask the agent"{{if or (not .OpenCodePanel.CanPrompt) (not .OpenCodeConnected) .OpenCodePanel.Busy}} disabled{{end}}>{{.OpenCodePrompt}}</textarea>
     <div class="opencode-model-row">
-      <button class="opencode-model-btn{{if .OpenCodePanel.ModelState}} state-{{.OpenCodePanel.ModelState}}{{end}}" id="opencode-model-btn" data-action="opencode-panel-model-toggle" type="button" title="Choose the model for this chat" aria-haspopup="listbox" aria-expanded="{{if .OpenCodePanel.ModelMenuOpen}}true{{else}}false{{end}}"{{if .OpenCodePanel.Running}} disabled{{end}}><span class="opencode-model-name">{{.OpenCodePanel.ModelLabel}}</span><span aria-hidden="true">&#9662;</span></button>
-      {{if .OpenCodePanel.ModelMenuOpen}}
+      <button class="opencode-model-btn{{if .OpenCodePanel.ModelState}} state-{{.OpenCodePanel.ModelState}}{{end}}" id="opencode-model-btn" data-action="opencode-panel-model-toggle" type="button" title="Choose the model for this chat" aria-haspopup="listbox" aria-expanded="{{if .OpenCodePanel.ModelMenuOpen}}true{{else}}false{{end}}"{{if .OpenCodePanel.Running}} disabled{{end}}><span class="opencode-model-name">{{.OpenCodePanel.ModelLabel}}</span><span class="opencode-model-caret" aria-hidden="true">&#9662;</span></button>
+    </div>
+    {{if .OpenCodePanel.ModelMenuOpen}}
       <div class="opencode-model-menu" id="opencode-model-menu" role="listbox" aria-label="Models">
-        <div class="opencode-model-inner" id="opencode-model-menu-inner" style="top:{{.OpenCodePanel.ModelMenuTop}}px">
+        <div class="opencode-model-inner{{if .OpenCodePanel.ModelScroll}} has-scroll{{end}}" id="opencode-model-menu-inner" style="top:{{.OpenCodePanel.ModelMenuTop}}px">
           {{range .OpenCodePanel.ModelGroups}}
           <div class="opencode-model-group">{{.Name}}</div>
-          {{range .Models}}<button class="opencode-model-item{{if .Active}} active{{end}}" id="opencode-model-{{.Key}}" data-action="opencode-panel-model-pick:{{.Key}}" type="button" role="option" aria-selected="{{if .Active}}true{{else}}false{{end}}">{{if .Active}}&#10003; {{end}}{{.Name}}</button>{{end}}
+          {{range .Models}}<button class="opencode-model-item{{if .Active}} active{{end}}" id="opencode-model-{{.Key}}" data-action="opencode-panel-model-pick:{{.Key}}" type="button" role="option" aria-selected="{{if .Active}}true{{else}}false{{end}}">{{if .Active}}<span class="opencode-model-check" aria-hidden="true">&#10003;</span>{{end}}<span class="opencode-model-item-label">{{.Name}}</span></button>{{end}}
           {{else}}
           <div class="opencode-model-empty" id="opencode-model-empty">{{.OpenCodePanel.ModelNote}}</div>
           {{end}}
         </div>
       </div>
-      {{end}}
-    </div>
+    {{end}}
     {{if .OpenCodePanel.ModelNote}}<div class="opencode-model-note" id="opencode-model-note">{{.OpenCodePanel.ModelNote}}</div>{{end}}
+    <div class="opencode-guidance">{{if or .OpenCodePanel.Busy .OpenCodePanel.Running}}Working&hellip;{{else}}Shell commands require approval and run in a private worktree, not your terminal.{{end}}</div>
     <div class="opencode-prompt-tools">
-      <span>{{if or .OpenCodePanel.Busy .OpenCodePanel.Running}}Working&hellip;{{else}}Agent shell commands ask for approval and run in a private worktree, not in your terminal.{{end}}</span>
       <button class="settings-btn" id="opencode-retry" data-action="opencode-session-retry" type="button" title="Send the last message again as a new request"{{if not .OpenCodePanel.CanRetry}} disabled{{end}}>Retry</button>
       {{if .OpenCodePanel.Running}}<button class="settings-btn primary" id="opencode-interrupt" data-action="opencode-session-interrupt" type="button">Stop</button>
-      {{else}}<button class="settings-btn primary" id="opencode-prompt-send" data-action="opencode-session-prompt" type="button"{{if or (not .OpenCodePanel.CanPrompt) (not .OpenCodeConnected) (not .OpenCodePanel.SelectedID) .OpenCodePanel.Busy}} disabled{{end}}>Send</button>{{end}}
+      {{else}}<button class="settings-btn primary" id="opencode-prompt-send" data-action="opencode-session-prompt" type="button"{{if or (not .OpenCodePanel.CanPrompt) (not .OpenCodeConnected) .OpenCodePanel.Busy}} disabled{{end}}>Send</button>{{end}}
     </div>
   </footer>
 </section>
+{{if and .OpenCodePanel.ModelMenuOpen .OpenCodePanel.ModelScroll}}
+<button class="opencode-model-rail" id="opencode-model-rail" type="button" title="Scroll models" aria-label="Scroll models" tabindex="-1" style="left:{{.OpenCodePanel.ModelRailLeft}}px;top:{{.OpenCodePanel.ModelRailTop}}px;height:{{.OpenCodePanel.ModelTrackH}}px">
+  <span class="opencode-model-thumb" id="opencode-model-thumb" style="top:{{.OpenCodePanel.ModelThumbTop}}px;height:{{.OpenCodePanel.ModelThumbH}}px"><svg width="6" height="{{.OpenCodePanel.ModelThumbH}}" aria-hidden="true"><rect width="6" height="{{.OpenCodePanel.ModelThumbH}}" fill="{{.ThumbColor}}"/></svg></span>
+</button>
+{{end}}
 {{end}}
