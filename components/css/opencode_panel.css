@@ -97,3 +97,4 @@
 .opencode-mention { display: flex; align-items: baseline; gap: 8px; padding: 3px 8px; border: 0; background: transparent; color: var(--text); font-size: 10px; text-align: left; cursor: pointer; }
 .opencode-mention:hover { background-color: var(--accent-soft); }
 .opencode-mention span { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.opencode-mention.active { background-color: var(--accent-soft); }

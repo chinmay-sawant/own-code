@@ -210,9 +210,6 @@ func canPatchOpenCodePanel(prev, next openCodePanelView) bool {
 		prev.WorkspaceAvailable != next.WorkspaceAvailable ||
 		prev.Connected != next.Connected ||
 		prev.SelectedID != next.SelectedID ||
-		prev.IncludeSelection != next.IncludeSelection ||
-		prev.ContextPreview != next.ContextPreview ||
-		prev.ContextAvailable != next.ContextAvailable ||
 		!sameOpenCodeComposer(prev, next) ||
 		prev.CanReview != next.CanReview ||
 		prev.Running != next.Running ||

@@ -25,9 +25,6 @@ type openCodePanelView struct {
 	Sessions           []openCodePanelSessionRow
 	Messages           []openCodePanelMessageRow
 	SelectedID         string
-	IncludeSelection   bool
-	ContextPreview     string
-	ContextAvailable   bool
 	// Composer attachments (opencode_mentions.go).
 	Mentions        []openCodeMentionRow
 	Chips           []openCodeChipRow
@@ -114,7 +111,6 @@ func (a *App) openCodePanelView() openCodePanelView {
 		Connected:          a.openCode.connected,
 		Status:             a.openCode.panelStatus,
 		SelectedID:         a.openCode.selectedSessionID,
-		IncludeSelection:   a.openCode.includeSelection,
 		CanReview:          a.openCode.reviewable && a.openCode.selectedSessionID != "" && a.openCode.operation == openCodeOperationNone,
 	}
 	run := a.openCodeRunFor(v.SelectedID)
@@ -191,14 +187,6 @@ func (a *App) openCodePanelView() openCodePanelView {
 	v.AgentProposals = a.agentProposalRows(v.SelectedID)
 	a.fillOpenCodeChrome(&v)
 	a.openCodeComposerView(&v)
-	if v.IncludeSelection {
-		if snapshot, err := a.currentOpenCodeContext(); err == nil {
-			v.ContextAvailable = true
-			v.ContextPreview = formatOpenCodeContext(snapshot)
-		} else {
-			v.ContextPreview = err.Error()
-		}
-	}
 	return v
 }
 
@@ -243,10 +231,6 @@ func openCodeVisibleMessages(persisted []openCodeTranscriptMessage, run *openCod
 			Text: openCodeTurnLine(run.provider, run.model, state, run.startedAt, time.Now())})
 	}
 	return out
-}
-
-func formatOpenCodeContext(snapshot agentContextSnapshot) string {
-	return "Selected editor context (" + snapshot.RelativePath + ", lines " + openCodeLineSpan(snapshot.StartLine, snapshot.EndLine) + ", version " + snapshot.Version[:16] + "):\n```\n" + snapshot.Text + "\n```"
 }
 
 func openCodeWorkspaceSessions(sessions []opencode.Session, root string) []opencode.Session {
@@ -325,10 +309,6 @@ func (a *App) opencodePanelAction(ctx context.Context, action string) error {
 		return nil
 	case strings.HasPrefix(action, "opencode-panel-chip-remove:"):
 		a.removeOpenCodeChip(strings.TrimPrefix(action, "opencode-panel-chip-remove:"))
-		return nil
-	case action == "opencode-context-toggle":
-		a.openCode.includeSelection = !a.openCode.includeSelection
-		a.refresh()
 		return nil
 	case action == "opencode-panel-refresh":
 		return a.loadOpenCodeSessions()

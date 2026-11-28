@@ -28,6 +28,8 @@ const (
 	maxOpenCodeDiffBytes      = 48 << 10
 	maxOpenCodeDiffLines      = 800
 	maxOpenCodeProblemRows    = 25
+	maxOpenCodeProblemPicks   = 6
+	maxOpenCodeUntrackedFiles = 8
 	maxOpenCodeMentionFiles   = 8
 	maxOpenCodeMentionScan    = 50000
 	openCodeContextMarker     = "\n\n[context attachments"
@@ -57,12 +59,17 @@ type openCodeChip struct {
 	StartLine, EndLine int
 	Truncated          bool
 	Note               string // truncation reason
+	FromBuffer         bool   // text is the unsaved editor buffer, not the disk file
 }
 
 type openCodeComposer struct {
 	text  string
 	chips []openCodeChip
 	seq   int
+	// mentionIndex is the keyboard-highlighted popup row; mentionDismissed
+	// hides the popup after Escape or a click away until the query changes.
+	mentionIndex     int
+	mentionDismissed bool
 }
 
 type openCodeMentionCandidate struct {
@@ -70,12 +77,15 @@ type openCodeMentionCandidate struct {
 	Label string
 	Path  string
 	Info  string
+	// Problem is the rendered line of one specific Problems entry.
+	Problem string
 }
 
 // openCodeMentionRow and openCodeChipRow are the template views.
 type openCodeMentionRow struct {
 	Index         int
 	Label, Detail string
+	Active        bool
 }
 
 type openCodeChipRow struct {
@@ -103,6 +113,47 @@ func openCodeMentionQuery(text string) (query string, start int, ok bool) {
 	return rest, at, true
 }
 
+// openCodeMentionKey handles the keyboard while the @ popup is showing:
+// Up/Down move the highlight, Enter or Tab attach it, Escape hides it. It
+// reports whether the key was consumed.
+func (a *App) openCodeMentionKey(key string) bool {
+	cands := a.currentOpenCodeMentions()
+	if len(cands) == 0 {
+		return false
+	}
+	c := &a.openCode.composer
+	c.mentionIndex = max(0, min(c.mentionIndex, len(cands)-1))
+	switch key {
+	case "arrowdown":
+		c.mentionIndex = (c.mentionIndex + 1) % len(cands)
+	case "arrowup":
+		c.mentionIndex = (c.mentionIndex + len(cands) - 1) % len(cands)
+	case "enter", "tab":
+		_ = a.pickOpenCodeMention(c.mentionIndex)
+		return true
+	case "escape":
+		c.mentionDismissed = true
+	default:
+		return false
+	}
+	a.refresh()
+	return true
+}
+
+// dismissOpenCodeMentions hides the popup when a click lands outside it and
+// outside the composer. The click itself still proceeds.
+func (a *App) dismissOpenCodeMentions(boxID string) {
+	c := &a.openCode.composer
+	if c.mentionDismissed || !a.openCode.panelOpen || strings.HasPrefix(boxID, "opencode-mention") || boxID == "opencode-prompt" {
+		return
+	}
+	if len(a.currentOpenCodeMentions()) == 0 {
+		return
+	}
+	c.mentionDismissed = true
+	a.refresh()
+}
+
 // openCodeMentionCandidates lists the editor sources whose names match the
 // query, then workspace files by fuzzy score. Ignored, sensitive, binary and
 // oversized-listing entries never appear. The result is bounded.
@@ -121,6 +172,16 @@ func (a *App) openCodeMentionCandidates(query string) []openCodeMentionCandidate
 	} {
 		if strings.HasPrefix(s.name, lq) {
 			out = append(out, openCodeMentionCandidate{Kind: s.kind, Label: "@" + s.name, Info: s.info})
+		}
+	}
+	if len(lq) >= 3 && strings.HasPrefix("problems", lq) && a != nil && a.lspm != nil {
+		a.lspm.rebuildProblems()
+		for _, p := range a.lspm.problems {
+			if len(out) >= 4+maxOpenCodeProblemPicks || isSensitiveAgentContextPath(p.Path) {
+				continue
+			}
+			out = append(out, openCodeMentionCandidate{Kind: openCodeChipProblems, Label: "@problem", Path: p.Path,
+				Info: fmt.Sprintf("%d:%d %s", p.Line+1, p.Col+1, clipProblemText(p.Message, 80)), Problem: openCodeProblemLine(p)})
 		}
 	}
 	if a == nil || a.ws == nil || a.ws.Sample {
@@ -159,7 +220,7 @@ func (a *App) openCodeMentionCandidates(query string) []openCodeMentionCandidate
 
 // currentOpenCodeMentions is the popup for the composer text, or nil.
 func (a *App) currentOpenCodeMentions() []openCodeMentionCandidate {
-	if !a.openCode.panelOpen {
+	if !a.openCode.panelOpen || a.openCode.composer.mentionDismissed {
 		return nil
 	}
 	q, _, ok := openCodeMentionQuery(a.openCode.composer.text)
@@ -178,6 +239,7 @@ func (a *App) onOpenCodePromptChange(text string) {
 	nextQ, _, nextOK := openCodeMentionQuery(text)
 	c.text = text
 	if prevOK != nextOK || prevQ != nextQ {
+		c.mentionIndex, c.mentionDismissed = 0, false
 		a.refresh()
 	}
 }
@@ -211,6 +273,7 @@ func (a *App) pickOpenCodeMention(index int) error {
 	if _, start, ok := openCodeMentionQuery(c.text); ok {
 		c.text = c.text[:start]
 	}
+	c.mentionIndex, c.mentionDismissed = 0, false
 	if a.page != nil {
 		a.page.Form().SetFormValue("opencode-prompt", c.text)
 	}
@@ -301,6 +364,9 @@ func (a *App) captureOpenCodeChip(cand openCodeMentionCandidate) (openCodeChip, 
 	case openCodeChipDiff:
 		return a.captureOpenCodeDiffChip(root)
 	case openCodeChipProblems:
+		if cand.Problem != "" {
+			return openCodeSingleProblemChip(root, cand), nil
+		}
 		return a.captureOpenCodeProblemsChip(root)
 	}
 	return openCodeChip{}, errors.New("Unknown context source.")
@@ -314,6 +380,9 @@ func boolNote(b bool, s string) string {
 }
 
 func (a *App) captureOpenCodeFileChip(root, path string) (openCodeChip, error) {
+	if a.editing && a.edit != nil && a.editPath() == path && a.dirty[path] {
+		return a.captureOpenCodeBufferChip(root, path)
+	}
 	col, err := collectSelectedAgentFiles(root, []string{path}, a.ws.ignored)
 	if err != nil {
 		return openCodeChip{}, err
@@ -340,6 +409,37 @@ func (a *App) captureOpenCodeFileChip(root, path string) (openCodeChip, error) {
 	}, nil
 }
 
+// captureOpenCodeBufferChip attaches the unsaved editor text of a dirty file
+// so the model sees what the user sees. The same path rules apply as for a
+// disk file; the chip is marked as a buffer snapshot.
+func (a *App) captureOpenCodeBufferChip(root, path string) (openCodeChip, error) {
+	col, err := collectSelectedAgentFiles(root, []string{path}, a.ws.ignored)
+	if err != nil {
+		return openCodeChip{}, err
+	}
+	if len(col.Files) == 0 {
+		reason := "the file cannot be attached"
+		if len(col.Excluded) > 0 {
+			reason = col.Excluded[0].Reason
+		}
+		return openCodeChip{}, errors.New("Not attached: " + reason + ".")
+	}
+	full := a.edit.Text()
+	sum := sha256.Sum256([]byte(full))
+	data := []byte(full)
+	data = data[:utf8PrefixLength(data, min(len(data), maxOpenCodeChipBytes))]
+	data, lineCut := limitAgentContextLines(data, 400)
+	truncated := len(data) < len(full) || lineCut
+	end := strings.Count(string(data), "\n") + 1
+	return openCodeChip{
+		Kind: openCodeChipFile, Label: filepath.Base(path), Path: path,
+		Detail: "unsaved buffer, lines 1-" + strconv.Itoa(end),
+		Root:   root, Version: hex.EncodeToString(sum[:]), Text: string(data),
+		StartLine: 1, EndLine: end, Truncated: truncated, FromBuffer: true,
+		Note: boolNote(truncated, "buffer exceeds the per-file byte or line limit"),
+	}, nil
+}
+
 // sensitiveDiffExcludes keeps credential-like files out of the diff.
 var sensitiveDiffExcludes = []string{
 	"**/.env", "**/.env.*", "**/*.key", "**/*.pem", "**/*.p12", "**/*.pfx", "**/*.keystore",
@@ -357,6 +457,14 @@ func (a *App) captureOpenCodeDiffChip(root string) (openCodeChip, error) {
 	if err != nil {
 		return openCodeChip{}, errors.New("The working-tree diff is unavailable (is this a Git repository with a commit?).")
 	}
+	if !capped {
+		if extra := a.openCodeUntrackedDiff(ctx, root, maxOpenCodeDiffBytes-len(data)); extra != "" {
+			if len(data) > 0 && data[len(data)-1] != '\n' {
+				data = append(data, '\n')
+			}
+			data = append(data, extra...)
+		}
+	}
 	if len(data) == 0 {
 		return openCodeChip{}, errors.New("There are no uncommitted changes to attach.")
 	}
@@ -370,8 +478,99 @@ func (a *App) captureOpenCodeDiffChip(root string) (openCodeChip, error) {
 		Detail: strconv.Itoa(files) + " file(s), " + strconv.Itoa(strings.Count(string(data), "\n")+1) + " lines",
 		Root:   root, Version: hex.EncodeToString(sum[:]), Text: string(data),
 		StartLine: 1, EndLine: strings.Count(string(data), "\n") + 1, Truncated: truncated,
-		Note: boolNote(truncated, "diff cut at the byte or line limit; untracked files are not included"),
+		Note: boolNote(truncated, "diff cut at the byte or line limit"),
 	}, nil
+}
+
+// openCodeProblemLine renders one problem deterministically.
+func openCodeProblemLine(p lspProblem) string {
+	sev := "info"
+	switch p.Severity {
+	case 1:
+		sev = "error"
+	case 2:
+		sev = "warning"
+	}
+	return fmt.Sprintf("%s:%d:%d %s: %s", p.Path, p.Line+1, p.Col+1, sev, clipProblemText(p.Message, 300))
+}
+
+func openCodeSingleProblemChip(root string, cand openCodeMentionCandidate) openCodeChip {
+	sum := sha256.Sum256([]byte(cand.Problem))
+	loc, _, _ := strings.Cut(cand.Problem, " ")
+	return openCodeChip{
+		Kind: openCodeChipProblems, Label: "problem", Path: cand.Path, Detail: loc,
+		Root: root, Version: hex.EncodeToString(sum[:]), Text: cand.Problem, StartLine: 1, EndLine: 1,
+	}
+}
+
+// openCodeProblemsStale re-reads the live problem list at send time.
+func (a *App) openCodeProblemsStale(root string, chip openCodeChip) string {
+	if a.lspm == nil {
+		return "no language-server problems are available now"
+	}
+	if chip.Label == "problem" {
+		a.lspm.rebuildProblems()
+		for _, p := range a.lspm.problems {
+			if openCodeProblemLine(p) == chip.Text {
+				return ""
+			}
+		}
+		return "that problem is no longer reported"
+	}
+	cur, err := a.captureOpenCodeProblemsChip(root)
+	if err != nil || cur.Version != chip.Version {
+		return "the problem list changed since it was attached"
+	}
+	return ""
+}
+
+// openCodeUntrackedDiff renders untracked, non-ignored text files as
+// new-file diffs. Sensitive, binary, symlinked and oversized files are
+// skipped by collectSelectedAgentFiles; the output is bounded by budget.
+func (a *App) openCodeUntrackedDiff(ctx context.Context, root string, budget int) string {
+	if budget <= 0 {
+		return ""
+	}
+	out, _, err := gitBytesCapped(ctx, root, 64<<10, "ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil || len(out) == 0 {
+		return ""
+	}
+	var paths []string
+	for _, p := range strings.Split(string(out), "\x00") {
+		if p == "" || isSensitiveAgentContextPath(p) || containsAgentContextPathComponent(p, ".git") {
+			continue
+		}
+		paths = append(paths, p)
+		if len(paths) >= maxOpenCodeUntrackedFiles {
+			break
+		}
+	}
+	if len(paths) == 0 {
+		return ""
+	}
+	col, err := collectSelectedAgentFiles(root, paths, a.ws.ignored)
+	if err != nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, f := range col.Files {
+		lines := strings.Split(strings.TrimSuffix(f.Text, "\n"), "\n")
+		fmt.Fprintf(&b, "diff --git a/%s b/%s\nnew file mode 100644\n--- /dev/null\n+++ b/%s\n@@ -0,0 +1,%d @@\n", f.RelativePath, f.RelativePath, f.RelativePath, len(lines))
+		for _, l := range lines {
+			b.WriteString("+" + l + "\n")
+		}
+		if f.Truncated {
+			b.WriteString("\\ [untracked file truncated]\n")
+		}
+		if b.Len() > budget {
+			break
+		}
+	}
+	res := b.String()
+	if len(res) > budget {
+		res = res[:utf8PrefixLength([]byte(res), budget)]
+	}
+	return res
 }
 
 func (a *App) captureOpenCodeProblemsChip(root string) (openCodeChip, error) {
@@ -389,14 +588,7 @@ func (a *App) captureOpenCodeProblemsChip(root string) (openCodeChip, error) {
 		if n >= maxOpenCodeProblemRows {
 			continue
 		}
-		sev := "info"
-		switch p.Severity {
-		case 1:
-			sev = "error"
-		case 2:
-			sev = "warning"
-		}
-		fmt.Fprintf(&b, "%s:%d:%d %s: %s\n", p.Path, p.Line+1, p.Col+1, sev, clipProblemText(p.Message, 300))
+		b.WriteString(openCodeProblemLine(p) + "\n")
 		n++
 	}
 	if n == 0 {
@@ -422,10 +614,27 @@ func (a *App) openCodeChipStale(chip openCodeChip) string {
 	}
 	switch chip.Kind {
 	case openCodeChipFile:
+		if chip.FromBuffer {
+			if !a.editing || a.edit == nil || a.editPath() != chip.Path {
+				return "the editor no longer shows that file"
+			}
+			sum := sha256.Sum256([]byte(a.edit.Text()))
+			if hex.EncodeToString(sum[:]) != chip.Version {
+				return "the editor buffer changed since the file was attached"
+			}
+			return ""
+		}
 		col, err := collectSelectedAgentFiles(root, []string{chip.Path}, a.ws.ignored)
 		if err != nil || len(col.Files) == 0 || col.Files[0].Version != chip.Version {
 			return "the file changed since it was attached"
 		}
+	case openCodeChipDiff:
+		cur, err := a.captureOpenCodeDiffChip(root)
+		if err != nil || cur.Version != chip.Version {
+			return "the working tree changed since the diff was attached"
+		}
+	case openCodeChipProblems:
+		return a.openCodeProblemsStale(root, chip)
 	case openCodeChipSelection:
 		if !a.editing || a.edit == nil || a.editPath() != chip.Path {
 			return "the editor no longer shows that file"
@@ -493,7 +702,10 @@ func (a *App) openCodeComposerView(v *openCodePanelView) {
 		if cand.Path != "" {
 			detail = cand.Path
 		}
-		v.Mentions = append(v.Mentions, openCodeMentionRow{Index: i, Label: cand.Label, Detail: detail})
+		if cand.Problem != "" {
+			detail = cand.Path + " " + cand.Info
+		}
+		v.Mentions = append(v.Mentions, openCodeMentionRow{Index: i, Label: cand.Label, Detail: detail, Active: i == c.mentionIndex})
 	}
 	for _, ch := range c.chips {
 		title := ch.Path

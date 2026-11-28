@@ -56,7 +56,7 @@ type stashRow struct {
 
 // paletteExtraCatalog lists the static commands this file owns.
 func paletteExtraCatalog() []paletteRow {
-	return []paletteRow{
+	rows := []paletteRow{
 		{Cmd: paletteCmdTaskPick, Name: "Task: Run Task…", Dir: "Run a Makefile target, npm script or go test in the terminal"},
 		{Cmd: paletteCmdStageHunk, Name: "Git: Stage Hunk at Cursor", Dir: "Stage the highlighted change hunk (Source Control view)"},
 		{Cmd: paletteCmdUnstageHunk, Name: "Git: Unstage Hunk at Cursor", Dir: "Move the highlighted staged hunk back to unstaged"},
@@ -67,6 +67,7 @@ func paletteExtraCatalog() []paletteRow {
 		{Cmd: paletteCmdOpenCodePanel, Name: "OpenCode: Open Session Panel", Dir: "Show saved OpenCode sessions for this workspace"},
 		{Cmd: paletteCmdOpenCodeNew, Name: "OpenCode: New Blank Session", Dir: "Create an empty session in this workspace when connected"},
 	}
+	return append(rows, openCodeActionRows()...)
 }
 
 // paletteCmdChords maps a command id to the keymap action whose chord it

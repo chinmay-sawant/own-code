@@ -61,6 +61,7 @@ func (a *App) addAgentProposal(sessionID string, p agenttools.Proposal) {
 	if a.openCode.agentProposals == nil {
 		a.openCode.agentProposals = map[string][]*openCodeAgentProposal{}
 	}
+	a.recordAgentReview(sessionID, p)
 	list := a.openCode.agentProposals[sessionID]
 	entry := &openCodeAgentProposal{ID: openCodeAgentProposalID(p), Proposal: p}
 	for i, e := range list {
@@ -99,6 +100,7 @@ func (a *App) dropAgentProposal(sid string, i int) {
 	e := list[i]
 	a.openCode.agentProposals[sid] = append(list[:i:i], list[i+1:]...)
 	a.discardStagedProposal(sid, e.Proposal.Path)
+	a.forgetAgentReview(sid, e.Proposal.Path)
 }
 
 // discardStagedProposal removes the staged copy so later edits start from the

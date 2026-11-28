@@ -57,6 +57,8 @@ func (a *App) clearDoubleClick() {
 // onClick routes every control. State changes end in one refresh; the page
 // redraws after the handler returns.
 func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
+	a.dismissOpenCodeMentions(box.ID)
+
 	if a.dismissOpenMenu(box.ID, box.Action) {
 		return nil
 	}
@@ -568,7 +570,7 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.settingsTab = strings.TrimPrefix(action, "settings-tab:")
 		a.resetSettingsScroll()
 		return a.redrawSettings(ctx)
-	case strings.HasPrefix(action, "opencode-panel-") || strings.HasPrefix(action, "opencode-session-") || action == "opencode-context-toggle":
+	case strings.HasPrefix(action, "opencode-panel-") || strings.HasPrefix(action, "opencode-session-"):
 		return a.opencodePanelAction(ctx, action)
 	case strings.HasPrefix(action, "opencode-"):
 		return a.opencodeAction(ctx, action)
@@ -2134,6 +2136,10 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 	}
 
 	if a.popupKeyDown(key) {
+		return a.page.Redraw(ctx)
+	}
+
+	if a.page != nil && a.page.Form().FocusID() == "opencode-prompt" && a.openCodeMentionKey(key) {
 		return a.page.Redraw(ctx)
 	}
 

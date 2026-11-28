@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/chinmay-sawant/own-code/internal/agent"
+	"github.com/chinmay-sawant/own-code/internal/agentreview"
 	"github.com/chinmay-sawant/own-code/internal/agentstore"
 	"github.com/chinmay-sawant/own-code/internal/opencode"
 )
@@ -55,12 +56,13 @@ type openCodeRuntime struct {
 	sessions                   []opencode.Session
 	selectedSessionID          string
 	messages                   []openCodeTranscriptMessage
-	includeSelection           bool
 	composer                   openCodeComposer
 	reviewable                 bool
 	proposals                  []openCodeProposalFile
 	// agentProposals holds pending write_file/edit_file proposals per session.
 	agentProposals map[string][]*openCodeAgentProposal
+	// agentReview holds per-hunk accept/reject state per session and file.
+	agentReview *agentreview.Registry
 	// runs holds one run context per local session, keyed by session ID.
 	// Cancellation and event routing never cross sessions.
 	runs         map[string]*openCodeRun

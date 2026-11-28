@@ -22,7 +22,7 @@ func (a *App) runExtraPaletteCommand(ctx context.Context, id string) (bool, erro
 	case id == paletteCmdComparePick:
 		return true, a.setPaletteQuery(ctx, ">compare ")
 	case id == paletteCmdStageHunk, id == paletteCmdUnstageHunk, id == paletteCmdStashPush, id == paletteCmdLSPToggle,
-		id == paletteCmdOpenCodePanel, id == paletteCmdOpenCodeNew,
+		id == paletteCmdOpenCodePanel, id == paletteCmdOpenCodeNew, strings.HasPrefix(id, paletteCmdOCActionPrefix),
 		strings.HasPrefix(id, paletteCmdTaskPrefix), strings.HasPrefix(id, paletteCmdStashApplyPfx),
 		strings.HasPrefix(id, paletteCmdComparePfx):
 		owned = true
@@ -68,6 +68,10 @@ func (a *App) runExtraPaletteCommand(ctx context.Context, id string) (bool, erro
 			return true, err
 		}
 		if err := a.opencodePanelAction(ctx, paletteCmdOpenCodeNew); err != nil {
+			return true, err
+		}
+	case strings.HasPrefix(id, paletteCmdOCActionPrefix):
+		if err := a.runOpenCodeAction(ctx, id); err != nil {
 			return true, err
 		}
 	case strings.HasPrefix(id, paletteCmdTaskPrefix):
