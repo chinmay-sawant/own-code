@@ -77,7 +77,7 @@ func (t ModelTarget) endpointFor(stream bool) (string, error) {
 	}
 	host := u.Hostname()
 	loopback := host == "localhost" || host == "127.0.0.1" || host == "::1"
-	if u.Scheme != "https" && !(u.Scheme == "http" && loopback) {
+	if u.Scheme != "https" && (u.Scheme != "http" || !loopback) {
 		return "", errors.New("model base_url must use https")
 	}
 	u.RawQuery, u.Fragment = "", ""

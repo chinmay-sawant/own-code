@@ -64,7 +64,7 @@ func TestOfflineRestoreAndResume(t *testing.T) {
 	closed := false
 	t.Cleanup(func() {
 		if !closed {
-			store.Close()
+			_ = store.Close()
 		}
 	})
 	const sid = "restore-1"
@@ -115,7 +115,7 @@ func TestOfflineRestoreAndResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer store2.Close()
+	defer func() { _ = store2.Close() }()
 	if rep, err := store2.RecoverInterrupted(ctx, time.Now()); err != nil || rep.CallsUnknown != 1 {
 		t.Fatalf("recovery = %+v, %v", rep, err)
 	}

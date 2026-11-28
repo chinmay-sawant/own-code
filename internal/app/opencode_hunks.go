@@ -177,12 +177,12 @@ func (a *App) commitAgentHunkText(root, abs, rel, cur, next string, inBuffer boo
 	_, werr := tmp.WriteString(next)
 	cerr := tmp.Close()
 	if werr != nil || cerr != nil {
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 		return errors.Join(werr, cerr)
 	}
 	_ = os.Chmod(tmp.Name(), mode)
 	if err := os.Rename(tmp.Name(), abs); err != nil {
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 		return err
 	}
 	if a.ws != nil {

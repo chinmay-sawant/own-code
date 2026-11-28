@@ -211,7 +211,7 @@ func (c *Client) run(ctx context.Context, req Request, stream bool, emit func(Ev
 	if err != nil {
 		return classify(err, ErrKindTransport, "inference request failed: "+c.redact(errString(err)))
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fail(c.httpError(resp))
 	}

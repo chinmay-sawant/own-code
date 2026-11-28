@@ -4,10 +4,6 @@ import (
 	"encoding/json"
 )
 
-type integrationListResponse struct {
-	Data []Integration `json:"data"`
-}
-
 // Integration describes an available server-side authentication integration.
 type Integration struct {
 	ID          string              `json:"id"`
@@ -49,12 +45,6 @@ type ConnectKeyInput struct {
 
 func (ConnectKeyInput) String() string         { return "ConnectKeyInput{key:[redacted]}" }
 func (input ConnectKeyInput) GoString() string { return input.String() }
-
-type connectKeyRequest struct {
-	Key    string          `json:"key"`
-	Answer json.RawMessage `json:"answer,omitempty"`
-	Label  *string         `json:"label,omitempty"`
-}
 
 // Session is the subset of Session.Info needed by the workbench. Unknown
 // session fields are ignored so server additions do not break this client.

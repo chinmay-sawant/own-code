@@ -241,7 +241,7 @@ func (s *Store) CreateSession(ctx context.Context, session Session) (Session, er
 	if err != nil {
 		return Session{}, fmt.Errorf("agent store: begin session transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	existing, err := scanSession(tx.QueryRowContext(ctx, sessionSelect+` WHERE id = ?`, session.ID))
 	if errors.Is(err, ErrNotFound) && session.ServerID != "" && session.OpenCodeSessionID != "" {
@@ -306,7 +306,7 @@ func (s *Store) UpdateSessionMetadata(ctx context.Context, session Session) (Ses
 	if err != nil {
 		return Session{}, fmt.Errorf("agent store: begin session metadata update: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	result, err := tx.ExecContext(ctx, `
 		UPDATE agent_sessions
 		SET title = CASE WHEN ? = '' THEN title ELSE ? END,
@@ -369,7 +369,7 @@ func (s *Store) ListSessions(ctx context.Context, workspaceRoot string, opts ...
 	if err != nil {
 		return nil, fmt.Errorf("agent store: list sessions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var sessions []Session
 	for rows.Next() {
@@ -417,7 +417,7 @@ func (s *Store) ListMessages(ctx context.Context, sessionID string) ([]Message, 
 	if err != nil {
 		return nil, fmt.Errorf("agent store: list messages: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var messages []Message
 	for rows.Next() {
 		var message Message
@@ -469,7 +469,7 @@ func (s *Store) ListToolActivity(ctx context.Context, sessionID string) ([]ToolA
 	if err != nil {
 		return nil, fmt.Errorf("agent store: list tool activity: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var activities []ToolActivity
 	for rows.Next() {
 		var activity ToolActivity
@@ -505,7 +505,7 @@ func (s *Store) SaveCheckpoint(ctx context.Context, checkpoint Checkpoint) error
 	if err != nil {
 		return fmt.Errorf("agent store: begin checkpoint transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO event_checkpoints (session_id, sequence, updated_at)
 		VALUES (?, ?, ?)
@@ -710,7 +710,7 @@ func (s *Store) ArchiveSession(ctx context.Context, sessionID string, archived b
 	if err != nil {
 		return fmt.Errorf("agent store: begin archive: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var status string
 	var current sql.NullInt64
 	if err := tx.QueryRowContext(ctx, `SELECT status, archived_at FROM agent_sessions WHERE id = ?`, sessionID).Scan(&status, &current); err != nil {

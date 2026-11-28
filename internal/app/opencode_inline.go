@@ -154,17 +154,17 @@ func matchInlineEnds(original, replacement string) string {
 // buildInlinePatch converts a model reply into a patch against the snapshot.
 func buildInlinePatch(snap agentContextSnapshot, reply string) (*openCodeInlinePatch, error) {
 	if len(reply) > openCodeInlineMaxReply {
-		return nil, errors.New("The reply is too large for an inline edit. Use the workspace review flow for large changes.")
+		return nil, errors.New("the reply is too large for an inline edit; use the workspace review flow for large changes")
 	}
 	repl := matchInlineEnds(snap.SelectionText, extractInlineReplacement(reply))
 	if strings.TrimSpace(repl) == "" {
-		return nil, errors.New("The model returned no replacement text.")
+		return nil, errors.New("the model returned no replacement text")
 	}
 	if repl == snap.SelectionText {
-		return nil, errors.New("The model proposed no change.")
+		return nil, errors.New("the model proposed no change")
 	}
 	if !utf8.ValidString(repl) {
-		return nil, errors.New("The replacement is not valid UTF-8.")
+		return nil, errors.New("the replacement is not valid UTF-8")
 	}
 	return &openCodeInlinePatch{
 		Path: snap.RelativePath, BaseVersion: snap.Version,

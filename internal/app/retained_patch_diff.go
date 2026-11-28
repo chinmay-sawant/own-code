@@ -342,11 +342,12 @@ func renderDiffRowsHTML(v View) string {
 			b.WriteString(html.EscapeString(row.NewNo))
 			b.WriteString(`</span><span class="dsign">`)
 			if !row.Cont {
-				if row.Kind == "add" {
+				switch row.Kind {
+				case "add":
 					b.WriteByte('+')
-				} else if row.Kind == "del" {
+				case "del":
 					b.WriteString("−")
-				} else {
+				default:
 					b.WriteByte(' ')
 				}
 			}

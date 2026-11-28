@@ -30,13 +30,25 @@ func TestAdversarialMapPathSymlinks(t *testing.T) {
 		t.Skip("symlinks need privileges on windows")
 	}
 	root, outside := t.TempDir(), t.TempDir()
-	os.WriteFile(filepath.Join(outside, "s"), []byte("x"), 0o600)
-	os.Symlink(outside, filepath.Join(root, "dir"))
-	os.Symlink(filepath.Join(outside, "s"), filepath.Join(root, "file"))
-	os.Mkdir(filepath.Join(root, "real"), 0o755)
-	os.Symlink(outside, filepath.Join(root, "real", "up"))
+	if err := os.WriteFile(filepath.Join(outside, "s"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "dir")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "s"), filepath.Join(root, "file")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "real"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "real", "up")); err != nil {
+		t.Fatal(err)
+	}
 	// Dangling link: target does not exist but the link itself is refused.
-	os.Symlink(filepath.Join(outside, "missing"), filepath.Join(root, "dangling"))
+	if err := os.Symlink(filepath.Join(outside, "missing"), filepath.Join(root, "dangling")); err != nil {
+		t.Fatal(err)
+	}
 	for _, p := range []string{"dir/s", "dir/new", "file", "real/up/s", "dangling"} {
 		if _, _, err := MapPath(root, p); !errors.Is(err, ErrOutside) {
 			t.Errorf("MapPath(%q) err = %v, want ErrOutside", p, err)

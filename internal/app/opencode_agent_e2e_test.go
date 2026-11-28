@@ -124,7 +124,7 @@ func TestOpenCodeAgentE2EProposalsAndRecovery(t *testing.T) {
 	closed := false
 	t.Cleanup(func() {
 		if !closed {
-			store.Close()
+			_ = store.Close()
 		}
 	})
 	const sid = "local-e2e"
@@ -217,7 +217,7 @@ func TestOpenCodeAgentE2EProposalsAndRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer store2.Close()
+	defer func() { _ = store2.Close() }()
 	report, err := store2.RecoverInterrupted(ctx, time.Now())
 	if err != nil || report.CallsUnknown != 1 {
 		t.Fatalf("recovery = %+v, %v", report, err)
@@ -282,7 +282,9 @@ func TestOpenCodeAgentProposalAcceptRefusalsAndReject(t *testing.T) {
 	repo := t.TempDir()
 	e2eGit(t, repo, "init", "-q")
 	for _, f := range []string{"a.txt", "b.txt", "d.txt"} {
-		os.WriteFile(filepath.Join(repo, f), []byte("base\n"), 0o644)
+		if err := os.WriteFile(filepath.Join(repo, f), []byte("base\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	e2eGit(t, repo, "add", ".")
 	e2eGit(t, repo, "commit", "-q", "-m", "init")
@@ -303,15 +305,21 @@ func TestOpenCodeAgentProposalAcceptRefusalsAndReject(t *testing.T) {
 	// Unstaged user change: refused and preserved.
 	pb := e2eProposal(t, repo, "b.txt", "agent\n")
 	a.addAgentProposal("s1", pb)
-	os.WriteFile(filepath.Join(repo, "b.txt"), []byte("mine\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(repo, "b.txt"), []byte("mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	_ = a.acceptOpenCodeProposal(openCodeAgentProposalID(pb))
 	if read("b.txt") != "mine\n" || !strings.Contains(a.openCode.panelStatus, "Refused") {
 		t.Fatalf("unstaged change clobbered: %q %q", read("b.txt"), a.openCode.panelStatus)
 	}
 	// Staged-only change (worktree restored to HEAD content) is also refused.
-	os.WriteFile(filepath.Join(repo, "b.txt"), []byte("staged\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(repo, "b.txt"), []byte("staged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	e2eGit(t, repo, "add", "b.txt")
-	os.WriteFile(filepath.Join(repo, "b.txt"), []byte("base\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(repo, "b.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	_ = a.acceptOpenCodeProposal(openCodeAgentProposalID(pb))
 	if read("b.txt") != "base\n" || !strings.Contains(a.openCode.panelStatus, "Refused") {
 		t.Fatalf("staged change not refused: %q", a.openCode.panelStatus)
@@ -341,8 +349,12 @@ func e2eWholeProposal(t *testing.T, repo, tool string, args map[string]string) a
 			continue
 		}
 		if src, err := os.ReadFile(filepath.Join(repo, rel)); err == nil {
-			os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755)
-			os.WriteFile(filepath.Join(root, rel), src, 0o644)
+			if err := os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, rel), src, 0o644); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	var got agenttools.Proposal
@@ -366,7 +378,9 @@ func TestOpenCodeAgentDeleteAndRenameProposals(t *testing.T) {
 	repo := t.TempDir()
 	e2eGit(t, repo, "init", "-q")
 	for _, f := range []string{"a.txt", "b.txt", "c.txt", "d.txt", "e.txt"} {
-		os.WriteFile(filepath.Join(repo, f), []byte("base\n"), 0o644)
+		if err := os.WriteFile(filepath.Join(repo, f), []byte("base\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	e2eGit(t, repo, "add", ".")
 	e2eGit(t, repo, "commit", "-q", "-m", "init")
@@ -390,9 +404,13 @@ func TestOpenCodeAgentDeleteAndRenameProposals(t *testing.T) {
 		t.Fatalf("dirty not refused: %q", a.openCode.panelStatus)
 	}
 	delete(a.dirty, "a.txt")
-	os.WriteFile(filepath.Join(repo, "a.txt"), []byte("staged\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(repo, "a.txt"), []byte("staged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	e2eGit(t, repo, "add", "a.txt")
-	os.WriteFile(filepath.Join(repo, "a.txt"), []byte("base\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(repo, "a.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	_ = a.acceptOpenCodeProposal(openCodeAgentProposalID(pa))
 	if !exists("a.txt") || !strings.Contains(a.openCode.panelStatus, "Refused") {
 		t.Fatalf("staged not refused: %q", a.openCode.panelStatus)
@@ -425,7 +443,9 @@ func TestOpenCodeAgentDeleteAndRenameProposals(t *testing.T) {
 	pc := e2eWholeProposal(t, repo, agenttools.ToolDeleteFile, map[string]string{"path": "c.txt"})
 	a.addAgentProposal("s1", pc)
 	e2eGit(t, repo, "add", "c.txt")
-	os.WriteFile(filepath.Join(repo, "c.txt"), []byte("other\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(repo, "c.txt"), []byte("other\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	e2eGit(t, repo, "add", "c.txt")
 	e2eGit(t, repo, "commit", "-q", "-m", "c")
 	_ = a.acceptOpenCodeProposal(openCodeAgentProposalID(pc))
@@ -436,7 +456,9 @@ func TestOpenCodeAgentDeleteAndRenameProposals(t *testing.T) {
 	// Rename: collision refused (untracked destination), then clean accept.
 	pd := e2eWholeProposal(t, repo, agenttools.ToolMoveFile, map[string]string{"from": "d.txt", "to": "moved.txt"})
 	a.addAgentProposal("s1", pd)
-	os.WriteFile(filepath.Join(repo, "moved.txt"), []byte("mine\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(repo, "moved.txt"), []byte("mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	_ = a.acceptOpenCodeProposal(openCodeAgentProposalID(pd))
 	if !exists("d.txt") || !strings.Contains(a.openCode.panelStatus, "Refused") {
 		t.Fatalf("collision not refused: %q", a.openCode.panelStatus)
@@ -444,7 +466,9 @@ func TestOpenCodeAgentDeleteAndRenameProposals(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(repo, "moved.txt")); string(b) != "mine\n" {
 		t.Fatal("destination clobbered")
 	}
-	os.Remove(filepath.Join(repo, "moved.txt"))
+	if err := os.Remove(filepath.Join(repo, "moved.txt")); err != nil {
+		t.Fatal(err)
+	}
 	// Dirty source buffer refuses a rename too.
 	a.dirty["d.txt"] = true
 	_ = a.acceptOpenCodeProposal(openCodeAgentProposalID(pd))
@@ -459,10 +483,14 @@ func TestOpenCodeAgentDeleteAndRenameProposals(t *testing.T) {
 
 	// Symlink target: refused, outside file survives.
 	outside := filepath.Join(t.TempDir(), "secret")
-	os.WriteFile(outside, []byte("s\n"), 0o644)
+	if err := os.WriteFile(outside, []byte("s\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	pe := e2eWholeProposal(t, repo, agenttools.ToolDeleteFile, map[string]string{"path": "e.txt"})
 	a.addAgentProposal("s1", pe)
-	os.Remove(filepath.Join(repo, "e.txt"))
+	if err := os.Remove(filepath.Join(repo, "e.txt")); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Symlink(outside, filepath.Join(repo, "e.txt")); err == nil {
 		a.openCode.panelStatus = ""
 		_ = a.acceptOpenCodeProposal(openCodeAgentProposalID(pe))

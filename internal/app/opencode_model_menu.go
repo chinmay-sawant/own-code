@@ -151,7 +151,7 @@ func sameOpenCodeModelGroups(a, b []openCodeModelGroupRow) bool {
 // lands outside them. Their own toggles, rows, and anything geometrically
 // inside an open menu are left to the normal action handlers.
 func (a *App) dismissOpenCodeDropdowns(box ownframe.Box) {
-	if a == nil || a.page == nil || !(a.openCode.historyOpen || a.openCode.modelMenuOpen) {
+	if a == nil || a.page == nil || (!a.openCode.historyOpen && !a.openCode.modelMenuOpen) {
 		return
 	}
 	if box.ID == openCodeModelRailID || box.ID == openCodeModelThumbID ||
@@ -403,18 +403,6 @@ func (a *App) openCodeMenuMetrics() bool {
 		}
 	}
 	return changed
-}
-
-func measureOpenCodeMenu(boxes []ownframe.Box, viewportID, innerID string, s *openCodeTranscriptScroll) bool {
-	vp, ok := findBoxID(boxes, viewportID)
-	if !ok {
-		return false
-	}
-	inner, ok := findBoxID(boxes, innerID)
-	if !ok {
-		return false
-	}
-	return s.measure(int(vp.H), int(inner.H))
 }
 
 // openCodeMenuWheel scrolls an open dropdown when the wheel lands on it.

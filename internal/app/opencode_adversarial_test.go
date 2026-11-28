@@ -53,10 +53,16 @@ func TestAdversarialCollectSelectedFilesExcludesUnsafe(t *testing.T) {
 	write("ignored/a.go", "LEAK6")
 	write(".git/config", "LEAK7")
 	write("sub/.git/config", "LEAK8")
-	os.WriteFile(filepath.Join(outside, "s.txt"), []byte("LEAK9"), 0o600)
+	if err := os.WriteFile(filepath.Join(outside, "s.txt"), []byte("LEAK9"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if runtime.GOOS != "windows" {
-		os.Symlink(outside, filepath.Join(root, "linkdir"))
-		os.Symlink(filepath.Join(outside, "s.txt"), filepath.Join(root, "linkfile"))
+		if err := os.Symlink(outside, filepath.Join(root, "linkdir")); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(outside, "s.txt"), filepath.Join(root, "linkfile")); err != nil {
+			t.Fatal(err)
+		}
 	}
 	selected := []string{
 		"ok.go", ".env", ".env.local", "keys/id_rsa", "tls/cert.pem", "config/credentials.json", "ignored/a.go",
@@ -89,7 +95,9 @@ func TestAdversarialCollectSelectedFilesExcludesUnsafe(t *testing.T) {
 
 func TestAdversarialCaptureContextRejectsSensitiveAndEscapes(t *testing.T) {
 	root := t.TempDir()
-	os.WriteFile(filepath.Join(root, ".env"), []byte("A=1"), 0o600)
+	if err := os.WriteFile(filepath.Join(root, ".env"), []byte("A=1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	for _, p := range []string{".env", "../x", "/etc/passwd", ".git/config", `..\x`, "a\x00b"} {
 		if _, err := captureAgentContext(root, p, "A=1", 0, 0); err == nil {
 			t.Errorf("captureAgentContext(%q) accepted", p)

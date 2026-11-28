@@ -69,7 +69,9 @@ func TestDeleteSymlinkAndOutsideRefused(t *testing.T) {
 	r, root, _ := newPropReg(t)
 	outside := t.TempDir()
 	writeF(t, filepath.Join(outside, "secret"), "s\n")
-	os.Symlink(filepath.Join(outside, "secret"), filepath.Join(root, "link"))
+	if err := os.Symlink(filepath.Join(outside, "secret"), filepath.Join(root, "link")); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := runProposal(t, r, ToolDeleteFile, map[string]any{"path": "link"}); !errors.Is(err, ErrOutside) {
 		t.Fatalf("symlink delete err = %v", err)
 	}
@@ -79,8 +81,12 @@ func TestDeleteSymlinkAndOutsideRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	os.Remove(filepath.Join(root, "real.txt"))
-	os.Symlink(filepath.Join(outside, "secret"), filepath.Join(root, "real.txt"))
+	if err := os.Remove(filepath.Join(root, "real.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "secret"), filepath.Join(root, "real.txt")); err != nil {
+		t.Fatal(err)
+	}
 	if err := ApplyProposal(*out.Proposal, root); !errors.Is(err, ErrOutside) {
 		t.Fatalf("apply onto symlink err = %v", err)
 	}

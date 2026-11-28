@@ -160,12 +160,12 @@ func openCodeWorktreeCommonDir(ctx context.Context, manager *openCodeWorktreeMan
 func singleGitPathOutput(output []byte) (string, error) {
 	value := string(output)
 	if !strings.HasSuffix(value, "\n") || strings.Count(value, "\n") != 1 {
-		return "", errors.New("Git returned an invalid path")
+		return "", errors.New("git returned an invalid path")
 	}
 	value = strings.TrimSuffix(value, "\n")
 	value = strings.TrimSuffix(value, "\r")
 	if strings.TrimSpace(value) == "" || strings.ContainsRune(value, 0) {
-		return "", errors.New("Git returned an invalid path")
+		return "", errors.New("git returned an invalid path")
 	}
 	return value, nil
 }

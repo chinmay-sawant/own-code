@@ -243,9 +243,15 @@ func TestInvalidInputRejectedBeforeExecutor(t *testing.T) {
 
 func TestFilesystemTools(t *testing.T) {
 	r, root := newReg(t)
-	os.MkdirAll(filepath.Join(root, "sub"), 0o755)
-	os.WriteFile(filepath.Join(root, "sub", "a.txt"), []byte("hello\nneedle here\n"), 0o644)
-	os.WriteFile(filepath.Join(root, "big.txt"), []byte(strings.Repeat("x", maxReadBytes+10)), 0o644)
+	if err := os.MkdirAll(filepath.Join(root, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sub", "a.txt"), []byte("hello\nneedle here\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "big.txt"), []byte(strings.Repeat("x", maxReadBytes+10)), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	ctx := context.Background()
 	run := func(tool, args string) (Output, error) {
 		p, err := r.Prepare(tool, json.RawMessage(args))
@@ -274,7 +280,9 @@ func TestFilesystemTools(t *testing.T) {
 func TestSymlinkEscapeRejectedAtExecution(t *testing.T) {
 	r, root := newReg(t)
 	outside := t.TempDir()
-	os.WriteFile(filepath.Join(outside, "secret"), []byte("top secret"), 0o644)
+	if err := os.WriteFile(filepath.Join(outside, "secret"), []byte("top secret"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	// Link created AFTER Prepare passes lexical checks: recheck at execution.
 	p, err := r.Prepare(ToolReadFile, json.RawMessage(`{"path":"link/secret"}`))
 	if err != nil {
@@ -286,7 +294,9 @@ func TestSymlinkEscapeRejectedAtExecution(t *testing.T) {
 	if _, err := p.Execute(context.Background(), nil); !errors.Is(err, ErrOutside) {
 		t.Fatalf("expected ErrOutside, got %v", err)
 	}
-	os.Symlink(filepath.Join(outside, "secret"), filepath.Join(root, "flink"))
+	if err := os.Symlink(filepath.Join(outside, "secret"), filepath.Join(root, "flink")); err != nil {
+		t.Fatal(err)
+	}
 	p, _ = r.Prepare(ToolReadFile, json.RawMessage(`{"path":"flink"}`))
 	if _, err := p.Execute(context.Background(), nil); !errors.Is(err, ErrOutside) {
 		t.Fatalf("file link: %v", err)

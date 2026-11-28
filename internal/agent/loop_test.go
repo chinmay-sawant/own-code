@@ -107,7 +107,6 @@ type fakeApprover struct {
 	err   error
 	tweak func(*ToolApproval)
 	calls atomic.Int32
-	store *agentstore.Store
 	check func(req ApprovalRequest)
 }
 
@@ -141,7 +140,7 @@ func newEnv(t *testing.T, mutate func(*Config)) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { store.Close() })
+	t.Cleanup(func() { _ = store.Close() })
 	e := &env{store: store, prov: &scriptProvider{script: map[string][]Result{}}, reg: &fakeRegistry{needsApproval: true}, appr: &fakeApprover{grant: true}}
 	cfg := Config{Store: store, Provider: e.prov, Tools: e.reg, Approver: e.appr, MaxSteps: 5}
 	if mutate != nil {
@@ -611,7 +610,7 @@ func TestTurnIDReuseAndBusySession(t *testing.T) {
 	e.prov.started = make(chan string, 2)
 	done := make(chan struct{})
 	go func() {
-		e.run.Run(context.Background(), RunInput{SessionID: "s1", TurnID: "t2", UserText: "x"})
+		_, _ = e.run.Run(context.Background(), RunInput{SessionID: "s1", TurnID: "t2", UserText: "x"})
 		close(done)
 	}()
 	<-e.prov.started

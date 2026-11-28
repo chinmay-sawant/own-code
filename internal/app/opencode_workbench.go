@@ -81,9 +81,9 @@ type openCodeRuntime struct {
 	lastStreamPaint time.Time
 	streamDirty     bool
 	retryText       string
-	recoveryNote string
-	testProvider agent.Provider
-	inline       *openCodeInline
+	recoveryNote    string
+	testProvider    agent.Provider
+	inline          *openCodeInline
 	// scroll is the transcript scroll model (follow only while at the end).
 	scroll openCodeTranscriptScroll
 	// allSessions are the stored rows from every workspace, used for session

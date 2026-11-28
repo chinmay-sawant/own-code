@@ -89,10 +89,3 @@ func sameWorkspacePath(left, right string) bool {
 	}
 	return filepath.Clean(left) == filepath.Clean(right)
 }
-
-func contextError(ctx context.Context) error {
-	if ctx == nil {
-		return errors.New("context is required")
-	}
-	return ctx.Err()
-}

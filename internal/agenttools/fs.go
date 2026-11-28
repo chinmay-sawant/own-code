@@ -150,7 +150,7 @@ func readFileTool() tool {
 				if err != nil {
 					return Output{}, err
 				}
-				defer f.Close()
+				defer func() { _ = f.Close() }()
 				st, err := f.Stat()
 				if err != nil {
 					return Output{}, err
@@ -230,7 +230,7 @@ func listFilesTool() tool {
 				for i, e := range ents {
 					if i >= maxListEntries {
 						trunc = true
-						sb.WriteString(fmt.Sprintf("[truncated: more than %d entries]\n", maxListEntries))
+						fmt.Fprintf(&sb, "[truncated: more than %d entries]\n", maxListEntries)
 						break
 					}
 					name := e.Name()
@@ -324,7 +324,7 @@ func searchFilesTool() tool {
 							if len(line) > 300 {
 								line = line[:300] + "..."
 							}
-							sb.WriteString(fmt.Sprintf("%s:%d: %s\n", filepath.ToSlash(relp), i+1, strings.TrimRight(line, "\r")))
+							fmt.Fprintf(&sb, "%s:%d: %s\n", filepath.ToSlash(relp), i+1, strings.TrimRight(line, "\r"))
 							n++
 						}
 					}
@@ -334,7 +334,7 @@ func searchFilesTool() tool {
 					return Output{}, walkErr
 				}
 				if trunc {
-					sb.WriteString(fmt.Sprintf("[truncated: more than %d matches]\n", maxSearchResults))
+					fmt.Fprintf(&sb, "[truncated: more than %d matches]\n", maxSearchResults)
 				}
 				return Output{Text: sb.String(), Truncated: trunc, Duration: time.Since(start)}, nil
 			}

@@ -32,13 +32,13 @@ func migrate(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 		return fmt.Errorf("agent store: disable foreign keys for migration: %w", err)
 	}
-	defer db.ExecContext(context.WithoutCancel(ctx), `PRAGMA foreign_keys = ON`)
+	defer func() { _, _ = db.ExecContext(context.WithoutCancel(ctx), `PRAGMA foreign_keys = ON`) }()
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("agent store: begin migration: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 		version INTEGER PRIMARY KEY,
 		applied_at INTEGER NOT NULL
@@ -304,7 +304,7 @@ func applySchemaV5(ctx context.Context, tx *sql.Tx) error {
 	if err != nil {
 		return fmt.Errorf("agent store: verify schema v5 foreign keys: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	if rows.Next() {
 		return errors.New("agent store: schema v5 migration left dangling foreign keys")
 	}

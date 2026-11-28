@@ -69,7 +69,7 @@ func TestMigrationFromV3PreservesLegacyTranscript(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open() on v3 database error = %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	sessions, err := store.ListSessions(ctx, "/work")
 	if err != nil || len(sessions) != 1 {

@@ -113,12 +113,12 @@ func (m *openCodeWorktreeManager) Create(ctx context.Context, workspaceRoot stri
 	}
 	gitRootText := string(gitRootOutput)
 	if !strings.HasSuffix(gitRootText, "\n") || strings.Count(gitRootText, "\n") != 1 {
-		return nil, errors.New("Git returned an invalid worktree root")
+		return nil, errors.New("git returned an invalid worktree root")
 	}
 	gitRootText = strings.TrimSuffix(gitRootText, "\n")
 	gitRootText = strings.TrimSuffix(gitRootText, "\r")
 	if strings.TrimSpace(gitRootText) == "" {
-		return nil, errors.New("Git returned an invalid worktree root")
+		return nil, errors.New("git returned an invalid worktree root")
 	}
 	gitRoot, err := filepath.EvalSymlinks(gitRootText)
 	if err != nil {
@@ -146,7 +146,7 @@ func (m *openCodeWorktreeManager) Create(ctx context.Context, workspaceRoot stri
 	}
 	commit := strings.TrimSpace(string(head))
 	if commit == "" || strings.ContainsAny(commit, "\r\n") {
-		return nil, errors.New("Git did not return a valid committed revision")
+		return nil, errors.New("git did not return a valid committed revision")
 	}
 	name, err := randomWorktreeName()
 	if err != nil {
@@ -369,7 +369,7 @@ func (m *openCodeWorktreeManager) gitOutput(ctx context.Context, directory strin
 		return nil, err
 	}
 	if stdout.truncated {
-		return nil, errors.New("Git worktree command output exceeds its limit")
+		return nil, errors.New("git worktree command output exceeds its limit")
 	}
 	return stdout.data, nil
 }

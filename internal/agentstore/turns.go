@@ -213,13 +213,6 @@ func millis(t time.Time) int64 {
 	return t.UnixMilli()
 }
 
-func nullMillis(t time.Time) any {
-	if t.IsZero() {
-		return nil
-	}
-	return t.UnixMilli()
-}
-
 // BeginTurn records a new running turn. Repeating the call for the same turn
 // ID returns the stored row unchanged.
 func (s *Store) BeginTurn(ctx context.Context, turn Turn) (Turn, error) {
@@ -236,7 +229,7 @@ func (s *Store) BeginTurn(ctx context.Context, turn Turn) (Turn, error) {
 	if err != nil {
 		return Turn{}, fmt.Errorf("agent store: begin turn: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var archivedAt sql.NullInt64
 	var legacy int
 	if err := tx.QueryRowContext(ctx, `SELECT archived_at, legacy FROM agent_sessions WHERE id = ?`, turn.SessionID).Scan(&archivedAt, &legacy); err != nil {
@@ -292,7 +285,7 @@ func (s *Store) FinishTurn(ctx context.Context, sessionID, turnID string, status
 	if err != nil {
 		return fmt.Errorf("agent store: begin finish turn: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var current TurnStatus
 	if err := tx.QueryRowContext(ctx, `SELECT status FROM agent_turns WHERE session_id = ? AND id = ?`, sessionID, turnID).Scan(&current); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -322,7 +315,7 @@ func (s *Store) ListTurns(ctx context.Context, sessionID string) ([]Turn, error)
 	if err != nil {
 		return nil, fmt.Errorf("agent store: list turns: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var turns []Turn
 	for rows.Next() {
 		turn, err := scanTurn(rows)
@@ -372,7 +365,7 @@ func (s *Store) SaveTurnMessage(ctx context.Context, message TurnMessage) error 
 	if err != nil {
 		return fmt.Errorf("agent store: begin message: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	ordinal, err := nextOrdinal(ctx, tx, `SELECT COALESCE(MAX(ordinal) + 1, 0) FROM agent_messages WHERE session_id = ?`, message.SessionID)
 	if err != nil {
 		return fmt.Errorf("agent store: allocate message ordinal: %w", err)
@@ -420,7 +413,7 @@ func (s *Store) SaveMessagePart(ctx context.Context, part MessagePart) error {
 	if err != nil {
 		return fmt.Errorf("agent store: begin part: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if err := requireMessage(ctx, tx, part.SessionID, part.MessageID); err != nil {
 		return err
 	}
@@ -509,7 +502,7 @@ func (s *Store) ReplaceMessageTextParts(ctx context.Context, sessionID, messageI
 	if err != nil {
 		return fmt.Errorf("agent store: begin text-part replacement: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if err := requireMessage(ctx, tx, sessionID, messageID); err != nil {
 		return err
 	}
@@ -551,16 +544,16 @@ func syncBody(ctx context.Context, tx *sql.Tx, sessionID, messageID string) erro
 	for rows.Next() {
 		var text string
 		if err := rows.Scan(&text); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return fmt.Errorf("agent store: scan message text: %w", err)
 		}
 		body.WriteString(text)
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
+		_ = rows.Close()
 		return err
 	}
-	rows.Close()
+	_ = rows.Close()
 	if _, err := tx.ExecContext(ctx, `UPDATE agent_messages SET body = ? WHERE session_id = ? AND id = ?`,
 		bounded(body.String(), maxMessageBytes), sessionID, messageID); err != nil {
 		return fmt.Errorf("agent store: update message body: %w", err)
@@ -613,7 +606,7 @@ func (s *Store) SaveToolCall(ctx context.Context, call ToolCall) (ToolCall, erro
 	if err != nil {
 		return ToolCall{}, fmt.Errorf("agent store: begin tool call: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if err := requireMessage(ctx, tx, call.SessionID, call.MessageID); err != nil {
 		return ToolCall{}, err
 	}
@@ -711,7 +704,7 @@ func (s *Store) ListCallsNeedingInspection(ctx context.Context, sessionID string
 	if err != nil {
 		return nil, fmt.Errorf("agent store: list calls needing inspection: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []ToolCall
 	for rows.Next() {
 		call, err := scanToolCall(rows)
@@ -768,7 +761,7 @@ func (s *Store) updateToolCall(ctx context.Context, sessionID, callID string, de
 	if err != nil {
 		return fmt.Errorf("agent store: begin tool call update: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	call, err := scanToolCall(tx.QueryRowContext(ctx, toolCallSelect+` WHERE session_id = ? AND id = ?`, sessionID, callID))
 	if err != nil {
 		return err
@@ -828,7 +821,7 @@ func (s *Store) LoadHistory(ctx context.Context, sessionID string) ([]HistoryMes
 	if err != nil {
 		return nil, fmt.Errorf("agent store: begin history read: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	callRows, err := tx.QueryContext(ctx, toolCallSelect+` WHERE session_id = ?`, sessionID)
 	if err != nil {
@@ -838,7 +831,7 @@ func (s *Store) LoadHistory(ctx context.Context, sessionID string) ([]HistoryMes
 	for callRows.Next() {
 		call, err := scanToolCall(callRows)
 		if err != nil {
-			callRows.Close()
+			_ = callRows.Close()
 			return nil, fmt.Errorf("agent store: scan tool call: %w", err)
 		}
 		if call.Result == "" && call.Status.Terminal() {
@@ -847,10 +840,10 @@ func (s *Store) LoadHistory(ctx context.Context, sessionID string) ([]HistoryMes
 		calls[call.ID] = &call
 	}
 	if err := callRows.Err(); err != nil {
-		callRows.Close()
+		_ = callRows.Close()
 		return nil, err
 	}
-	callRows.Close()
+	_ = callRows.Close()
 
 	messageRows, err := tx.QueryContext(ctx, `SELECT id, turn_id, role, body, created_at FROM agent_messages WHERE session_id = ? ORDER BY ordinal, id`, sessionID)
 	if err != nil {
@@ -864,7 +857,7 @@ func (s *Store) LoadHistory(ctx context.Context, sessionID string) ([]HistoryMes
 		var body string
 		var created int64
 		if err := messageRows.Scan(&message.ID, &message.TurnID, &message.Role, &body, &created); err != nil {
-			messageRows.Close()
+			_ = messageRows.Close()
 			return nil, fmt.Errorf("agent store: scan message: %w", err)
 		}
 		message.CreatedAt = time.UnixMilli(created).UTC()
@@ -873,10 +866,10 @@ func (s *Store) LoadHistory(ctx context.Context, sessionID string) ([]HistoryMes
 		history = append(history, message)
 	}
 	if err := messageRows.Err(); err != nil {
-		messageRows.Close()
+		_ = messageRows.Close()
 		return nil, err
 	}
-	messageRows.Close()
+	_ = messageRows.Close()
 
 	partRows, err := tx.QueryContext(ctx, `SELECT message_id, ordinal, kind, text, thought_signature, tool_call_id, status FROM message_parts WHERE session_id = ? ORDER BY message_id, ordinal, id`, sessionID)
 	if err != nil {
@@ -886,7 +879,7 @@ func (s *Store) LoadHistory(ctx context.Context, sessionID string) ([]HistoryMes
 		var messageID, toolCallID string
 		var part HistoryPart
 		if err := partRows.Scan(&messageID, &part.Ordinal, &part.Kind, &part.Text, &part.ThoughtSignature, &toolCallID, &part.Status); err != nil {
-			partRows.Close()
+			_ = partRows.Close()
 			return nil, fmt.Errorf("agent store: scan part: %w", err)
 		}
 		index, ok := byID[messageID]
@@ -905,10 +898,10 @@ func (s *Store) LoadHistory(ctx context.Context, sessionID string) ([]HistoryMes
 		history[index].Parts = append(history[index].Parts, part)
 	}
 	if err := partRows.Err(); err != nil {
-		partRows.Close()
+		_ = partRows.Close()
 		return nil, err
 	}
-	partRows.Close()
+	_ = partRows.Close()
 
 	for i := range history {
 		if len(history[i].Parts) == 0 && bodies[history[i].ID] != "" {
@@ -933,7 +926,7 @@ func (s *Store) RecoverInterrupted(ctx context.Context, at time.Time) (RecoveryR
 	if err != nil {
 		return report, fmt.Errorf("agent store: begin recovery: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	count := func(query string, args ...any) (int, error) {
 		res, err := tx.ExecContext(ctx, query, args...)
 		if err != nil {

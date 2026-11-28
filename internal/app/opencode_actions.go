@@ -60,7 +60,7 @@ func (a *App) planOpenCodeAction(cmd string) (openCodeActionPlan, error) {
 	case paletteCmdOCExplainProblem, paletteCmdOCFixProblem:
 		cand, ok := a.openCodeActionProblem()
 		if !ok {
-			return openCodeActionPlan{}, errors.New("There are no Problems to use. Open a file with diagnostics first.")
+			return openCodeActionPlan{}, errors.New("there are no Problems to use; open a file with diagnostics first")
 		}
 		chip, err := a.captureOpenCodeChip(cand)
 		if err != nil {
@@ -81,7 +81,7 @@ func (a *App) planOpenCodeAction(cmd string) (openCodeActionPlan, error) {
 			Chips:  []openCodeChip{chip},
 		}, nil
 	}
-	return openCodeActionPlan{}, errors.New("Unknown OpenCode action.")
+	return openCodeActionPlan{}, errors.New("unknown OpenCode action")
 }
 
 // openCodeActionProblem picks the Problem at the caret line of the active

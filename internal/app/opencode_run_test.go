@@ -151,7 +151,7 @@ func TestTranscriptProjectionInterruptedAndInspection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 	now := time.Now().UTC()
 	if _, err := store.CreateSession(ctx, agentstore.Session{ID: "s1", WorkspaceRoot: t.TempDir()}); err != nil {
 		t.Fatal(err)

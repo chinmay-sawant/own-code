@@ -297,11 +297,11 @@ func openCodeLineSpan(start, end int) string {
 
 func (a *App) currentOpenCodeContext() (agentContextSnapshot, error) {
 	if a == nil || a.ws == nil || a.ws.Sample || !a.editing || a.edit == nil {
-		return agentContextSnapshot{}, errors.New("Enter edit mode and select text or place the caret in a workspace file first.")
+		return agentContextSnapshot{}, errors.New("enter edit mode and select text or place the caret in a workspace file first")
 	}
 	path := a.editPath()
 	if path == "" {
-		return agentContextSnapshot{}, errors.New("There is no active editor buffer to use as context.")
+		return agentContextSnapshot{}, errors.New("there is no active editor buffer to use as context")
 	}
 	return captureAgentContext(a.ws.Root, path, a.edit.Text(), a.editAnchor, a.editCaret)
 }
@@ -433,10 +433,6 @@ func (a *App) openOpenCodePanel(ctx context.Context) error {
 		a.refresh()
 		return nil
 	}
-	return a.loadOpenCodeSessions()
-}
-
-func (a *App) loadOpenCodeCachedSessions() error {
 	return a.loadOpenCodeSessions()
 }
 
@@ -821,8 +817,6 @@ func (a *App) reviewOpenCodeProposal() error {
 	}()
 	return nil
 }
-
-func boolPointer(value bool) *bool { return &value }
 
 func (a *App) sendOpenCodeReply(ctx context.Context, result chan<- openCodeReply, reply openCodeReply) {
 	select {

@@ -104,7 +104,8 @@ func (m *openCodeWorktreeManager) snapshotProposal(ctx context.Context, worktree
 		if exists {
 			size = currentSize
 		}
-		if change.Kind == "renamed" {
+		switch change.Kind {
+		case "renamed":
 			if !exists || size > openCodeProposalMaxFileBytes {
 				return openCodeProposalSnapshot{}, fmt.Errorf("%w: rename destination is missing or too large: %s", errOpenCodeProposalUnsupported, relative)
 			}
@@ -119,7 +120,7 @@ func (m *openCodeWorktreeManager) snapshotProposal(ctx context.Context, worktree
 			if err != nil || !supportedProposalMode(mode) || baseSize > openCodeProposalMaxFileBytes {
 				return openCodeProposalSnapshot{}, fmt.Errorf("%w: rename source is not a bounded regular file: %s", errOpenCodeProposalUnsupported, change.RenamedFrom)
 			}
-		} else if change.Kind == "deleted" {
+		case "deleted":
 			if exists {
 				return openCodeProposalSnapshot{}, fmt.Errorf("%w: deleted path still exists: %s", errOpenCodeProposalUnsupported, relative)
 			}
@@ -128,7 +129,7 @@ func (m *openCodeWorktreeManager) snapshotProposal(ctx context.Context, worktree
 				return openCodeProposalSnapshot{}, fmt.Errorf("%w: deleted path is not a bounded regular file: %s", errOpenCodeProposalUnsupported, relative)
 			}
 			size = baseSize
-		} else {
+		default:
 			if !exists || size > openCodeProposalMaxFileBytes {
 				return openCodeProposalSnapshot{}, fmt.Errorf("%w: changed path is missing or too large: %s", errOpenCodeProposalUnsupported, relative)
 			}
@@ -217,7 +218,7 @@ func parseOpenCodeProposalNameStatus(data []byte) (map[string]openCodeProposalCh
 		return changed, nil
 	}
 	if data[len(data)-1] != 0 {
-		return nil, errors.New("Git returned malformed OpenCode proposal status")
+		return nil, errors.New("git returned malformed OpenCode proposal status")
 	}
 	parts := bytes.Split(data[:len(data)-1], []byte{0})
 	seen := make(map[string]struct{}, len(parts))
@@ -241,7 +242,7 @@ func parseOpenCodeProposalNameStatus(data []byte) (map[string]openCodeProposalCh
 			kind = "renamed"
 		}
 		if index+pathsNeeded > len(parts) {
-			return nil, errors.New("Git returned malformed OpenCode proposal status")
+			return nil, errors.New("git returned malformed OpenCode proposal status")
 		}
 		oldOrOnlyPath := string(parts[index])
 		index++
@@ -290,7 +291,7 @@ func parseOpenCodeUntrackedPaths(data []byte) ([]string, error) {
 		return nil, nil
 	}
 	if data[len(data)-1] != 0 {
-		return nil, errors.New("Git returned malformed untracked OpenCode proposal paths")
+		return nil, errors.New("git returned malformed untracked OpenCode proposal paths")
 	}
 	parts := bytes.Split(data[:len(data)-1], []byte{0})
 	if len(parts) > openCodeProposalMaxFiles {
@@ -386,7 +387,7 @@ func (m *openCodeWorktreeManager) proposalBaseFile(ctx context.Context, director
 	}
 	size, err := strconv.ParseInt(strings.TrimSpace(string(sizeData)), 10, 64)
 	if err != nil || size < 0 {
-		return "", 0, errors.New("Git returned an invalid OpenCode proposal base size")
+		return "", 0, errors.New("git returned an invalid OpenCode proposal base size")
 	}
 	return mode, size, nil
 }
@@ -451,7 +452,7 @@ func (m *openCodeWorktreeManager) proposalGitOutput(ctx context.Context, directo
 	cmd.Stderr = io.Discard
 	err := cmd.Run()
 	if stdout.truncated {
-		return stdout.data, errors.New("Git proposal output exceeds its limit")
+		return stdout.data, errors.New("git proposal output exceeds its limit")
 	}
 	return stdout.data, err
 }

@@ -48,7 +48,9 @@ func TestWriteToolsOnlyWithProposalRoot(t *testing.T) {
 		t.Fatal("proposal root == root accepted")
 	}
 	sub := filepath.Join(root, "sub")
-	os.Mkdir(sub, 0o755)
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := newRegistry(root, WithProposalRoot(sub)); err == nil {
 		t.Fatal("proposal root inside root accepted")
 	}
@@ -57,7 +59,9 @@ func TestWriteToolsOnlyWithProposalRoot(t *testing.T) {
 func TestWriteFileStagesOnlyInProposalRoot(t *testing.T) {
 	var sunk []Proposal
 	r, root, prop := newPropReg(t, WithProposalSink(func(_ context.Context, p Proposal) error { sunk = append(sunk, p); return nil }))
-	os.WriteFile(filepath.Join(root, "a.txt"), []byte("one\ntwo\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	out, err := runProposal(t, r, ToolWriteFile, map[string]any{"path": "a.txt", "content": "one\nthree\n"})
 	if err != nil || out.Proposal == nil {
 		t.Fatalf("%v %+v", err, out)
@@ -88,7 +92,9 @@ func TestWriteFileStagesOnlyInProposalRoot(t *testing.T) {
 
 func TestEditFileAndCumulativeEdits(t *testing.T) {
 	r, root, _ := newPropReg(t)
-	os.WriteFile(filepath.Join(root, "f.go"), []byte("a\nb\nc\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(root, "f.go"), []byte("a\nb\nc\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	out, err := runProposal(t, r, ToolEditFile, map[string]any{"path": "f.go", "old_string": "b", "new_string": "B"})
 	if err != nil || out.Proposal.NewContent != "a\nB\nc\n" {
 		t.Fatalf("%v %+v", err, out)
@@ -103,7 +109,9 @@ func TestEditFileAndCumulativeEdits(t *testing.T) {
 		"ambiguous": {"path": "g.go", "old_string": "x", "new_string": "y"},
 		"nofile":    {"path": "nope.go", "old_string": "x", "new_string": "y"},
 	} {
-		os.WriteFile(filepath.Join(root, "g.go"), []byte("x x"), 0o644)
+		if err := os.WriteFile(filepath.Join(root, "g.go"), []byte("x x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 		if _, err := runProposal(t, r, ToolEditFile, args); !errors.Is(err, ErrInvalidArgs) {
 			t.Errorf("%s: err = %v", name, err)
 		}
@@ -129,19 +137,27 @@ func TestWriteRefusesSymlinks(t *testing.T) {
 	}
 	r, root, prop := newPropReg(t)
 	outside := t.TempDir()
-	os.WriteFile(filepath.Join(outside, "secret"), []byte("s"), 0o644)
+	if err := os.WriteFile(filepath.Join(outside, "secret"), []byte("s"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	// Symlinked directory in the proposal root.
-	os.Symlink(outside, filepath.Join(prop, "link"))
+	if err := os.Symlink(outside, filepath.Join(prop, "link")); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := runProposal(t, r, ToolWriteFile, map[string]any{"path": "link/x", "content": "a"}); !errors.Is(err, ErrOutside) {
 		t.Fatalf("dir symlink err = %v", err)
 	}
 	// Symlinked file in the proposal root.
-	os.Symlink(filepath.Join(outside, "secret"), filepath.Join(prop, "f"))
+	if err := os.Symlink(filepath.Join(outside, "secret"), filepath.Join(prop, "f")); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := runProposal(t, r, ToolWriteFile, map[string]any{"path": "f", "content": "a"}); !errors.Is(err, ErrOutside) {
 		t.Fatalf("file symlink err = %v", err)
 	}
 	// Symlink in the user's checkout pointing outside: baseline read refused.
-	os.Symlink(filepath.Join(outside, "secret"), filepath.Join(root, "g"))
+	if err := os.Symlink(filepath.Join(outside, "secret"), filepath.Join(root, "g")); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := runProposal(t, r, ToolWriteFile, map[string]any{"path": "g", "content": "a"}); !errors.Is(err, ErrOutside) {
 		t.Fatalf("baseline symlink err = %v", err)
 	}
@@ -153,13 +169,17 @@ func TestWriteRefusesSymlinks(t *testing.T) {
 func TestApplyProposal(t *testing.T) {
 	r, root, _ := newPropReg(t)
 	file := filepath.Join(root, "a.txt")
-	os.WriteFile(file, []byte("old"), 0o640)
+	if err := os.WriteFile(file, []byte("old"), 0o640); err != nil {
+		t.Fatal(err)
+	}
 	out, err := runProposal(t, r, ToolWriteFile, map[string]any{"path": "a.txt", "content": "new"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Baseline changed: refuse and leave the file alone.
-	os.WriteFile(file, []byte("user edit"), 0o640)
+	if err := os.WriteFile(file, []byte("user edit"), 0o640); err != nil {
+		t.Fatal(err)
+	}
 	if err := ApplyProposal(*out.Proposal, root); !errors.Is(err, ErrBaselineChanged) {
 		t.Fatalf("err = %v", err)
 	}
@@ -167,7 +187,9 @@ func TestApplyProposal(t *testing.T) {
 		t.Fatalf("file = %q", b)
 	}
 	// Unchanged baseline: applies, keeps mode.
-	os.WriteFile(file, []byte("old"), 0o640)
+	if err := os.WriteFile(file, []byte("old"), 0o640); err != nil {
+		t.Fatal(err)
+	}
 	if err := ApplyProposal(*out.Proposal, root); err != nil {
 		t.Fatal(err)
 	}
@@ -183,11 +205,15 @@ func TestApplyProposal(t *testing.T) {
 	}
 	// New-file proposal refuses if the file appeared meanwhile.
 	out, _ = runProposal(t, r, ToolWriteFile, map[string]any{"path": "n.txt", "content": "n"})
-	os.WriteFile(filepath.Join(root, "n.txt"), []byte("appeared"), 0o644)
+	if err := os.WriteFile(filepath.Join(root, "n.txt"), []byte("appeared"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := ApplyProposal(*out.Proposal, root); !errors.Is(err, ErrBaselineChanged) {
 		t.Fatalf("new-file err = %v", err)
 	}
-	os.Remove(filepath.Join(root, "n.txt"))
+	if err := os.Remove(filepath.Join(root, "n.txt")); err != nil {
+		t.Fatal(err)
+	}
 	if err := ApplyProposal(*out.Proposal, root); err != nil {
 		t.Fatal(err)
 	}
@@ -209,13 +235,19 @@ func TestApplyProposalRefusesSymlinks(t *testing.T) {
 		t.Skip("symlinks need privileges on windows")
 	}
 	root, outside := t.TempDir(), t.TempDir()
-	os.Symlink(outside, filepath.Join(root, "d"))
+	if err := os.Symlink(outside, filepath.Join(root, "d")); err != nil {
+		t.Fatal(err)
+	}
 	p := Proposal{Tool: ToolWriteFile, Path: "d/x", NewContent: "a", NewHash: hashBytes([]byte("a"))}
 	if err := ApplyProposal(p, root); !errors.Is(err, ErrOutside) {
 		t.Fatalf("err = %v", err)
 	}
-	os.WriteFile(filepath.Join(outside, "t"), []byte("t"), 0o644)
-	os.Symlink(filepath.Join(outside, "t"), filepath.Join(root, "l"))
+	if err := os.WriteFile(filepath.Join(outside, "t"), []byte("t"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "t"), filepath.Join(root, "l")); err != nil {
+		t.Fatal(err)
+	}
 	p.Path = "l"
 	if err := ApplyProposal(p, root); !errors.Is(err, ErrOutside) {
 		t.Fatalf("file link err = %v", err)

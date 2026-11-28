@@ -74,7 +74,7 @@ func (s *OpenCodeAPIKey) Save(apiKey string) error {
 		return fmt.Errorf("secretstore: create temporary OpenCode API key file: %w", err)
 	}
 	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 	if err := tmp.Chmod(fileMode); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("secretstore: secure temporary OpenCode API key file: %w", err)

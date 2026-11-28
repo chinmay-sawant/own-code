@@ -70,7 +70,7 @@ func TestAgentCancelAndRejectLeaveCheckoutUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 	const sid = "s1"
 	if _, err := store.CreateSession(ctx, agentstore.Session{
 		ID: sid, WorkspaceRoot: canon, WorktreeRoot: wt.Path(), BaselineCommit: wt.baseCommit,

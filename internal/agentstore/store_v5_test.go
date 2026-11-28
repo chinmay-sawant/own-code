@@ -161,7 +161,7 @@ func TestLegacyServerSessionsStayReadableButCannotRunTurns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 	sessions, err := store.ListSessions(ctx, "/work")
 	if err != nil || len(sessions) != 2 {
 		t.Fatalf("ListSessions() = %v, %v", sessions, err)

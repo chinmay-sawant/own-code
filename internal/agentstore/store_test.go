@@ -57,7 +57,7 @@ func TestOpenMigratesAndReopensDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second Open() error = %v", err)
 	}
-	defer second.Close()
+	defer func() { _ = second.Close() }()
 	var version int
 	if err := second.db.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil {
 		t.Fatalf("read migration version: %v", err)

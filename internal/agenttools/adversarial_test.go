@@ -96,8 +96,12 @@ func TestAdversarialSearchSkipsGitDirectory(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	os.WriteFile(filepath.Join(root, ".git", "config"), []byte("GITSECRETTOKEN"), 0o600)
-	os.WriteFile(filepath.Join(root, "ok.txt"), []byte("GITSECRETTOKEN visible"), 0o600)
+	if err := os.WriteFile(filepath.Join(root, ".git", "config"), []byte("GITSECRETTOKEN"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "ok.txt"), []byte("GITSECRETTOKEN visible"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	raw, _ := json.Marshal(map[string]any{"pattern": "GITSECRETTOKEN"})
 	prep, err := r.Prepare(ToolSearchFiles, raw)
 	if err != nil {
@@ -114,7 +118,9 @@ func TestAdversarialSearchSkipsGitDirectory(t *testing.T) {
 
 func TestAdversarialWriteToolsRefuseEveryNonGrant(t *testing.T) {
 	r, root, prop := newPropReg(t)
-	os.WriteFile(filepath.Join(root, "a.txt"), []byte("one\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	calls := map[string]map[string]any{
 		ToolWriteFile: {"path": "a.txt", "content": "owned\n"},
 		ToolEditFile:  {"path": "a.txt", "old_string": "one", "new_string": "owned"},
@@ -163,12 +169,14 @@ func TestAdversarialWriteToolsRefuseEveryNonGrant(t *testing.T) {
 		t.Fatalf("checkout modified: %q", b)
 	}
 	var staged []string
-	filepath.WalkDir(prop, func(p string, d os.DirEntry, err error) error {
+	if err := filepath.WalkDir(prop, func(p string, d os.DirEntry, err error) error {
 		if err == nil && !d.IsDir() {
 			staged = append(staged, p)
 		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if len(staged) != 0 {
 		t.Fatalf("denied calls staged files: %v", staged)
 	}

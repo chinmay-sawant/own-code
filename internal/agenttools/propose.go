@@ -137,15 +137,15 @@ func writeAtomic(path string, data []byte) error {
 	_, werr := f.Write(data)
 	cerr := f.Close()
 	if werr != nil || cerr != nil {
-		os.Remove(name)
+		_ = os.Remove(name)
 		return errors.Join(werr, cerr)
 	}
 	if err := os.Chmod(name, mode); err != nil {
-		os.Remove(name)
+		_ = os.Remove(name)
 		return err
 	}
 	if err := os.Rename(name, path); err != nil {
-		os.Remove(name)
+		_ = os.Remove(name)
 		return err
 	}
 	return nil

@@ -103,7 +103,7 @@ func writePrivateProposalFile(path string, data []byte) error {
 		return errors.New("could not create private OpenCode proposal state")
 	}
 	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 	if err := tmp.Chmod(0o600); err != nil {
 		_ = tmp.Close()
 		return errors.New("could not restrict OpenCode proposal state permissions")
@@ -204,7 +204,7 @@ func readPrivateProposalState(path string) ([]byte, error) {
 	if err != nil {
 		return nil, errors.New("could not read OpenCode proposal state")
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	data, err := io.ReadAll(io.LimitReader(f, openCodeProposalStateMaxBytes+1))
 	if err != nil || len(data) > openCodeProposalStateMaxBytes {
 		return nil, errors.New("OpenCode proposal state exceeds its size limit")

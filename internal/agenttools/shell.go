@@ -108,7 +108,7 @@ func runShell(ctx context.Context, dir string, a shellArgs) (Output, error) {
 		out.Text = sb.String()
 		return out, ctx.Err()
 	case errors.Is(tctx.Err(), context.DeadlineExceeded):
-		sb.WriteString(fmt.Sprintf("[timed out after %ds; process tree killed]\n", a.TimeoutSeconds))
+		fmt.Fprintf(&sb, "[timed out after %ds; process tree killed]\n", a.TimeoutSeconds)
 		out.Text = sb.String()
 		code := -1
 		out.ExitCode = &code
@@ -123,7 +123,7 @@ func runShell(ctx context.Context, dir string, a shellArgs) (Output, error) {
 		code := 0
 		out.ExitCode = &code
 	}
-	sb.WriteString(fmt.Sprintf("exit status: %d\n", *out.ExitCode))
+	fmt.Fprintf(&sb, "exit status: %d\n", *out.ExitCode)
 	out.Text = sb.String()
 	return out, nil
 }

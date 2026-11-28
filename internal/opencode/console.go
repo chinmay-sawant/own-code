@@ -162,7 +162,7 @@ func (c *ConsoleClient) Models(ctx context.Context) ([]ConsoleModel, error) {
 	if err != nil {
 		return nil, fmt.Errorf("OpenCode Console model request failed: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return nil, &ConsoleHTTPError{StatusCode: response.StatusCode}
 	}

@@ -47,8 +47,8 @@ func TestAnthropicCompleteHeadersAndHistory(t *testing.T) {
 			r.Header.Get("Authorization") != "Bearer "+testKey || r.Header.Get("anthropic-version") == "" {
 			t.Errorf("bad request %s %v", r.URL.Path, r.Header)
 		}
-		json.NewDecoder(r.Body).Decode(&got)
-		io.WriteString(w, `{"type":"message","content":[{"type":"text","text":"yo"},{"type":"tool_use","id":"tu1","name":"read","input":{"p":1}}],"stop_reason":"tool_use","usage":{"input_tokens":3,"output_tokens":4}}`)
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_, _ = io.WriteString(w, `{"type":"message","content":[{"type":"text","text":"yo"},{"type":"tool_use","id":"tu1","name":"read","input":{"p":1}}],"stop_reason":"tool_use","usage":{"input_tokens":3,"output_tokens":4}}`)
 	}))
 	defer srv.Close()
 	req := newReq(srv.URL, ProtocolMessages)
@@ -110,7 +110,7 @@ func TestAnthropicStreamSplitFramesToolsUsage(t *testing.T) {
 	}
 	srv := httptest.NewServer(sse(chunks...))
 	defer srv.Close()
-	res, err, evs := collect(client(t, Options{}), newReq(srv.URL, ProtocolMessages))
+	res, evs, err := collect(client(t, Options{}), newReq(srv.URL, ProtocolMessages))
 	if err != nil || res.Status != StatusCompleted || res.Text != "Hello" || res.FinishReason != "tool_use" ||
 		len(res.ToolCalls) != 1 || string(res.ToolCalls[0].Arguments) != `{"path":"a"}` ||
 		res.Usage == nil || res.Usage.InputTokens != 10 || res.Usage.OutputTokens != 9 || res.Usage.TotalTokens != 19 {
@@ -138,7 +138,7 @@ func TestAnthropicStreamIncompleteAndMalformed(t *testing.T) {
 		anthEv("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"a"}}`),
 		anthEv("message_stop", `{"type":"message_stop"}`)))
 	defer srv.Close()
-	res, err, evs := collect(client(t, Options{}), newReq(srv.URL, ProtocolMessages))
+	res, evs, err := collect(client(t, Options{}), newReq(srv.URL, ProtocolMessages))
 	if err == nil || len(res.ToolCalls) != 0 || res.Status != StatusFailed {
 		t.Fatalf("%+v %v", res, err)
 	}
@@ -153,7 +153,7 @@ func TestAnthropicStreamIncompleteAndMalformed(t *testing.T) {
 		anthEv("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"a"}}`),
 		anthEv("content_block_stop", `{"type":"content_block_stop","index":0}`)))
 	defer srv2.Close()
-	res, err, _ = collect(client(t, Options{}), newReq(srv2.URL, ProtocolMessages))
+	res, _, err = collect(client(t, Options{}), newReq(srv2.URL, ProtocolMessages))
 	if err == nil || len(res.ToolCalls) != 0 {
 		t.Fatalf("%+v %v", res, err)
 	}
@@ -162,21 +162,21 @@ func TestAnthropicStreamIncompleteAndMalformed(t *testing.T) {
 		anthEv("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"a"}}`),
 		"data: {not json\n\n"))
 	defer srv3.Close()
-	res, err, _ = collect(client(t, Options{}), newReq(srv3.URL, ProtocolMessages))
+	res, _, err = collect(client(t, Options{}), newReq(srv3.URL, ProtocolMessages))
 	if !errors.As(err, &e) || e.Kind != ErrKindMalformed || res.Text != "a" {
 		t.Fatalf("%+v %v", res, err)
 	}
 	// Truncated before message_stop.
 	srv4 := httptest.NewServer(sse(anthEv("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"x"}}`)))
 	defer srv4.Close()
-	res, err, _ = collect(client(t, Options{}), newReq(srv4.URL, ProtocolMessages))
+	res, _, err = collect(client(t, Options{}), newReq(srv4.URL, ProtocolMessages))
 	if err == nil || res.Status != StatusFailed || res.Text != "x" {
 		t.Fatalf("%+v %v", res, err)
 	}
 	// In-stream error event.
 	srv5 := httptest.NewServer(sse(anthEv("error", `{"type":"error","error":{"type":"overloaded_error","message":"busy"}}`)))
 	defer srv5.Close()
-	_, err, _ = collect(client(t, Options{}), newReq(srv5.URL, ProtocolMessages))
+	_, _, err = collect(client(t, Options{}), newReq(srv5.URL, ProtocolMessages))
 	if !errors.As(err, &e) || e.Kind != ErrKindServer || !strings.Contains(err.Error(), "busy") {
 		t.Fatalf("%v", err)
 	}
@@ -185,14 +185,14 @@ func TestAnthropicStreamIncompleteAndMalformed(t *testing.T) {
 func TestAnthropicCancelAndKeyRedaction(t *testing.T) {
 	release := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, anthEv("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"one"}}`))
+		_, _ = io.WriteString(w, anthEv("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"one"}}`))
 		w.(http.Flusher).Flush()
 		select {
 		case <-release:
 		case <-r.Context().Done():
 			return
 		}
-		io.WriteString(w, anthEv("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"late"}}`))
+		_, _ = io.WriteString(w, anthEv("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"late"}}`))
 	}))
 	defer srv.Close()
 	defer close(release)
@@ -204,7 +204,7 @@ func TestAnthropicCancelAndKeyRedaction(t *testing.T) {
 	}
 	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(400)
-		io.WriteString(w, `{"type":"error","error":{"type":"invalid_request_error","message":"bad `+testKey+`"}}`)
+		_, _ = io.WriteString(w, `{"type":"error","error":{"type":"invalid_request_error","message":"bad `+testKey+`"}}`)
 	}))
 	defer bad.Close()
 	_, err = client(t, Options{}).Complete(context.Background(), newReq(bad.URL, ProtocolMessages))
@@ -216,7 +216,7 @@ func TestAnthropicCancelAndKeyRedaction(t *testing.T) {
 func TestAnthropicBounds(t *testing.T) {
 	var e *Error
 	big := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, strings.Repeat("x", 2000))
+		_, _ = io.WriteString(w, strings.Repeat("x", 2000))
 	}))
 	defer big.Close()
 	_, err := client(t, Options{MaxBodyBytes: 100}).Complete(context.Background(), newReq(big.URL, ProtocolMessages))
@@ -225,7 +225,7 @@ func TestAnthropicBounds(t *testing.T) {
 	}
 	frame := httptest.NewServer(sse("data: " + strings.Repeat("y", 5000) + "\n\n"))
 	defer frame.Close()
-	_, err, _ = collect(client(t, Options{MaxFrameBytes: 1000}), newReq(frame.URL, ProtocolMessages))
+	_, _, err = collect(client(t, Options{MaxFrameBytes: 1000}), newReq(frame.URL, ProtocolMessages))
 	if !errors.As(err, &e) || e.Kind != ErrKindTooLarge {
 		t.Fatalf("frame: %v", err)
 	}
@@ -238,7 +238,7 @@ func TestResponsesStreamMalformedFrames(t *testing.T) {
 		"data: {\"type\":\"response.output_text.delta\",\"delta\":\"a\"}\n\n",
 		"data: {not json\n\n"))
 	defer srv.Close()
-	res, err, _ := collect(client(t, Options{}), newReq(srv.URL, ProtocolResponses))
+	res, _, err := collect(client(t, Options{}), newReq(srv.URL, ProtocolResponses))
 	if !errors.As(err, &e) || e.Kind != ErrKindMalformed || res.Status != StatusFailed || res.Text != "a" {
 		t.Fatalf("%+v %v", res, err)
 	}
@@ -247,14 +247,14 @@ func TestResponsesStreamMalformedFrames(t *testing.T) {
 		"data: {\"type\":\"response.output_text.delta\",\"delta\":\"b\"}\n\n",
 		"data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}"))
 	defer srv2.Close()
-	res, err, _ = collect(client(t, Options{}), newReq(srv2.URL, ProtocolResponses))
+	res, _, err = collect(client(t, Options{}), newReq(srv2.URL, ProtocolResponses))
 	if err == nil || res.Status != StatusFailed || res.Text != "b" {
 		t.Fatalf("%+v %v", res, err)
 	}
 	// Oversized frame.
 	srv3 := httptest.NewServer(sse("data: " + strings.Repeat("z", 5000) + "\n\n"))
 	defer srv3.Close()
-	_, err, _ = collect(client(t, Options{MaxFrameBytes: 1000}), newReq(srv3.URL, ProtocolResponses))
+	_, _, err = collect(client(t, Options{MaxFrameBytes: 1000}), newReq(srv3.URL, ProtocolResponses))
 	if !errors.As(err, &e) || e.Kind != ErrKindTooLarge {
 		t.Fatalf("%v", err)
 	}
@@ -269,12 +269,12 @@ func TestResponsesStreamMalformedFrames(t *testing.T) {
 	}
 	srv4 := httptest.NewServer(sse(parts...))
 	defer srv4.Close()
-	res, err, _ = collect(client(t, Options{}), newReq(srv4.URL, ProtocolResponses))
+	res, _, err = collect(client(t, Options{}), newReq(srv4.URL, ProtocolResponses))
 	if err != nil || res.Text != "ok" {
 		t.Fatalf("%+v %v", res, err)
 	}
 	// Complete() with malformed JSON body.
-	srv5 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "{nope") }))
+	srv5 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "{nope") }))
 	defer srv5.Close()
 	_, err = client(t, Options{}).Complete(context.Background(), newReq(srv5.URL, ProtocolResponses))
 	if !errors.As(err, &e) || e.Kind != ErrKindMalformed {

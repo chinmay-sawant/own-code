@@ -297,11 +297,11 @@ func (a *App) clearOpenCodeComposer() {
 func (a *App) addOpenCodeChip(chip openCodeChip) error {
 	c := &a.openCode.composer
 	if len(c.chips) >= maxOpenCodeChips {
-		return fmt.Errorf("At most %d context sources can be attached.", maxOpenCodeChips)
+		return fmt.Errorf("at most %d context sources can be attached", maxOpenCodeChips)
 	}
 	for _, e := range c.chips {
 		if e.Kind == chip.Kind && e.Path == chip.Path && e.Label == chip.Label && e.Detail == chip.Detail {
-			return errors.New("That context is already attached.")
+			return errors.New("that context is already attached")
 		}
 	}
 	used := 0
@@ -310,7 +310,7 @@ func (a *App) addOpenCodeChip(chip openCodeChip) error {
 	}
 	remaining := maxOpenCodeChipTotalBytes - used
 	if remaining <= 0 {
-		return errors.New("The total context limit is reached; remove a source first.")
+		return errors.New("the total context limit is reached; remove a source first")
 	}
 	if len(chip.Text) > remaining {
 		chip.Text = chip.Text[:utf8PrefixLength([]byte(chip.Text), remaining)]
@@ -325,7 +325,7 @@ func (a *App) addOpenCodeChip(chip openCodeChip) error {
 
 func (a *App) openCodeChipRoot() (string, error) {
 	if a == nil || a.ws == nil || a.ws.Sample {
-		return "", errors.New("Open a project folder first.")
+		return "", errors.New("open a project folder first")
 	}
 	return canonicalWorkspaceRoot(a.ws.Root)
 }
@@ -343,7 +343,7 @@ func (a *App) captureOpenCodeChip(cand openCodeMentionCandidate) (openCodeChip, 
 			return openCodeChip{}, err
 		}
 		if snap.SelectionText == "" {
-			return openCodeChip{}, errors.New("Select text in the editor first.")
+			return openCodeChip{}, errors.New("select text in the editor first")
 		}
 		return openCodeChip{
 			Kind: openCodeChipSelection, Label: "selection", Path: snap.RelativePath,
@@ -357,7 +357,7 @@ func (a *App) captureOpenCodeChip(cand openCodeMentionCandidate) (openCodeChip, 
 		if path == "" {
 			path = a.editPath()
 			if path == "" {
-				return openCodeChip{}, errors.New("There is no active file.")
+				return openCodeChip{}, errors.New("there is no active file")
 			}
 		}
 		return a.captureOpenCodeFileChip(root, path)
@@ -369,7 +369,7 @@ func (a *App) captureOpenCodeChip(cand openCodeMentionCandidate) (openCodeChip, 
 		}
 		return a.captureOpenCodeProblemsChip(root)
 	}
-	return openCodeChip{}, errors.New("Unknown context source.")
+	return openCodeChip{}, errors.New("unknown context source")
 }
 
 func boolNote(b bool, s string) string {
@@ -461,7 +461,7 @@ func captureOpenCodeDiffChipFor(root string, ignored map[string]bool) (openCodeC
 	}
 	data, capped, err := gitBytesCapped(ctx, root, maxOpenCodeDiffBytes, args...)
 	if err != nil {
-		return openCodeChip{}, errors.New("The working-tree diff is unavailable (is this a Git repository with a commit?).")
+		return openCodeChip{}, errors.New("the working-tree diff is unavailable (is this a Git repository with a commit?)")
 	}
 	if !capped {
 		if extra := openCodeUntrackedDiffFor(ctx, root, maxOpenCodeDiffBytes-len(data), ignored); extra != "" {
@@ -472,7 +472,7 @@ func captureOpenCodeDiffChipFor(root string, ignored map[string]bool) (openCodeC
 		}
 	}
 	if len(data) == 0 {
-		return openCodeChip{}, errors.New("There are no uncommitted changes to attach.")
+		return openCodeChip{}, errors.New("there are no uncommitted changes to attach")
 	}
 	data = data[:utf8PrefixLength(data, len(data))]
 	data, lineCut := limitAgentContextLines(data, maxOpenCodeDiffLines)
@@ -530,13 +530,9 @@ func (a *App) openCodeProblemsStale(root string, chip openCodeChip) string {
 	return ""
 }
 
-// openCodeUntrackedDiff renders untracked, non-ignored text files as
+// openCodeUntrackedDiffFor renders untracked, non-ignored text files as
 // new-file diffs. Sensitive, binary, symlinked and oversized files are
 // skipped by collectSelectedAgentFiles; the output is bounded by budget.
-func (a *App) openCodeUntrackedDiff(ctx context.Context, root string, budget int) string {
-	return openCodeUntrackedDiffFor(ctx, root, budget, a.ws.ignored)
-}
-
 func openCodeUntrackedDiffFor(ctx context.Context, root string, budget int, ignored map[string]bool) string {
 	if budget <= 0 {
 		return ""
@@ -585,7 +581,7 @@ func openCodeUntrackedDiffFor(ctx context.Context, root string, budget int, igno
 
 func (a *App) captureOpenCodeProblemsChip(root string) (openCodeChip, error) {
 	if a.lspm == nil {
-		return openCodeChip{}, errors.New("No language-server problems are available.")
+		return openCodeChip{}, errors.New("no language-server problems are available")
 	}
 	a.lspm.rebuildProblems()
 	var b strings.Builder
@@ -602,7 +598,7 @@ func (a *App) captureOpenCodeProblemsChip(root string) (openCodeChip, error) {
 		n++
 	}
 	if n == 0 {
-		return openCodeChip{}, errors.New("There are no problems to attach.")
+		return openCodeChip{}, errors.New("there are no problems to attach")
 	}
 	text := b.String()
 	sum := sha256.Sum256([]byte(text))
@@ -743,7 +739,7 @@ func (a *App) composeOpenCodeUserText(prompt string) (string, error) {
 	}
 	for _, c := range chips {
 		if why := a.openCodeChipStale(c); why != "" {
-			return "", fmt.Errorf("Context %s is stale: %s. Remove it and attach it again.", c.Label, why)
+			return "", fmt.Errorf("context %s is stale: %s; remove it and attach it again", c.Label, why)
 		}
 	}
 	return prompt + renderOpenCodeContextBlock(chips), nil
@@ -762,13 +758,13 @@ func (a *App) composeOpenCodeUserTextAsync(prompt string) (string, func() string
 	for _, c := range chips {
 		if c.Kind == openCodeChipDiff {
 			if root, err := a.openCodeChipRoot(); err != nil || root != c.Root {
-				return "", nil, fmt.Errorf("Context %s is stale: the workspace changed. Remove it and attach it again.", c.Label)
+				return "", nil, fmt.Errorf("context %s is stale: the workspace changed; remove it and attach it again", c.Label)
 			}
 			diffs = append(diffs, c)
 			continue
 		}
 		if why := a.openCodeChipStale(c); why != "" {
-			return "", nil, fmt.Errorf("Context %s is stale: %s. Remove it and attach it again.", c.Label, why)
+			return "", nil, fmt.Errorf("context %s is stale: %s; remove it and attach it again", c.Label, why)
 		}
 	}
 	var recheck func() string

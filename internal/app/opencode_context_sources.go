@@ -62,7 +62,7 @@ func collectSelectedAgentFiles(workspaceRoot string, selectedPaths []string, ign
 	if err != nil {
 		return agentFileContextCollection{}, errInvalidAgentWorkspace
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 
 	collection := agentFileContextCollection{WorkspaceRoot: rootPath}
 	seen := make(map[string]struct{}, min(len(selectedPaths), maxSelectedAgentContextFiles))

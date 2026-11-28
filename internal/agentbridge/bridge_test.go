@@ -15,7 +15,9 @@ import (
 
 func TestRegistrySpecsAndReadFile(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello"), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	reg, err := NewRegistry(dir)
 	if err != nil {
 		t.Fatal(err)

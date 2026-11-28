@@ -53,8 +53,8 @@ func TestGeminiCompleteHeadersAndHistory(t *testing.T) {
 			r.Header.Get("Authorization") != "Bearer "+testKey {
 			t.Errorf("bad request %s %v", r.URL.Path, r.Header)
 		}
-		json.NewDecoder(r.Body).Decode(&got)
-		io.WriteString(w, `{"candidates":[{"content":{"parts":[{"text":"yo"},{"functionCall":{"name":"read","args":{"p":1}}}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":3,"candidatesTokenCount":4,"totalTokenCount":7}}`)
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_, _ = io.WriteString(w, `{"candidates":[{"content":{"parts":[{"text":"yo"},{"functionCall":{"name":"read","args":{"p":1}}}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":3,"candidatesTokenCount":4,"totalTokenCount":7}}`)
 	}))
 	defer srv.Close()
 	req := newReq(srv.URL, ProtocolGenerateContent)
@@ -153,7 +153,7 @@ func TestGeminiStreamSplitFramesToolsUsage(t *testing.T) {
 		sse(chunks...)(w, r)
 	}))
 	defer srv.Close()
-	res, err, evs := collect(client(t, Options{}), newReq(srv.URL, ProtocolGenerateContent))
+	res, evs, err := collect(client(t, Options{}), newReq(srv.URL, ProtocolGenerateContent))
 	if err != nil || res.Status != StatusCompleted || res.Text != "Hello" || len(res.ToolCalls) != 1 ||
 		string(res.ToolCalls[0].Arguments) != `{"path":"a"}` ||
 		res.Usage == nil || res.Usage.InputTokens != 10 || res.Usage.OutputTokens != 9 || res.Usage.TotalTokens != 19 {
@@ -181,7 +181,7 @@ func TestGeminiStreamIncompleteAndMalformed(t *testing.T) {
 	// Truncated: no finishReason, so tool calls are withheld.
 	srv := httptest.NewServer(sse(gemEv(`{"candidates":[{"content":{"parts":[{"text":"x"},{"functionCall":{"name":"r","args":{}}}]}}]}`)))
 	defer srv.Close()
-	res, err, evs := collect(client(t, Options{}), newReq(srv.URL, ProtocolGenerateContent))
+	res, evs, err := collect(client(t, Options{}), newReq(srv.URL, ProtocolGenerateContent))
 	if err == nil || res.Status != StatusFailed || res.Text != "x" || len(res.ToolCalls) != 0 {
 		t.Fatalf("%+v %v", res, err)
 	}
@@ -193,33 +193,33 @@ func TestGeminiStreamIncompleteAndMalformed(t *testing.T) {
 	// Malformed event after text.
 	srv2 := httptest.NewServer(sse(gemEv(`{"candidates":[{"content":{"parts":[{"text":"a"}]}}]}`), "data: {not json\n\n"))
 	defer srv2.Close()
-	res, err, _ = collect(client(t, Options{}), newReq(srv2.URL, ProtocolGenerateContent))
+	res, _, err = collect(client(t, Options{}), newReq(srv2.URL, ProtocolGenerateContent))
 	if !errors.As(err, &e) || e.Kind != ErrKindMalformed || res.Text != "a" {
 		t.Fatalf("%+v %v", res, err)
 	}
 	// Unterminated trailing frame is discarded as incomplete.
 	srv3 := httptest.NewServer(sse(`data: {"candidates":[{"content":{"parts":[{"text":"b"}]},"finishReason":"STOP"}]}`))
 	defer srv3.Close()
-	res, err, _ = collect(client(t, Options{}), newReq(srv3.URL, ProtocolGenerateContent))
+	res, _, err = collect(client(t, Options{}), newReq(srv3.URL, ProtocolGenerateContent))
 	if err == nil || res.Status != StatusFailed {
 		t.Fatalf("%+v %v", res, err)
 	}
 	// In-stream error object.
 	srv4 := httptest.NewServer(sse(gemEv(`{"error":{"code":503,"message":"busy"}}`)))
 	defer srv4.Close()
-	_, err, _ = collect(client(t, Options{}), newReq(srv4.URL, ProtocolGenerateContent))
+	_, _, err = collect(client(t, Options{}), newReq(srv4.URL, ProtocolGenerateContent))
 	if !errors.As(err, &e) || e.Kind != ErrKindServer || !strings.Contains(err.Error(), "busy") {
 		t.Fatalf("%v", err)
 	}
 	// Blocked prompt.
 	srv5 := httptest.NewServer(sse(gemEv(`{"promptFeedback":{"blockReason":"SAFETY"}}`)))
 	defer srv5.Close()
-	_, err, _ = collect(client(t, Options{}), newReq(srv5.URL, ProtocolGenerateContent))
+	_, _, err = collect(client(t, Options{}), newReq(srv5.URL, ProtocolGenerateContent))
 	if err == nil || !strings.Contains(err.Error(), "SAFETY") {
 		t.Fatalf("%v", err)
 	}
 	// Non-stream malformed body.
-	srv6 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "{nope") }))
+	srv6 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "{nope") }))
 	defer srv6.Close()
 	_, err = client(t, Options{}).Complete(context.Background(), newReq(srv6.URL, ProtocolGenerateContent))
 	if !errors.As(err, &e) || e.Kind != ErrKindMalformed {
@@ -230,14 +230,14 @@ func TestGeminiStreamIncompleteAndMalformed(t *testing.T) {
 func TestGeminiCancelBoundsAndKeyRedaction(t *testing.T) {
 	release := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, gemEv(`{"candidates":[{"content":{"parts":[{"text":"one"}]}}]}`))
+		_, _ = io.WriteString(w, gemEv(`{"candidates":[{"content":{"parts":[{"text":"one"}]}}]}`))
 		w.(http.Flusher).Flush()
 		select {
 		case <-release:
 		case <-r.Context().Done():
 			return
 		}
-		io.WriteString(w, gemEv(`{"candidates":[{"content":{"parts":[{"text":"late"}]}}]}`))
+		_, _ = io.WriteString(w, gemEv(`{"candidates":[{"content":{"parts":[{"text":"late"}]}}]}`))
 	}))
 	defer srv.Close()
 	defer close(release)
@@ -249,7 +249,7 @@ func TestGeminiCancelBoundsAndKeyRedaction(t *testing.T) {
 	}
 	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(400)
-		io.WriteString(w, `{"error":{"code":400,"message":"bad `+testKey+`"}}`)
+		_, _ = io.WriteString(w, `{"error":{"code":400,"message":"bad `+testKey+`"}}`)
 	}))
 	defer bad.Close()
 	_, err = client(t, Options{}).Complete(context.Background(), newReq(bad.URL, ProtocolGenerateContent))
@@ -257,7 +257,7 @@ func TestGeminiCancelBoundsAndKeyRedaction(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 	var e *Error
-	big := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, strings.Repeat("x", 2000)) }))
+	big := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, strings.Repeat("x", 2000)) }))
 	defer big.Close()
 	_, err = client(t, Options{MaxBodyBytes: 100}).Complete(context.Background(), newReq(big.URL, ProtocolGenerateContent))
 	if !errors.As(err, &e) || e.Kind != ErrKindTooLarge {
@@ -265,7 +265,7 @@ func TestGeminiCancelBoundsAndKeyRedaction(t *testing.T) {
 	}
 	frame := httptest.NewServer(sse("data: " + strings.Repeat("y", 5000) + "\n\n"))
 	defer frame.Close()
-	_, err, _ = collect(client(t, Options{MaxFrameBytes: 1000}), newReq(frame.URL, ProtocolGenerateContent))
+	_, _, err = collect(client(t, Options{MaxFrameBytes: 1000}), newReq(frame.URL, ProtocolGenerateContent))
 	if !errors.As(err, &e) || e.Kind != ErrKindTooLarge {
 		t.Fatalf("frame: %v", err)
 	}
