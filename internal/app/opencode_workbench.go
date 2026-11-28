@@ -153,6 +153,8 @@ func (a *App) retireOpenCodeConnection() {
 
 func (a *App) receiveOpenCode(ctx context.Context) bool {
 	changed := false
+	panelOnly := true
+	prevPanel := a.view.OpenCodePanel
 	for {
 		select {
 		case reply := <-a.openCode.results:
@@ -161,10 +163,10 @@ func (a *App) receiveOpenCode(ctx context.Context) bool {
 			}
 			if reply.operation >= openCodeOperationSessions {
 				a.receiveOpenCodePanelReply(reply)
-				a.refresh()
 				changed = true
 				continue
 			}
+			panelOnly = false
 			if reply.err != nil {
 				a.openCode.connected = false
 				a.openCode.consoleClient = nil
@@ -198,6 +200,14 @@ func (a *App) receiveOpenCode(ctx context.Context) bool {
 			changed = true
 		default:
 			if changed {
+				if panelOnly {
+					nextPanel := a.openCodePanelView()
+					a.view.OpenCodePanel = nextPanel
+					if a.patchOpenCodePanel(ctx, prevPanel, nextPanel) {
+						return true
+					}
+					a.refresh()
+				}
 				if err := a.page.Redraw(ctx); err != nil {
 					return false
 				}

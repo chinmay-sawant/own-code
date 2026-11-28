@@ -554,6 +554,7 @@ button.sb-item:hover { background-color: var(--panel-3); color: var(--text); }
 .sb-dev.on .sb-dot { background-color: var(--green); }
 .sb-fill { flex: 1; }
 .sb-path { max-width: 42vw; overflow: hidden; color: var(--accent); font-family: var(--mono); font-size: 9px; white-space: nowrap; }
+.sb-path.empty { display: none; }
 .sb-watch { color: var(--green); }
 .sb-scan { color: var(--amber); }
 .sb-dirty { color: var(--amber); }

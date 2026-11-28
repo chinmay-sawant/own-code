@@ -711,6 +711,7 @@ func NewWithLimit(root string, limit int) (*App, error) {
 		DevTools:         true,
 		Title:            "Code Review",
 		HTML:             buildHTML(),
+		RetainState:      true,
 		Width:            defaultWidth,
 		Height:           defaultHeight,
 		MinWidth:         minWidth,

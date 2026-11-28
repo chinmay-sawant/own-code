@@ -504,7 +504,12 @@ func (a *App) pollTerminal(ctx context.Context) error {
 	a.termAppCursor = snapshot.AppCursor
 	a.termBracketedPaste = snapshot.BracketedPaste
 	a.termScroll = terminalScrollBy(a.termScroll, max(0, total-a.termVisibleRows()), 0)
-	a.view.Terminal = a.terminalView()
+	prev := a.view.Terminal
+	next := a.terminalView()
+	a.view.Terminal = next
+	if a.patchTerminalBody(ctx, prev, next) {
+		return nil
+	}
 	a.page.SetData(&a.view)
 	return a.page.RedrawIfChanged(ctx)
 }

@@ -3,7 +3,7 @@
   <span class="sb-item" title="{{.Workspace}}"><span class="sb-dot"></span>{{.WorkspaceLabel}}</span>
   {{if .ChangeLabel}}<span class="sb-item sb-changed" id="sb-change-summary">{{.ChangeLabel}}</span>{{else if .Changed}}<span class="sb-item sb-changed">{{.Changed}} changed</span>{{end}}
   <span class="sb-fill"></span>
-  {{if .HoverPath}}<span class="sb-item sb-path mono" id="sb-hover-path">{{.HoverPath}}</span>{{end}}
+  <span class="sb-item sb-path mono{{if not .HoverPath}} empty{{end}}" id="sb-hover-path">{{.HoverPath}}</span>
   {{if .WatchNote}}<span class="sb-item sb-watch" id="sb-watch">{{.WatchNote}}</span>{{end}}
   {{if .LSP.Progress}}<span class="sb-item sb-progress" id="sb-lsp-progress" role="status" title="{{.LSP.Progress}}">{{.LSP.Progress}}</span>{{end}}
   {{if .LSP.Show}}<button class="sb-item sb-diag" id="sb-problems" data-action="problems-open" type="button" title="Problems: {{.LSP.Errors}} errors, {{.LSP.Warnings}} warnings" aria-label="Problems: {{.LSP.Errors}} errors, {{.LSP.Warnings}} warnings"{{if .Modal}} tabindex="-1"{{end}}><span class="sb-diag-err">✕ {{.LSP.Errors}}</span><span class="sb-diag-warn">! {{.LSP.Warnings}}</span></button>{{end}}

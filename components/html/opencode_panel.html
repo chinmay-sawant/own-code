@@ -3,7 +3,7 @@
   {{template "bottom-panel-grip" .}}
   <header class="term-head">
     {{template "bottom-panel-tabs" .}}
-    <div class="opencode-panel-heading"><b>OpenCode</b><span>{{.OpenCodePanel.Status}}</span></div>
+    <div class="opencode-panel-heading" id="opencode-panel-heading"><b>OpenCode</b><span id="opencode-panel-status">{{.OpenCodePanel.Status}}</span></div>
     <div class="term-tools">
       <button class="term-tool" id="opencode-session-refresh" data-action="opencode-panel-refresh" type="button" title="Refresh local sessions" aria-label="Refresh OpenCode sessions"{{if not .OpenCodePanel.WorkspaceAvailable}} disabled{{end}}>↻</button>
       <button class="term-tool" id="opencode-session-review" data-action="opencode-session-review" type="button" title="Review isolated changes" aria-label="Review isolated OpenCode changes"{{if or (not .OpenCodePanel.CanReview) .OpenCodePanel.Busy}} disabled{{end}}>Review</button>

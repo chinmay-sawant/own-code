@@ -1376,7 +1376,7 @@ func (a *App) scrollTree(rows int) {
 }
 
 // onHover shows the commit message card while a history row is hovered.
-func (a *App) onHover(_ context.Context, _, next ownframe.Box) (bool, error) {
+func (a *App) onHover(ctx context.Context, _, next ownframe.Box) (bool, error) {
 	if a.historyDrag {
 		return false, nil
 	}
@@ -1404,8 +1404,7 @@ func (a *App) onHover(_ context.Context, _, next ownframe.Box) (bool, error) {
 	if path != "" {
 		if doc := a.docs[path]; doc != nil {
 			if path != a.hoverPath {
-				a.hoverPath = path
-				a.refresh()
+				a.patchHoverPath(ctx, path)
 			}
 
 			return false, nil
@@ -1414,8 +1413,7 @@ func (a *App) onHover(_ context.Context, _, next ownframe.Box) (bool, error) {
 		for _, file := range a.ws.Files {
 			if file.Path == path {
 				if path != a.hoverPath {
-					a.hoverPath = path
-					a.refresh()
+					a.patchHoverPath(ctx, path)
 				}
 
 				return false, nil
@@ -1434,8 +1432,8 @@ func (a *App) onHover(_ context.Context, _, next ownframe.Box) (bool, error) {
 	}
 
 	if short == a.hoverCommit && a.hoverPath != "" {
-		a.hoverPath = ""
-		a.refresh()
+		a.patchHoverPath(ctx, "")
+		return false, nil
 	}
 
 	a.hoverCommit = short
