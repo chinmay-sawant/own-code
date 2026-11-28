@@ -19,7 +19,7 @@ Decisions are the effective own-code decisions (`agenttools.DefaultPolicy` plus 
 
 | Tool | own-code | LazyCoder equivalent | Notes |
 | --- | --- | --- | --- |
-| `read_file` | allow | none (not a policy concern there) | Containment, symlink recheck, 64 KiB cap enforced in the executor. |
+| `read_file` | allow | none (not a policy concern there) | Containment, symlink recheck, 64 KiB cap enforced in the executor. Refuses sensitive-name paths (`internal/sensitive`: `.env*`, keys, `*.pem`, credentials, secrets, tokens, `.npmrc`, `.netrc`, ...) and git-ignored paths with `ErrSensitive`; `list_files` and `search_files` silently skip them. Git-ignored detection uses `git ls-files --others --ignored`; outside a git repo only the name rules apply. `run_shell` is not filtered and stays approval-gated. |
 | `list_files` | allow | none | Same containment rules. |
 | `search_files` | allow | none | Skips symlinks and `.git`; bounded results. |
 | `write_file` | ask | none | Stages a proposal in a separate proposal worktree only; never writes the user's checkout. Apply is a separate, rechecked step. |

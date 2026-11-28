@@ -47,3 +47,18 @@ Use each linked file as the checklist for that slice. Keep checkboxes open until
 - Do not let an agent overwrite pre-existing dirty buffers or silently change the user's checked-out files before review.
 - Keep HTTP, streaming, storage, tool execution, and session coordination outside the UI render loop. Deliver async results through the app's existing notification and stale-result patterns.
 - Keep this plan honest. Mark a row complete only after the implementation exists and the listed evidence passes. Record a concrete reason and next gate for any intentional deferral.
+
+## Remaining work (final audit)
+
+Genuine feature gaps:
+- Anthropic Messages and Gemini `generateContent` adapters are not implemented (`internal/agent` supports only chat-completions and responses; models offering only those APIs are ineligible). Open in 01 (two rows). The Anthropic adapter needs its own request builder, SSE event parser, tool_use/tool_result history mapping and fixtures; not attempted in the last pass.
+- 06: delete and rename hunks are reported unsupported (no agent tool produces them).
+- 03: malformed-frame coverage exists for the chat-completions stream (`TestMalformedEvent`) but is not asserted per protocol for Responses.
+- 03: no dedicated assertion for the session state labels.
+- 09: no explicit offline restore-and-resume test (local list and transcript are loaded from SQLite, but the "rebuild request after workspace/model check" path has no end-to-end test).
+
+Manual or live checks (no code gap expected):
+- 03: dock layout at minimum window size, visual check.
+- 07: terminal focus/keyboard/resize/scroll with the dock open; clicking a real `file:line` link.
+- 08: the end-to-end acceptance rows (fresh setup with a real `oc_sk_` key, catalog fetch, a real streamed turn, cancel/disconnect, inline edit accept/reject/undo, multi-file hunk review, restart restore, pre-turn user changes survive).
+- 08 and 09: full serial test, vet and lint gate on a host that tolerates whole-package runs; 09 live Console turn with approve/deny/stop/restore/interrupted-tool cases; 09 final cross-checklist update once those pass.

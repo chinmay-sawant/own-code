@@ -4,14 +4,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/chinmay-sawant/own-code/internal/sensitive"
 )
 
 const (
@@ -68,6 +72,43 @@ func (r *registry) resolve(rel string) (string, error) {
 	return real, nil
 }
 
+// ErrSensitive is returned when a path names a secret-bearing or git-ignored file.
+var ErrSensitive = errors.New("agenttools: path is sensitive or git-ignored and excluded from agent access")
+
+// ignoredSet lists git-ignored files and directories (slash paths; dirs end
+// in "/") under root. Outside a git repository, or if git fails, it is empty.
+func ignoredSet(ctx context.Context, root string) []string {
+	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(cctx, "git", "-C", root, "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+	var set []string
+	for _, e := range strings.Split(string(out), "\x00") {
+		if e != "" {
+			set = append(set, e)
+		}
+	}
+	return set
+}
+
+func isIgnored(set []string, rel string) bool {
+	rel = filepath.ToSlash(rel)
+	for _, e := range set {
+		if e == rel || (strings.HasSuffix(e, "/") && (rel+"/" == e || strings.HasPrefix(rel+"/", e))) {
+			return true
+		}
+	}
+	return false
+}
+
+// blocked reports whether rel (workspace-relative) must be hidden from the model.
+func blocked(set []string, rel string) bool {
+	return rel != "." && (sensitive.Path(rel) || isIgnored(set, rel))
+}
+
 func schema(s string) json.RawMessage { return json.RawMessage(s) }
 
 type readArgs struct {
@@ -100,6 +141,10 @@ func readFileTool() tool {
 				real, err := r.resolve(rel)
 				if err != nil {
 					return Output{}, err
+				}
+				set := ignoredSet(ctx, r.root)
+				if rr, e := filepath.Rel(r.root, real); blocked(set, rel) || (e == nil && blocked(set, rr)) {
+					return Output{}, fmt.Errorf("%w: %s", ErrSensitive, a.Path)
 				}
 				f, err := os.Open(real)
 				if err != nil {
@@ -165,10 +210,21 @@ func listFilesTool() tool {
 				if err != nil {
 					return Output{}, err
 				}
+				set := ignoredSet(ctx, r.root)
+				if blocked(set, rel) {
+					return Output{}, fmt.Errorf("%w: %s", ErrSensitive, a.Path)
+				}
 				ents, err := os.ReadDir(real)
 				if err != nil {
 					return Output{}, err
 				}
+				kept := ents[:0:0]
+				for _, e := range ents {
+					if !blocked(set, filepath.Join(rel, e.Name())) {
+						kept = append(kept, e)
+					}
+				}
+				ents = kept
 				var sb strings.Builder
 				trunc := false
 				for i, e := range ents {
@@ -221,6 +277,10 @@ func searchFilesTool() tool {
 				if err != nil {
 					return Output{}, err
 				}
+				set := ignoredSet(ctx, r.root)
+				if blocked(set, rel) {
+					return Output{}, fmt.Errorf("%w: %s", ErrSensitive, a.Path)
+				}
 				var sb strings.Builder
 				n := 0
 				trunc := false
@@ -231,6 +291,12 @@ func searchFilesTool() tool {
 					}
 					if cerr := ctx.Err(); cerr != nil {
 						return cerr
+					}
+					if wr, e := filepath.Rel(r.root, p); e == nil && blocked(set, wr) {
+						if d.IsDir() {
+							return filepath.SkipDir
+						}
+						return nil
 					}
 					if d.IsDir() {
 						if d.Name() == ".git" {

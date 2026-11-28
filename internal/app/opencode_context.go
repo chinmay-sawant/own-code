@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/chinmay-sawant/own-code/internal/sensitive"
 	"os"
 	"path/filepath"
 	"strings"
@@ -189,23 +190,7 @@ func validateAgentContextPath(workspaceRoot, relativePath string) (string, strin
 }
 
 func isSensitiveAgentContextPath(relativePath string) bool {
-	cleanPath := strings.ToLower(filepath.FromSlash(relativePath))
-	base := filepath.Base(cleanPath)
-	ext := strings.ToLower(filepath.Ext(base))
-	for _, part := range strings.Split(cleanPath, string(filepath.Separator)) {
-		if part == ".env" || strings.HasPrefix(part, ".env.") || strings.Contains(part, "credential") || strings.Contains(part, "secret") || strings.Contains(part, "password") || strings.Contains(part, "token") {
-			return true
-		}
-	}
-	switch base {
-	case "id_rsa", "id_ed25519", "id_ecdsa", "known_hosts", "authorized_keys":
-		return true
-	}
-	switch ext {
-	case ".key", ".pem", ".p12", ".pfx", ".keystore":
-		return true
-	}
-	return false
+	return sensitive.Path(relativePath)
 }
 
 func runeLineRange(runes []rune, from, to int) (int, int) {

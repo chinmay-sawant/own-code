@@ -5,7 +5,7 @@
 ## Phase 1: PTY integration
 
 - [x] Decide whether an agent session shares a user terminal or starts a dedicated PTY. Show the relationship in the UI. **Decision: neither.** Agent sessions own no PTY. Approved agent shell commands run as child processes in the private worktree; the user terminal (`internal/terminal` manager) is user-owned and never written to by the agent. The panel footer says "Agent shell commands ask for approval and run in a private worktree, not in your terminal."
-- [ ] Reuse `internal/terminal/manager.go` where it fits. Keep process ownership and close behavior explicit.
+- [x] (Satisfied by the decision above: agent shell runs as approved child processes in the private worktree, so there is nothing to reuse; the user terminal manager is untouched and owns its own PTYs and close behavior.) Reuse `internal/terminal/manager.go` where it fits. Keep process ownership and close behavior explicit.
 - [ ] Preserve terminal focus, keyboard ownership, resize, and scroll behavior while the agent panel is open.
 - [x] Make terminal `file:line` links open only validated files inside the active workspace. (`termLinkInsideWorkspace` in `terminal_links.go`: symlink-resolved, regular file, under the root; test `TestOCTermLinkOnlyInsideWorkspace`. The manual click pass is still outstanding.)
 - [x] Define what happens to PTYs when the user switches session, workspace, or closes own-code. Switching an agent session leaves terminals untouched (they are not tied to sessions). Switching workspace calls `closeTerminalSessions` in `switchProject`. Closing own-code calls `App.Close`, which closes all PTYs. This is documented from the code; no lifecycle tests were added or run.
