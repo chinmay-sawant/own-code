@@ -144,8 +144,11 @@ func (c *Client) run(ctx context.Context, req Request, stream bool, emit func(Ev
 	}
 	endpoint, _ := req.Model.endpoint()
 	var proto protocolAdapter = chatAdapter{}
-	if req.Model.Protocol == ProtocolResponses {
+	switch req.Model.Protocol {
+	case ProtocolResponses:
 		proto = responsesAdapter{}
+	case ProtocolMessages:
+		proto = anthropicAdapter{}
 	}
 	body, err := proto.encode(req, stream)
 	if err != nil {
@@ -173,6 +176,9 @@ func (c *Client) run(ctx context.Context, req Request, stream bool, emit func(Ev
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
 	httpReq.Header.Set(sessionHeader, req.SessionID)
+	if req.Model.Protocol == ProtocolMessages {
+		httpReq.Header.Set("anthropic-version", anthropicVersion)
+	}
 	if stream {
 		httpReq.Header.Set("Accept", "text/event-stream")
 	} else {

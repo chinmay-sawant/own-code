@@ -111,4 +111,4 @@ CREATE TABLE tool_activity (
 - [x] Reconcile any interrupted local tool/run state explicitly before allowing continuation; do not silently re-run a command or file mutation after restart. Evidence: `TestRecoveryNeverRedispatches`.
 - [x] Isolate concurrent updates by local session ID and workspace root. Evidence: `TestConcurrentSessionsDoNotMix`.
 
-**Gate:** Close and reopen own-code, restore the visible session list and selected transcript offline, and continue a selected session only after verifying the workspace, credential, model, and pending tool state.
+**Gate:** Close and reopen own-code, restore the visible session list and selected transcript offline, and continue a selected session only after verifying the workspace, credential, model, and pending tool state. Offline reopen, list/transcript restore, model check and fresh approval after an interrupted call: `TestOfflineRestoreAndResume` (fake provider; live check still pending).

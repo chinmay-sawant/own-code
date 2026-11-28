@@ -11,8 +11,8 @@ import (
 
 // ResolveModel returns the routing for a catalog model, failing closed when
 // the model is not a chat model with explicit tool support and a supported
-// protocol with a base_url. When both protocols are offered,
-// chat-completions is preferred.
+// protocol with a base_url. Preference order: chat-completions, responses,
+// messages (Anthropic).
 func ResolveModel(m opencode.ConsoleModel) (ModelTarget, error) {
 	if strings.TrimSpace(m.ID) == "" || strings.TrimSpace(m.ProviderID) == "" {
 		return ModelTarget{}, errors.New("model is missing provider or model ID")
@@ -23,7 +23,7 @@ func ResolveModel(m opencode.ConsoleModel) (ModelTarget, error) {
 	if !m.ToolsKnown || !m.ToolsSupported {
 		return ModelTarget{}, errors.New("model does not advertise tool support")
 	}
-	for _, protocol := range []string{ProtocolChatCompletions, ProtocolResponses} {
+	for _, protocol := range []string{ProtocolChatCompletions, ProtocolResponses, ProtocolMessages} {
 		api, ok := m.APIs[protocol]
 		if !ok || strings.TrimSpace(api.BaseURL) == "" {
 			continue
@@ -37,7 +37,7 @@ func ResolveModel(m opencode.ConsoleModel) (ModelTarget, error) {
 		}
 		return target, nil
 	}
-	return ModelTarget{}, errors.New("model advertises no supported protocol (chat-completions or responses) with a base_url")
+	return ModelTarget{}, errors.New("model advertises no supported protocol (chat-completions, responses, or messages) with a base_url")
 }
 
 // Eligible reports whether the model may be selected for agent runs.
@@ -54,7 +54,7 @@ func (t ModelTarget) Validate() error {
 	if !t.ToolsSupported {
 		return errors.New("model does not advertise tool support")
 	}
-	if t.Protocol != ProtocolChatCompletions && t.Protocol != ProtocolResponses {
+	if t.Protocol != ProtocolChatCompletions && t.Protocol != ProtocolResponses && t.Protocol != ProtocolMessages {
 		return fmt.Errorf("unsupported inference protocol %q", t.Protocol)
 	}
 	_, err := t.endpoint()
@@ -78,8 +78,11 @@ func (t ModelTarget) endpoint() (string, error) {
 	}
 	u.RawQuery, u.Fragment = "", ""
 	suffix := "/chat/completions"
-	if t.Protocol == ProtocolResponses {
+	switch t.Protocol {
+	case ProtocolResponses:
 		suffix = "/responses"
+	case ProtocolMessages:
+		suffix = "/messages"
 	}
 	u.Path = strings.TrimRight(u.Path, "/")
 	if !strings.HasSuffix(u.Path, suffix) {

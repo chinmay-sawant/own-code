@@ -65,7 +65,7 @@ func TestResolveModel(t *testing.T) {
 		"not chat":      func(m *opencode.ConsoleModel) { m.Type = "image" },
 		"empty base":    func(m *opencode.ConsoleModel) { m.APIs = map[string]opencode.ConsoleModelAPI{"responses": {}} },
 		"unknown api": func(m *opencode.ConsoleModel) {
-			m.APIs = map[string]opencode.ConsoleModelAPI{"messages": {BaseURL: "https://x"}}
+			m.APIs = map[string]opencode.ConsoleModelAPI{"generateContent": {BaseURL: "https://x"}}
 		},
 		"http non-local": func(m *opencode.ConsoleModel) {
 			m.APIs = map[string]opencode.ConsoleModelAPI{"responses": {BaseURL: "http://x.example"}}

@@ -13,6 +13,10 @@ import (
 const (
 	ProtocolChatCompletions = "chat-completions"
 	ProtocolResponses       = "responses"
+	// ProtocolMessages is the Anthropic Messages family. "messages" is the
+	// exact api key the Console catalog uses (see internal/opencode/console_test.go
+	// fixture and the Inference API docs: /inference/anthropic/v1/messages).
+	ProtocolMessages = "messages"
 )
 
 // Role identifies the author of a Message.
