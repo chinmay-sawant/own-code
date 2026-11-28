@@ -17,8 +17,8 @@
 - [ ] Add command palette actions to start an agent task, open a saved session, explain a selection, explain or fix a Problem, review pending changes, and interrupt a run.
 - [ ] Add keybindings only after checking the existing `keymapCatalog` and terminal precedence. Keep new bindings rebindable where possible.
 - [ ] Route each action through the same session, context, and review contracts as the visible controls.
-- [ ] Show clear no-server, no-provider, no-session, permission-needed, and offline states.
+- [ ] Show clear missing-key, no-available-model, no-session, permission-needed, and offline states.
 
-**Implementation note:** The palette now has `OpenCode: Open Session Panel`, which opens the existing session panel, and `OpenCode: New Blank Session`, which opens the panel and requests an empty session through the existing connected-server guard. Prompt and interrupt commands were not added while isolated edit review remains incomplete. This covers only two palette entry points; the remaining actions and the phase gate are still pending, so all checklist rows remain open. No tests were run for this partial change.
+**Implementation note:** The palette has `OpenCode: Open Session Panel` and `OpenCode: New Blank Session` entry points. Direct Console model selection, local prompt submission, and the own-code agent loop are not wired through these commands yet. Prompt and interrupt commands remain open while local tool permissions and edit review are incomplete. This covers only two palette entry points; the remaining actions and the phase gate are still pending, so all checklist rows remain open. No tests were run for this partial change.
 
 **Gate:** Palette filtering, dispatch, keymap conflicts, terminal focus, and empty-state tests pass. Each command produces the intended session action without bypassing the review flow.

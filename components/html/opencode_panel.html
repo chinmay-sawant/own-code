@@ -5,9 +5,9 @@
     {{template "bottom-panel-tabs" .}}
     <div class="opencode-panel-heading"><b>OpenCode</b><span>{{.OpenCodePanel.Status}}</span></div>
     <div class="term-tools">
-      <button class="term-tool" id="opencode-session-refresh" data-action="opencode-panel-refresh" type="button" title="Refresh sessions" aria-label="Refresh OpenCode sessions"{{if or (not .OpenCodeConnected) (not .OpenCodePanel.WorkspaceAvailable)}} disabled{{end}}>↻</button>
+      <button class="term-tool" id="opencode-session-refresh" data-action="opencode-panel-refresh" type="button" title="Refresh local sessions" aria-label="Refresh OpenCode sessions"{{if not .OpenCodePanel.WorkspaceAvailable}} disabled{{end}}>↻</button>
       <button class="term-tool" id="opencode-session-review" data-action="opencode-session-review" type="button" title="Review isolated changes" aria-label="Review isolated OpenCode changes"{{if or (not .OpenCodePanel.CanReview) .OpenCodePanel.Busy}} disabled{{end}}>Review</button>
-      <button class="term-tool term-add" id="opencode-session-new" data-action="opencode-session-new" type="button" title="New isolated session in this workspace" aria-label="New isolated OpenCode session"{{if or (not .OpenCodeConnected) .OpenCodePanel.Busy (not .OpenCodePanel.WorkspaceAvailable)}} disabled{{end}}>+</button>
+      <button class="term-tool term-add" id="opencode-session-new" data-action="opencode-session-new" type="button" title="New local session in this workspace" aria-label="New local OpenCode session"{{if or (not .OpenCodeConnected) .OpenCodePanel.Busy (not .OpenCodePanel.WorkspaceAvailable)}} disabled{{end}}>+</button>
       <button class="term-tool" id="opencode-panel-hide" data-action="opencode-panel-hide" type="button" title="Hide panel" aria-label="Hide OpenCode panel">×</button>
     </div>
   </header>
@@ -18,14 +18,14 @@
         <b>{{.Title}}</b><span>{{.Status}}</span>
       </button>
       {{else}}
-      <div class="opencode-session-empty">{{if not .OpenCodePanel.WorkspaceAvailable}}Open a project folder to use OpenCode sessions.{{else if .OpenCodeConnected}}No sessions for this workspace. Create an isolated session.{{else}}Connect to OpenCode in Settings.{{end}}</div>
+      <div class="opencode-session-empty">{{if not .OpenCodePanel.WorkspaceAvailable}}Open a project folder to use OpenCode sessions.{{else if .OpenCodeConnected}}No local sessions for this workspace. Create one with +.{{else}}Connect to OpenCode Console in Settings to create a session.{{end}}</div>
       {{end}}
     </aside>
     <div class="opencode-transcript" id="opencode-transcript" role="log" aria-label="OpenCode transcript" aria-live="polite">
       {{range .OpenCodePanel.Messages}}
       <article class="opencode-message role-{{.Role}}" id="opencode-message-{{.ID}}"><b>{{if eq .Role "assistant"}}OpenCode{{else}}You{{end}}</b><pre>{{.Text}}</pre></article>
       {{else}}
-      <div class="opencode-transcript-empty">{{if .OpenCodePanel.SelectedID}}No saved text yet. Agent actions remain disabled until safe tool access is ready.{{else}}Choose or create an OpenCode session.{{end}}</div>
+      <div class="opencode-transcript-empty">{{if .OpenCodePanel.SelectedID}}No saved messages yet. Prompting remains paused until the local agent loop is ready.{{else}}Choose or create a local session.{{end}}</div>
       {{end}}
       {{if .OpenCodePanel.Proposals}}
       <section class="opencode-proposals" aria-label="Isolated proposal snapshot">
@@ -40,9 +40,9 @@
   <footer class="opencode-prompt-area">
     {{if .OpenCodePanel.IncludeSelection}}<pre class="opencode-context-preview" id="opencode-context-preview">{{.OpenCodePanel.ContextPreview}}</pre>{{end}}
     <div class="opencode-context-tools"><button class="settings-toggle" id="opencode-context-toggle" data-action="opencode-context-toggle" type="button" aria-pressed="{{if .OpenCodePanel.IncludeSelection}}true{{else}}false{{end}}"><span class="settings-check">{{if .OpenCodePanel.IncludeSelection}}✓{{end}}</span>{{if .OpenCodePanel.IncludeSelection}}Remove editor context{{else}}Include current editor selection{{end}}</button>{{if .OpenCodePanel.IncludeSelection}}{{if .OpenCodePanel.ContextAvailable}}<span>Exact context preview</span>{{else}}<span class="opencode-context-error">{{.OpenCodePanel.ContextPreview}}</span>{{end}}{{end}}</div>
-    <textarea class="opencode-prompt" id="opencode-prompt" data-bind="OpenCodePrompt" rows="2" maxlength="12000" aria-label="Message OpenCode" placeholder="Prompts require safe tool access and proposal acceptance"{{if or (not .OpenCodePanel.CanPrompt) (not .OpenCodeConnected) (not .OpenCodePanel.SelectedID) .OpenCodePanel.Busy}} disabled{{end}}>{{.OpenCodePrompt}}</textarea>
+    <textarea class="opencode-prompt" id="opencode-prompt" data-bind="OpenCodePrompt" rows="2" maxlength="12000" aria-label="Message OpenCode" placeholder="Prompting is not enabled yet"{{if or (not .OpenCodePanel.CanPrompt) (not .OpenCodeConnected) (not .OpenCodePanel.SelectedID) .OpenCodePanel.Busy}} disabled{{end}}>{{.OpenCodePrompt}}</textarea>
     <div class="opencode-prompt-tools">
-      <span>{{if .OpenCodePanel.Busy}}Working…{{else}}Prompts are paused until safe tool access and proposal acceptance are ready.{{end}}</span>
+      <span>{{if .OpenCodePanel.Busy}}Working…{{else}}Prompts are paused until local agent execution and permissions are ready.{{end}}</span>
       <button class="settings-btn" id="opencode-interrupt" data-action="opencode-session-interrupt" type="button"{{if not .OpenCodePanel.CanInterrupt}} disabled{{end}}>Stop</button>
       <button class="settings-btn primary" id="opencode-prompt-send" data-action="opencode-session-prompt" type="button"{{if or (not .OpenCodePanel.CanPrompt) (not .OpenCodeConnected) (not .OpenCodePanel.SelectedID) .OpenCodePanel.Busy}} disabled{{end}}>Send</button>
     </div>

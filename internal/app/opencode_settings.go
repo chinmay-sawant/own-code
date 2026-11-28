@@ -2,58 +2,36 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"net"
-	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/chinmay-sawant/own-code/internal/opencode"
 	"github.com/chinmay-sawant/own-code/internal/secretstore"
 )
 
-const (
-	openCodeModeOwned        = "owned"
-	openCodeModeAttach       = "attach"
-	openCodeDefaultURL       = "http://127.0.0.1:4096"
-	openCodeMaxIntegrationID = 100
-)
-
-var (
-	errInvalidOpenCodeServerURL = errors.New("Enter a valid OpenCode server address without credentials or a path prefix.")
-	errOpenCodeRemoteNeedsHTTPS = errors.New("Use HTTPS for remote OpenCode servers; HTTP is allowed only on localhost or a loopback IP.")
-)
-
-// opencodeSettings contains only non-secret connection metadata. Credentials
-// are entered into native form controls and are read through FormValue only
-// when a connection action is submitted.
+// opencodeSettings contains selected non-secret provider/model identifiers.
+// The Console API key is stored separately from application settings.
 type opencodeSettings struct {
-	Mode          string `json:"mode,omitempty"`
-	ServerURL     string `json:"serverUrl,omitempty"`
-	IntegrationID string `json:"integrationId,omitempty"`
+	ProviderID string `json:"providerId,omitempty"`
+	ModelID    string `json:"modelId,omitempty"`
 }
 
-func defaultOpenCodeSettings() opencodeSettings {
-	return opencodeSettings{
-		Mode:      openCodeModeAttach,
-		ServerURL: openCodeDefaultURL,
-	}
-}
+func defaultOpenCodeSettings() opencodeSettings { return opencodeSettings{} }
 
 func (s *opencodeSettings) sanitize() *opencodeSettings {
 	if s == nil {
 		return nil
 	}
 	out := *s
-	if out.Mode != openCodeModeOwned && out.Mode != openCodeModeAttach {
-		out.Mode = openCodeModeAttach
+	out.ProviderID = strings.TrimSpace(out.ProviderID)
+	out.ModelID = strings.TrimSpace(out.ModelID)
+	if len(out.ProviderID) > maxFieldLen {
+		out.ProviderID = ""
 	}
-	if normalized, err := normalizeOpenCodeServerURL(out.ServerURL); err == nil {
-		out.ServerURL = normalized
-	} else {
-		out.ServerURL = openCodeDefaultURL
+	if len(out.ModelID) > maxFieldLen {
+		out.ModelID = ""
 	}
-	out.IntegrationID = sanitizeOpenCodeIntegrationID(out.IntegrationID)
 	return &out
 }
 
@@ -75,63 +53,29 @@ func (a *App) openCodeSettingsView() opencodeSettings {
 	return openCodeSettingsValue(a.settings.OpenCode)
 }
 
-func openCodeSetupStatus() string {
-	return "Not connected. Enter the OpenCode server address and check the connection."
-}
-
-// normalizeOpenCodeServerURL rejects embedded credentials and cleartext
-// remote endpoints. A path is also rejected because the OpenCode server API
-// routes are rooted at /api and are not mounted under a user path prefix.
-func normalizeOpenCodeServerURL(raw string) (string, error) {
-	value := strings.TrimSpace(raw)
-	if value == "" || len(value) > maxFieldLen {
-		return "", errInvalidOpenCodeServerURL
+func (a *App) findOpenCodeModel(selection string) (providerID, modelID string, ok bool) {
+	providerID, modelID, found := strings.Cut(strings.TrimSpace(selection), "/")
+	if !found || providerID == "" || modelID == "" {
+		return "", "", false
 	}
-	u, err := url.Parse(value)
-	if err != nil || u == nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return "", errInvalidOpenCodeServerURL
-	}
-	if u.Path != "" && u.Path != "/" {
-		return "", errInvalidOpenCodeServerURL
-	}
-	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
-	switch strings.ToLower(u.Scheme) {
-	case "http":
-		if !openCodeLoopbackHost(host) {
-			return "", errOpenCodeRemoteNeedsHTTPS
+	for _, model := range a.openCode.consoleModels {
+		isChatModel := model.Type == "" || strings.EqualFold(model.Type, "chat")
+		if isChatModel && model.ProviderID == providerID && model.ID == modelID {
+			return providerID, modelID, true
 		}
-	case "https":
-	default:
-		return "", errInvalidOpenCodeServerURL
 	}
-	u.Scheme = strings.ToLower(u.Scheme)
-	u.Path = ""
-	u.RawPath = ""
-	u.RawQuery = ""
-	u.Fragment = ""
-	u.ForceQuery = false
-	return strings.TrimRight(u.String(), "/"), nil
+	return "", "", false
 }
 
-func openCodeLoopbackHost(host string) bool {
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
-}
-
-func sanitizeOpenCodeIntegrationID(raw string) string {
-	value := strings.TrimSpace(raw)
-	if len(value) > openCodeMaxIntegrationID {
+func openCodeModelSelection(providerID, modelID string) string {
+	if strings.TrimSpace(providerID) == "" || strings.TrimSpace(modelID) == "" {
 		return ""
 	}
-	for _, r := range value {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.') {
-			return ""
-		}
-	}
-	return value
+	return providerID + "/" + modelID
+}
+
+func openCodeSetupStatus() string {
+	return "Not connected. Enter a Console API key or use OPENCODE_API_KEY."
 }
 
 // opencodeCredentialInput reads a secret directly from the native form
@@ -147,193 +91,75 @@ func (a *App) clearOpenCodeCredentialInputs() {
 	if a == nil || a.page == nil {
 		return
 	}
-	a.page.Form().SetFormValue("opencode-server-password", "")
 	a.page.Form().SetFormValue("opencode-api-key", "")
-	cleared := make(map[string]struct{})
-	for _, integration := range a.openCode.integrations {
-		for _, method := range integration.Methods {
-			if !strings.EqualFold(method.Type, "key") {
-				continue
-			}
-			fields, err := ParseOpenCodeProviderKeyFields(method)
-			if err != nil {
-				continue
-			}
-			for _, field := range fields {
-				if _, ok := cleared[field.Key]; ok {
-					continue
-				}
-				a.page.Form().SetFormValue("opencode-provider-"+field.Key, "")
-				cleared[field.Key] = struct{}{}
-			}
-		}
-	}
 }
 
-func (a *App) openCodeProviderAnswer(integrationID string) (json.RawMessage, error) {
-	method, ok := openCodeKeyMethod(a.openCode.integrations, integrationID)
-	if !ok {
-		return nil, errors.New("OpenCode did not advertise a key authentication method for the selected provider")
-	}
-	fields, err := ParseOpenCodeProviderKeyFields(method)
-	if err != nil {
-		return nil, err
-	}
-	values := make(map[string]string, len(fields))
-	for _, field := range fields {
-		if field.Hidden {
-			continue
-		}
-		values[field.Key] = a.opencodeCredentialInput("opencode-provider-" + field.Key)
-	}
-	answer, err := BuildOpenCodeProviderAnswer(method, values)
-	if err != nil {
-		return nil, err
-	}
-	return answer.JSON()
-}
-
-// opencodeAction validates connection metadata and passes one-time credentials
-// to the OpenCode runtime without copying them into View or persisted settings.
+// opencodeAction connects to the OpenCode Console directly. API keys stay in
+// native form state until the catalog request succeeds and are never copied to
+// View or settings.json.
 func (a *App) opencodeAction(ctx context.Context, action string) error {
 	switch action {
-	case "opencode-mode:owned", "opencode-mode:attach":
+	case "opencode-model-save":
 		settings := openCodeSettingsValue(a.settings.OpenCode)
-		mode := strings.TrimPrefix(action, "opencode-mode:")
-		if settings.Mode != mode {
-			a.retireOpenCodeConnection()
-			a.openCode.status = "OpenCode mode changed. Check the server connection to continue."
+		providerID, modelID, ok := a.findOpenCodeModel(a.view.OpenCodeModelSelection)
+		if !ok {
+			a.settingsNote = "Choose a chat model from the connected OpenCode Console catalog first."
+			return a.redrawSettings(ctx)
 		}
-		settings.Mode = mode
+		settings.ProviderID = providerID
+		settings.ModelID = modelID
 		a.settings.OpenCode = &settings
-		a.settingsNote = "OpenCode mode saved."
+		a.settingsNote = "OpenCode model saved."
 		a.persistSettings()
 		return a.redrawSettings(ctx)
-	case "opencode-provider-fields":
+	case "opencode-connect":
+		key := strings.TrimSpace(a.opencodeCredentialInput("opencode-api-key"))
 		a.clearOpenCodeCredentialInputs()
-		settings := openCodeSettingsValue(a.settings.OpenCode)
-		integrationID := sanitizeOpenCodeIntegrationID(a.view.OpenCodeIntegrationID)
-		if strings.TrimSpace(a.view.OpenCodeIntegrationID) != "" && integrationID == "" {
-			a.settingsNote = "Provider integration ID may contain only letters, numbers, dots, underscores, and hyphens."
-			return a.redrawSettings(ctx)
-		}
-		settings.IntegrationID = integrationID
-		a.settings.OpenCode = &settings
-		a.persistSettings()
-		a.settingsNote = "Provider fields loaded from the selected OpenCode integration."
-		return a.redrawSettings(ctx)
-	case "opencode-save":
-		a.clearOpenCodeCredentialInputs()
-		settings := openCodeSettingsValue(a.settings.OpenCode)
-		oldServerURL := settings.ServerURL
-		serverURL, err := normalizeOpenCodeServerURL(a.view.OpenCodeServerURL)
-		if err != nil {
-			a.settingsNote = err.Error()
-			return a.redrawSettings(ctx)
-		}
-		integrationID := sanitizeOpenCodeIntegrationID(a.view.OpenCodeIntegrationID)
-		if strings.TrimSpace(a.view.OpenCodeIntegrationID) != "" && integrationID == "" {
-			a.settingsNote = "Provider integration ID may contain only letters, numbers, dots, underscores, and hyphens."
-			return a.redrawSettings(ctx)
-		}
-		settings.ServerURL = serverURL
-		settings.IntegrationID = integrationID
-		a.settings.OpenCode = &settings
-		if oldServerURL != serverURL {
-			a.retireOpenCodeConnection()
-			a.openCode.status = "Connection settings changed. Check the new server address."
-		}
-		a.settingsNote = "OpenCode connection settings saved. Credentials are not stored in settings.json."
-		a.persistSettings()
-		return a.redrawSettings(ctx)
-	case "opencode-check-connection", "opencode-connect-provider":
-		passwordInput := a.opencodeCredentialInput("opencode-server-password")
-		key := ""
-		var answer json.RawMessage
-		var answerErr error
-		if action == "opencode-connect-provider" {
-			key = a.opencodeCredentialInput("opencode-api-key")
-			answer, answerErr = a.openCodeProviderAnswer(a.view.OpenCodeIntegrationID)
-		}
-		a.clearOpenCodeCredentialInputs()
-		settings := openCodeSettingsValue(a.settings.OpenCode)
-		serverURL, err := normalizeOpenCodeServerURL(a.view.OpenCodeServerURL)
-		if err != nil {
-			a.openCode.status = err.Error()
-			a.openCode.connected = false
-			return a.redrawSettings(ctx)
-		}
-		settings.ServerURL = serverURL
-		integrationID := sanitizeOpenCodeIntegrationID(a.view.OpenCodeIntegrationID)
-		if strings.TrimSpace(a.view.OpenCodeIntegrationID) != "" && integrationID == "" {
-			a.openCode.status = "Provider integration ID may contain only letters, numbers, dots, underscores, and hyphens."
-			return a.redrawSettings(ctx)
-		}
-		settings.IntegrationID = integrationID
-		a.settings.OpenCode = &settings
-		a.persistSettings()
-
-		if action == "opencode-check-connection" {
-			password, provided, err := resolveOpenCodePassword(passwordInput)
-			if err != nil && !errors.Is(err, secretstore.ErrNotFound) {
-				a.openCode.status = "Could not read the saved OpenCode server password."
-				return a.redrawSettings(ctx)
-			}
-			if settings.Mode == openCodeModeOwned {
-				if err := a.startOwnedOpenCode(settings.ServerURL, password, provided); err != nil {
-					a.openCode.status = err.Error()
-					return a.redrawSettings(ctx)
-				}
-				return a.redrawSettings(ctx)
-			}
-			client, err := opencode.NewClient(settings.ServerURL, password)
+		provided := key != ""
+		if !provided {
+			var err error
+			key, err = loadOpenCodeConsoleAPIKey()
 			if err != nil {
-				a.openCode.status = err.Error()
-				a.openCode.connected = false
+				if errors.Is(err, secretstore.ErrNotFound) {
+					a.openCode.status = "Enter a workspace API key, save one first, or set OPENCODE_API_KEY."
+				} else {
+					a.openCode.status = "Could not read the saved OpenCode Console API key."
+				}
 				return a.redrawSettings(ctx)
 			}
-			a.openCode.serverID = a.openCodeServerID(settings.ServerURL)
-			a.checkOpenCodeConnection(client, password, provided)
+		}
+		client, err := opencode.NewConsoleClient(key)
+		if err != nil {
+			a.openCode.status = "The OpenCode Console API key is invalid."
 			return a.redrawSettings(ctx)
 		}
-		if answerErr != nil {
-			a.openCode.status = "Provider details are incomplete or no longer match OpenCode's advertised form. Load the selected provider fields and try again."
-			return a.redrawSettings(ctx)
-		}
-
-		password, provided, passwordErr := resolveOpenCodePassword(passwordInput)
-		if key == "" {
-			a.openCode.status = "Enter a provider API key before connecting it."
-			return a.redrawSettings(ctx)
-		}
-		if integrationID == "" {
-			a.openCode.status = "Choose an OpenCode provider integration first."
-			return a.redrawSettings(ctx)
-		}
-		if passwordErr != nil && !errors.Is(passwordErr, secretstore.ErrNotFound) {
-			a.openCode.status = "Could not read the saved OpenCode server password."
-			return a.redrawSettings(ctx)
-		}
-		client := a.openCode.client
-		serverID := a.openCodeServerID(settings.ServerURL)
-		if client == nil || a.openCode.serverID != serverID || provided {
-			if settings.Mode == openCodeModeOwned {
-				if a.openCode.process == nil || a.openCode.process.URL() != settings.ServerURL {
-					a.openCode.status = "Start or check the owned local OpenCode server before connecting a provider key."
-					return a.redrawSettings(ctx)
-				}
-				client = a.openCode.process.Client()
-				provided = false
-			} else {
-				client, err = opencode.NewClient(settings.ServerURL, password)
-				if err != nil {
-					a.openCode.status = err.Error()
-					return a.redrawSettings(ctx)
-				}
+		a.retireOpenCodeConnection()
+		token, baseCtx := a.beginOpenCodeOperation(openCodeOperationCheck)
+		a.openCode.connected = false
+		a.openCode.status = "Loading the OpenCode Console model catalog…"
+		a.refresh()
+		result := a.openCode.results
+		go func() {
+			ctx, cancel := context.WithTimeout(baseCtx, openCodeRequestTimeout)
+			defer cancel()
+			reply := openCodeReply{token: token, operation: openCodeOperationCheck, consoleClient: client}
+			reply.consoleModels, reply.err = client.Models(ctx)
+			if reply.err == nil && provided {
+				reply.apiKeySaveErr = saveOpenCodeConsoleAPIKey(key)
 			}
+			if reply.err == nil {
+				reply.safeStatus = "Connected to OpenCode Console. Loaded " + strconv.Itoa(len(reply.consoleModels)) + " models."
+			}
+			a.sendOpenCodeReply(baseCtx, result, reply)
+		}()
+		return a.redrawSettings(ctx)
+	case "opencode-key-clear":
+		if err := deleteOpenCodeConsoleAPIKey(); err != nil {
+			a.openCode.status = "Could not clear the saved OpenCode Console API key."
+			return a.redrawSettings(ctx)
 		}
-		a.openCode.serverID = serverID
-		a.connectOpenCodeProvider(client, integrationID, key, answer, password, provided)
+		a.retireOpenCodeConnection()
+		a.openCode.status = "Saved OpenCode Console API key cleared."
 		return a.redrawSettings(ctx)
 	default:
 		return nil

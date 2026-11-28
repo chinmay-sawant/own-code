@@ -4,25 +4,24 @@
 |---|---|
 | Repository | `github.com/chinmay-sawant/own-code` |
 | Issue | [#9 Native AI coding & agentic workbench](https://github.com/chinmay-sawant/own-code/issues/9) |
-| Status | In progress. OpenCode connection and provider onboarding, SQLite session history, a read-only native panel, context snapshots, private worktree creation, and bounded proposal snapshots are implemented in the current worktree. Prompting and proposal review are still disabled pending integration and safety validation. |
-| Scope | OpenCode first, then session history, inline editing, workspace context, review, and terminal workflows. |
+| Status | In progress. Direct Console key settings, model catalog loading/selection, private key storage, and local SQLite session creation/transcript reads are implemented. Direct inference, streaming, local agent execution, session restoration, review, and end-to-end validation remain open. |
+| Scope | Direct OpenCode Console API integration, with own-code owning local sessions, tool execution, permissions, context, and review. |
 
-This plan lives under `plans/v0.0.1` as requested. It is a separate plan for issue #9. It does not change the historical v0.0.1 release checklist. The current worktree adds OpenCode Server connection settings, transient provider credential submission, a user-config server password file, a SQLite session/message store, a native session panel with offline history, a bounded editor-selection snapshot, isolated session worktrees with stored base commits, and a bounded read-only proposal snapshot shown in the session panel. New sessions receive a deny-all OpenCode permission ruleset and prompt submission remains paused. Proposal acceptance and inline application are not implemented. Issue #9 remains open: event streaming, explicit permission UX, inline edit review, full context sources, and end-to-end validation remain in the slice checklists.
+This plan lives under `plans/v0.0.1` and is separate from the historical v0.0.1 release checklist. The OpenCode integration uses the hosted Console API directly. It does not start or attach to `opencode serve`, and it does not depend on remote OpenCode Server sessions or events.
 
 ## Goal
 
-Add a native Go agent workbench to own-code. Start and attach to OpenCode sessions from the editor, show streamed responses and tool activity, and let the user review agent edits in the existing workspace. Keep session history in a per-user SQLite database so sessions remain visible after restart.
+Add a native Go AI workbench to own-code. Let users configure an OpenCode Console API key, choose a model available to that key's workspace, and send requests to the matching inference API. Keep session IDs, transcripts, tool activity, and restoration state in own-code's per-user SQLite database. own-code runs the agent loop and local tools, asks for permission before sensitive actions, and presents proposed edits for review before applying them.
 
-The workbench also needs an inline edit flow and explicit prompt context. The user chooses which file, selection, Git diff, or LSP problem to include in a prompt.
+The workbench also needs inline edits and explicit prompt context. The user chooses which file, selection, Git diff, or LSP problem to include in a request.
 
-## Protocol and credential boundaries
+## API and credential boundaries
 
-- Use the OpenCode Server API for agent sessions. The current OpenCode 2 migration guide says server integrations must use the revised V2 API. The generated API reference labels its selected-instance HTTP surface experimental. Pin a supported OpenCode version and record any experimental dependency in [01-opencode-connection.md](01-opencode-connection.md).
-- Keep the OpenCode server password separate from model-provider API keys. The server uses HTTP Basic auth with the fixed username `opencode`. `OPENCODE_PASSWORD` sets the password; `OPENCODE_SERVER_PASSWORD` remains supported for compatibility.
-- Discover provider integrations and their available authentication methods from OpenCode. Send a typed provider key to OpenCode's `connect/key` endpoint so OpenCode owns the provider credential. Do not write that key to own-code settings, the session database, workspace files, or logs.
-- Treat LazyCoder's OpenCode Go integration as a different product path. It calls the hosted inference API directly. That API's bearer key, model routes, Responses support, and `x-opencode-session` header do not define the local OpenCode Server session protocol.
-- Store own-code's server connection secret outside `settings.json` and the SQLite session database. Prefer an OS credential store. If a file is needed, keep it in the user config directory with owner-only permissions. Do not write credentials into an opened project. If implementation adds a repository-local environment file, add its ignore rules before creating it.
-- The current `/api/event` stream is volatile and misses events during disconnects. The API reference also documents `GET /api/experimental/session/{sessionID}/log` as a durable session log, but it is experimental and not yet used here. `session.prompt` returns after queueing work. Reconnect by reading persisted messages or by adopting that log only with an explicit supported-version boundary.
+- OpenCode Console keys use the `oc_sk_` prefix, are scoped to one workspace when created, and are sent as `Authorization: Bearer …`. The selected workspace is part of the key; requests do not need a workspace header. See the official [Console API overview](https://opencode.ai/docs/console/api).
+- Fetch the workspace's provider/model catalog from `GET https://opencode.ai/console/api/v1/models`. The response is keyed by provider ID and includes model capabilities, limits, and protocol-specific API base URLs. See the official [model list API](https://opencode.ai/docs/console/api/models).
+- Send inference directly to the protocol endpoint advertised for the selected model. OpenCode documents OpenAI Chat Completions, OpenAI Responses, Anthropic Messages, and Gemini endpoints under `https://opencode.ai/inference`. Free-tier chat models are restricted to OpenCode; integrations should use eligible paid models or Go models. See the official [Inference API](https://opencode.ai/docs/console/api/inference).
+- Console inference is a model API, not a remote agent runtime. own-code creates and stores local session IDs and transcripts, assembles conversation history, runs the agent/tool loop, enforces tool permissions, and handles cancellation and review. Do not call or launch `opencode serve` for this workflow.
+- Store the Console API key outside `settings.json`, editor session files, SQLite, workspace files, rendered view data, errors, and logs. Prefer an OS credential store; if the app uses a file, keep it in the private per-user config directory with owner-only permissions. Do not create a repository-local `.env` for the key.
 - Keep the workbench in Go and the existing native OwnFrame UI. Do not add a browser or Electron runtime.
 
 ## Work files
@@ -31,19 +30,20 @@ Use each linked file as the checklist for that slice. Keep checkboxes open until
 
 | Order | Checklist | Scope | Depends on |
 |---:|---|---|---|
-| 0 | [01-opencode-connection.md](01-opencode-connection.md) | OpenCode V2 contract, settings, credentials, launch and attach | — |
-| 1 | [02-session-store.md](02-session-store.md) | SQLite schema, migrations, session restoration | 0 |
-| 2 | [03-agent-panel.md](03-agent-panel.md) | Sessions, streamed transcript, status, tool log | 0–1 |
+| 0 | [01-opencode-connection.md](01-opencode-connection.md) | Console key, model catalog, direct inference, credential storage | — |
+| 1 | [02-session-store.md](02-session-store.md) | Local SQLite sessions, transcripts, and restoration | 0 |
+| 2 | [03-agent-panel.md](03-agent-panel.md) | Local sessions, transcript, run status, and tool activity | 0–1 |
 | 3 | [04-inline-edits.md](04-inline-edits.md) | Selection and caret based agent edits | 0–3 |
 | 4 | [05-workspace-context.md](05-workspace-context.md) | User-selected files, diffs, selections, and LSP context | 0–3 |
 | 5 | [06-diff-review.md](06-diff-review.md) | Isolated edits and per-hunk accept, reject, and revert | 2–5 |
 | 6 | [07-terminal-and-actions.md](07-terminal-and-actions.md) | PTY sessions, file links, palette actions, keybindings | 0–6 |
-| 7 | [08-acceptance-and-docs.md](08-acceptance-and-docs.md) | End-to-end gates, supported versions, documentation | 0–7 |
+| 7 | [08-acceptance-and-docs.md](08-acceptance-and-docs.md) | End-to-end gates, supported setup, documentation | 0–7 |
 
 ## Shared acceptance rules
 
-- Keep API keys and server passwords out of `globalSettings`, `sessionState`, SQLite, rendered view data, errors, and logs.
-- Scope every OpenCode session and every path-bearing event to the selected workspace. Reject path traversal and out-of-workspace edits.
+- Keep the Console API key out of settings JSON, editor session files, SQLite, workspace files, rendered views, errors, and logs.
+- Scope every local session, tool request, and path-bearing result to its selected workspace. Reject traversal and out-of-workspace edits.
+- Execute tools in own-code only. Validate tool arguments, apply the permission policy, and get explicit user approval where required; a model response is never authorization to run a command or modify a file.
 - Do not let an agent overwrite pre-existing dirty buffers or silently change the user's checked-out files before review.
-- Keep OpenCode HTTP, event parsing, storage, and session coordination outside the UI render loop. Deliver async results through the app's existing notification and stale-result patterns.
+- Keep HTTP, streaming, storage, tool execution, and session coordination outside the UI render loop. Deliver async results through the app's existing notification and stale-result patterns.
 - Keep this plan honest. Mark a row complete only after the implementation exists and the listed evidence passes. Record a concrete reason and next gate for any intentional deferral.

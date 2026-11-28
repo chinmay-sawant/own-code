@@ -94,8 +94,8 @@ type globalSettings struct {
 	LSP *lspSettings `json:"lsp,omitempty"`
 	// Format configures format-on-save; see format_save.go.
 	Format *formatSettings `json:"format,omitempty"`
-	// OpenCode stores connection metadata only. Server passwords and provider
-	// API keys are transient inputs and must never be added to this schema.
+	// OpenCode stores the selected provider and model. Console API keys live in
+	// the dedicated secret store and are never added to this schema.
 	OpenCode *opencodeSettings `json:"opencode,omitempty"`
 }
 

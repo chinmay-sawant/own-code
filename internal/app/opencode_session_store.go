@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -27,6 +29,51 @@ const (
 )
 
 var errOpenCodeHistoryScope = errors.New("OpenCode session does not belong to the selected workspace and server")
+
+const openCodeConsoleBackendID = "opencode-console"
+
+func newOpenCodeLocalSessionID() (string, error) {
+	raw := make([]byte, 18)
+	if _, err := rand.Read(raw); err != nil {
+		return "", errors.New("could not create a local OpenCode session ID")
+	}
+	return "local-" + base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+func listLocalOpenCodeSessions(ctx context.Context, store *agentstore.Store, workspaceRoot string) ([]opencode.Session, error) {
+	if store == nil {
+		return nil, errors.New("OpenCode local session store is unavailable")
+	}
+	root, err := canonicalWorkspaceRoot(workspaceRoot)
+	if err != nil {
+		return nil, err
+	}
+	stored, err := store.ListSessions(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	sessions := make([]opencode.Session, 0, len(stored))
+	for _, local := range stored {
+		isConsoleSession := local.ServerID == openCodeConsoleBackendID
+		isCachedServerHistory := strings.HasPrefix(local.ServerID, "server-")
+		if !isConsoleSession && !isCachedServerHistory {
+			continue
+		}
+		if !sameWorkspacePath(local.WorkspaceRoot, root) {
+			continue
+		}
+		sessions = append(sessions, opencode.Session{
+			ID:    local.ID,
+			Title: local.Title,
+			Time: opencode.SessionTime{
+				Created: float64(local.CreatedAt.UnixMilli()),
+				Updated: float64(local.UpdatedAt.UnixMilli()),
+			},
+			Location: opencode.LocationRef{Directory: root},
+		})
+	}
+	return sessions, nil
+}
 
 // openCodeSessionHistory binds persisted history to exactly one workspace and
 // one opaque server identity. It never accepts a URL as server identity.

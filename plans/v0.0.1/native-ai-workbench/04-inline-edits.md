@@ -1,6 +1,6 @@
 # Inline agent edits
 
-**Goal:** Let the user ask OpenCode to change the current selection or nearby code and review the proposal inline.
+**Goal:** Let the user ask a selected OpenCode Console model to change the current selection or nearby code, then review the proposal inline.
 
 ## Phase 1: Prompt from the editor
 
@@ -10,7 +10,7 @@
 - [ ] Stream the response into an inline result card without inserting it into the document.
 - [ ] Preserve current editor content, selection, caret, undo history, and dirty state while the request runs.
 
-**Implementation note:** `internal/app/opencode_context.go` now provides a bounded immutable snapshot helper for a caller-supplied editor buffer. It records the canonical workspace root, relative file path, full-buffer SHA-256 version, and directional selection/caret offsets; it keeps the selection in a maximum 32 KiB excerpt and rejects unsafe paths and common credential files. Focused helper tests passed with `go test internal/app/opencode_context.go internal/app/opencode_context_test.go -count=1`. The editor action, prompt preview, OpenCode request, and apply/review flow are not wired yet, so all checklist items remain open.
+**Implementation note:** `internal/app/opencode_context.go` now provides a bounded immutable snapshot helper for a caller-supplied editor buffer. It records the canonical workspace root, relative file path, full-buffer SHA-256 version, and directional selection/caret offsets; it keeps the selection in a maximum 32 KiB excerpt and rejects unsafe paths and common credential files. Focused helper tests passed with `go test internal/app/opencode_context.go internal/app/opencode_context_test.go -count=1`. The editor action, prompt preview, direct Console inference request, and apply/review flow are not wired yet, so all checklist items remain open.
 
 **Gate:** Editor interaction checks prove the correct selection and file version reach the request. Typing during a request does not move or replace unrelated text.
 

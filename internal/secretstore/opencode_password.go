@@ -11,13 +11,10 @@ import (
 )
 
 const (
-	configDirName = "ownframe/code-view"
-	fileName      = "opencode-server-password"
-	dirMode       = 0o700
-	fileMode      = 0o600
+	fileName = "opencode-server-password"
 )
 
-var ErrNotFound = errors.New("OpenCode server password is not configured")
+var ErrNotFound = errors.New("OpenCode credential is not configured")
 
 // OpenCodePassword stores the Basic-auth password used to attach to an
 // OpenCode Server. It is deliberately separate from settings.json and the

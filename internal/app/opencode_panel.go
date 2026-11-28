@@ -66,11 +66,11 @@ func (a *App) openCodePanelView() openCodePanelView {
 		v.Status = "Open a project folder to use OpenCode sessions."
 	} else if v.Status == "" {
 		if v.SelectedID != "" {
-			v.Status = "Session is read-only; agent actions are disabled."
+			v.Status = "Local session is read-only until agent execution is implemented."
 		} else if !v.Connected {
-			v.Status = "Connect OpenCode in Settings to start or resume a session."
+			v.Status = "Connect OpenCode Console in Settings to create a session."
 		} else {
-			v.Status = "Choose a session or create one for this workspace."
+			v.Status = "Choose a local session or create one for this workspace."
 		}
 	}
 	for _, session := range a.openCode.sessions {
@@ -81,9 +81,9 @@ func (a *App) openCodePanelView() openCodePanelView {
 		if title == "" {
 			title = "Untitled session"
 		}
-		status := "OpenCode session"
+		status := "Local SQLite session"
 		if !v.Connected {
-			status = "Cached local history"
+			status = "Saved local history"
 		}
 		v.Sessions = append(v.Sessions, openCodePanelSessionRow{
 			ID:     session.ID,
@@ -219,63 +219,15 @@ func (a *App) openOpenCodePanel(ctx context.Context) error {
 		return nil
 	}
 	if err := a.ensureOpenCodeStore(); err != nil {
-		a.openCode.panelStatus = "Local session history is unavailable; sessions can still be read from OpenCode."
+		a.openCode.panelStatus = "Local session history is unavailable."
+		a.refresh()
+		return nil
 	}
-	if a.openCode.client != nil && a.openCode.connected {
-		if err := a.loadOpenCodeSessions(); err != nil {
-			return err
-		}
-	} else {
-		return a.loadOpenCodeCachedSessions()
-	}
-	return nil
+	return a.loadOpenCodeSessions()
 }
 
 func (a *App) loadOpenCodeCachedSessions() error {
-	if a.ws == nil || a.ws.Sample {
-		a.openCode.panelStatus = "Open a project folder to use OpenCode sessions."
-		a.refresh()
-		return nil
-	}
-	if a.openCode.store == nil {
-		a.openCode.panelStatus = "OpenCode is disconnected and local session history is unavailable."
-		a.refresh()
-		return nil
-	}
-	token, baseCtx := a.beginOpenCodeOperation(openCodeOperationSessions)
-	store, directory := a.openCode.store, a.ws.Root
-	serverID := a.openCodeServerID(openCodeSettingsValue(a.settings.OpenCode).ServerURL)
-	result := a.openCode.results
-	a.openCode.panelStatus = "Loading saved OpenCode history…"
-	a.refresh()
-	go func() {
-		ctx, cancel := context.WithTimeout(baseCtx, 3*time.Second)
-		defer cancel()
-		history, err := newOpenCodeSessionHistory(store, directory, serverID)
-		var cached []agentstore.Session
-		if err == nil {
-			cached, err = history.ListSessions(ctx)
-		}
-		sessions := make([]opencode.Session, 0, len(cached))
-		for _, local := range cached {
-			sessions = append(sessions, opencode.Session{
-				ID: local.OpenCodeSessionID, Title: local.Title,
-				Time:     opencode.SessionTime{Created: float64(local.CreatedAt.UnixMilli()), Updated: float64(local.UpdatedAt.UnixMilli())},
-				Location: opencode.LocationRef{Directory: directory},
-			})
-		}
-		status := "OpenCode is disconnected. Showing saved local history."
-		if err != nil {
-			status = "OpenCode is disconnected and local session history could not be loaded."
-		} else if len(sessions) == 0 {
-			status = "OpenCode is disconnected. There is no saved history for this workspace."
-		}
-		a.sendOpenCodeReply(baseCtx, result, openCodeReply{
-			token: token, operation: openCodeOperationSessions, sessions: sessions,
-			panelStatus: status, err: err,
-		})
-	}()
-	return nil
+	return a.loadOpenCodeSessions()
 }
 
 func (a *App) ensureOpenCodeStore() error {
@@ -308,31 +260,32 @@ func (a *App) loadOpenCodeSessions() error {
 		a.refresh()
 		return nil
 	}
-	if a.openCode.client == nil || !a.openCode.connected {
-		a.openCode.panelStatus = "Connect to OpenCode in Settings before loading sessions."
+	if err := a.ensureOpenCodeStore(); err != nil {
+		a.openCode.panelStatus = "Local session history is unavailable."
 		a.refresh()
 		return nil
 	}
 	token, baseCtx := a.beginOpenCodeOperation(openCodeOperationSessions)
-	client, directory, serverID, store := a.openCode.client, a.ws.Root, a.openCode.serverID, a.openCode.store
-	serverURL := openCodeSettingsValue(a.settings.OpenCode).ServerURL
-	manager, managerErr := a.openCodeWorktreeManager()
-	if managerErr != nil {
-		manager = nil
-	}
-	result := a.openCode.results
-	a.openCode.panelStatus = "Loading workspace sessions…"
+	store, directory := a.openCode.store, a.ws.Root
+	connected, result := a.openCode.connected, a.openCode.results
+	a.openCode.panelStatus = "Loading local sessions…"
 	a.refresh()
 	go func() {
-		ctx, cancel := context.WithTimeout(baseCtx, openCodeRequestTimeout)
+		ctx, cancel := context.WithTimeout(baseCtx, 3*time.Second)
 		defer cancel()
-		sessions, status, err := listOpenCodeWorkspaceSessions(ctx, client, directory, serverID, serverURL, store, manager)
-		if managerErr != nil && err == nil {
-			status = "Sessions loaded; isolated worktree sessions are unavailable because the private worktree directory could not be opened."
+		sessions, err := listLocalOpenCodeSessions(ctx, store, directory)
+		status := "Showing sessions saved in this workspace."
+		if !connected {
+			status = "OpenCode Console is disconnected. Showing saved local sessions."
+		}
+		if err != nil {
+			status = "Local session history could not be loaded."
+		} else if len(sessions) == 0 {
+			status = "No local sessions are saved for this workspace."
 		}
 		a.sendOpenCodeReply(baseCtx, result, openCodeReply{
-			token: token, operation: openCodeOperationSessions, client: client,
-			sessions: append([]opencode.Session{}, sessions...), panelStatus: status, err: err,
+			token: token, operation: openCodeOperationSessions,
+			sessions: sessions, panelStatus: status, err: err,
 		})
 	}()
 	return nil
@@ -344,82 +297,77 @@ func (a *App) createOpenCodeSession() error {
 		a.refresh()
 		return nil
 	}
-	if a.openCode.client == nil || !a.openCode.connected {
-		a.openCode.panelStatus = "Connect to OpenCode in Settings before creating a session."
+	if !a.openCode.connected || a.openCode.consoleClient == nil {
+		a.openCode.panelStatus = "Connect to OpenCode Console in Settings before creating a session."
 		a.refresh()
 		return nil
 	}
-	serverURL := openCodeSettingsValue(a.settings.OpenCode).ServerURL
-	if !isOpenCodeLoopbackServerURL(serverURL) {
-		a.openCode.panelStatus = "Isolated OpenCode sessions require a server running on this device. Remote servers cannot access this private worktree."
+	settings := openCodeSettingsValue(a.settings.OpenCode)
+	if _, _, ok := a.findOpenCodeModel(openCodeModelSelection(settings.ProviderID, settings.ModelID)); !ok {
+		a.openCode.panelStatus = "Choose and save an available OpenCode model in Settings before creating a session."
 		a.refresh()
 		return nil
 	}
-	if a.openCode.store == nil {
-		a.openCode.panelStatus = "Local session history is unavailable; an isolated session cannot be tracked safely."
+	if err := a.ensureOpenCodeStore(); err != nil {
+		a.openCode.panelStatus = "Local session history is unavailable; a session cannot be saved."
 		a.refresh()
 		return nil
 	}
-	manager, managerErr := a.openCodeWorktreeManager()
-	if managerErr != nil {
-		a.openCode.panelStatus = "The private OpenCode worktree directory could not be opened."
+	directory, err := canonicalWorkspaceRoot(a.ws.Root)
+	if err != nil {
+		a.openCode.panelStatus = "Could not resolve the selected workspace for a local session."
+		a.refresh()
+		return nil
+	}
+	sessionID, err := newOpenCodeLocalSessionID()
+	if err != nil {
+		a.openCode.panelStatus = "Could not create a local OpenCode session ID."
 		a.refresh()
 		return nil
 	}
 	token, baseCtx := a.beginOpenCodeOperation(openCodeOperationCreateSession)
+	store, result := a.openCode.store, a.openCode.results
 	a.openCode.reviewable = false
 	a.openCode.proposals = nil
-	client, directory, serverID, store := a.openCode.client, a.ws.Root, a.openCode.serverID, a.openCode.store
-	result := a.openCode.results
-	a.openCode.panelStatus = "Creating an OpenCode session…"
+	a.openCode.messages = nil
+	a.openCode.selectedSessionID = ""
+	a.openCode.panelStatus = "Saving a local session to SQLite…"
 	a.refresh()
 	go func() {
-		ctx, cancel := context.WithTimeout(baseCtx, 45*time.Second)
+		ctx, cancel := context.WithTimeout(baseCtx, 3*time.Second)
 		defer cancel()
-		worktree, err := manager.Create(ctx, directory)
-		var session opencode.Session
-		if err == nil {
-			session, err = client.CreateSession(ctx, opencode.CreateSessionInput{
-				Title:       "New isolated own-code session",
-				Location:    &opencode.LocationRef{Directory: worktree.WorkspaceRoot()},
-				Permissions: openCodeReadOnlyPermissions(),
-			})
-		}
-		var local agentstore.Session
-		if err == nil {
-			if !sameOpenCodeWorkspace(session.Location.Directory, worktree.WorkspaceRoot()) {
-				err = errors.New("OpenCode created the session outside its private worktree")
-			} else if history, historyErr := newOpenCodeSessionHistory(store, directory, serverID); historyErr != nil {
-				err = historyErr
-			} else {
-				local, err = history.PersistIsolatedSession(ctx, session, worktree, agentstore.SessionQueued)
-			}
-		}
+		local, err := store.CreateSession(ctx, agentstore.Session{
+			ID:                sessionID,
+			WorkspaceRoot:     directory,
+			ServerID:          openCodeConsoleBackendID,
+			OpenCodeSessionID: sessionID,
+			Title:             "New OpenCode session",
+			Agent:             "opencode",
+			Model:             settings.ProviderID + "/" + settings.ModelID,
+			Status:            agentstore.SessionQueued,
+		})
 		var sessions []opencode.Session
-		status := "Isolated session created. Agent permissions remain blocked until proposal review is ready."
+		status := "Local session saved to SQLite. Prompting remains paused until the safe agent loop is implemented."
+		selectedID := ""
 		if err == nil {
-			sessions, status, err = listOpenCodeWorkspaceSessions(ctx, client, directory, serverID, serverURL, store, manager)
-			if err == nil {
-				found := false
-				for _, listed := range sessions {
-					if listed.ID == session.ID {
-						found = true
-						break
-					}
-				}
-				if !found {
-					session.Location.Directory = directory
-					sessions = append(sessions, session)
-				}
+			selectedID = local.ID
+			sessions, err = listLocalOpenCodeSessions(ctx, store, directory)
+			if err != nil {
+				sessions = []opencode.Session{{
+					ID: local.ID, Title: local.Title,
+					Time:     opencode.SessionTime{Created: float64(local.CreatedAt.UnixMilli()), Updated: float64(local.UpdatedAt.UnixMilli())},
+					Location: opencode.LocationRef{Directory: directory},
+				}}
+				status = "Local session was saved, but the session list could not be refreshed."
+				err = nil
 			}
-		}
-		if err != nil {
-			status = "OpenCode could not create or record the isolated session. Any created worktree was left in place for safety."
+		} else {
+			status = "Could not save the OpenCode session to SQLite."
 		}
 		a.sendOpenCodeReply(baseCtx, result, openCodeReply{
-			token: token, operation: openCodeOperationCreateSession, client: client,
-			sessions: append([]opencode.Session{}, sessions...), selectedSessionID: session.ID,
-			localSessionID: local.ID, reviewable: local.BaselineCommit != "", panelStatus: status, err: err,
+			token: token, operation: openCodeOperationCreateSession,
+			sessions: sessions, selectedSessionID: selectedID,
+			panelStatus: status, err: err,
 		})
 	}()
 	return nil
@@ -439,22 +387,22 @@ func (a *App) selectOpenCodeSession(sessionID string) error {
 	if selected.ID == "" || !sameOpenCodeWorkspace(selected.Location.Directory, a.ws.Root) {
 		return nil
 	}
-	connected := a.openCode.connected && a.openCode.client != nil
-	if !connected && a.openCode.store == nil {
-		a.openCode.panelStatus = "OpenCode is disconnected and local session history is unavailable."
+	if err := a.ensureOpenCodeStore(); err != nil {
+		a.openCode.panelStatus = "Local session history is unavailable."
+		a.refresh()
+		return nil
+	}
+	directory, err := canonicalWorkspaceRoot(a.ws.Root)
+	if err != nil {
+		a.openCode.panelStatus = "Could not resolve the selected workspace for this local session."
 		a.refresh()
 		return nil
 	}
 	token, baseCtx := a.beginOpenCodeOperation(openCodeOperationLoadMessages)
-	client, directory, serverID, store := a.openCode.client, a.ws.Root, a.openCode.serverID, a.openCode.store
+	store := a.openCode.store
 	var worktreeManager *openCodeWorktreeManager
 	var worktreeManagerErr error
-	if store != nil {
-		worktreeManager, worktreeManagerErr = a.openCodeWorktreeManager()
-	}
-	if !connected || serverID == "" {
-		serverID = a.openCodeServerID(openCodeSettingsValue(a.settings.OpenCode).ServerURL)
-	}
+	worktreeManager, worktreeManagerErr = a.openCodeWorktreeManager()
 	a.openCode.selectedSessionID = sessionID
 	a.openCode.messages = nil
 	a.openCode.reviewable = false
@@ -463,56 +411,34 @@ func (a *App) selectOpenCodeSession(sessionID string) error {
 	a.refresh()
 	result := a.openCode.results
 	go func() {
-		ctx, cancel := context.WithTimeout(baseCtx, openCodeRequestTimeout)
+		ctx, cancel := context.WithTimeout(baseCtx, 3*time.Second)
 		defer cancel()
-		var history *openCodeSessionHistory
-		var err error
 		var local agentstore.Session
+		var err error
+		stored, err := store.ListSessions(ctx, directory)
+		if err == nil {
+			for _, session := range stored {
+				if session.ID == sessionID && sameWorkspacePath(session.WorkspaceRoot, directory) {
+					local = session
+					break
+				}
+			}
+			if local.ID == "" {
+				err = agentstore.ErrNotFound
+			}
+		}
 		var messages []agentstore.Message
 		reviewStatus := ""
 		reviewable := false
-		if !connected {
-			if store == nil {
-				err = errors.New("local OpenCode session history is unavailable")
-			} else if history, historyErr := newOpenCodeSessionHistory(store, directory, serverID); historyErr != nil {
-				err = historyErr
-			} else {
-				localID := stableHistoryID("session", serverID, sessionID)
-				local, err = history.FindSession(ctx, sessionID)
-				if err == nil {
-					reviewable, reviewStatus = verifyOpenCodeSessionWorktree(ctx, worktreeManager, directory, local)
-					messages, err = history.LoadMessages(ctx, localID)
-				}
+		if err == nil && local.WorktreeRoot != "" {
+			reviewable, reviewStatus = verifyOpenCodeSessionWorktree(ctx, worktreeManager, directory, local)
+			if worktreeManagerErr != nil {
+				reviewable = false
+				reviewStatus = "The isolated worktree could not be verified for proposal review."
 			}
-		} else if store != nil {
-			history, err = newOpenCodeSessionHistory(store, directory, serverID)
-			if err == nil {
-				local, err = history.FindSession(ctx, selected.ID)
-				if errors.Is(err, agentstore.ErrNotFound) {
-					local, err = history.PersistSession(ctx, selected, agentstore.SessionCompleted)
-				}
-			}
-			if err == nil && local.WorktreeRoot != "" {
-				reviewable, reviewStatus = verifyOpenCodeSessionWorktree(ctx, worktreeManager, directory, local)
-				if worktreeManagerErr != nil {
-					reviewable = false
-					reviewStatus = "Transcript loaded, but the isolated worktree could not be verified for proposal review."
-				}
-			}
-			if err == nil {
-				messages, err = history.SyncMessages(ctx, client, local.ID)
-			}
-		} else {
-			page, listErr := client.ListMessages(ctx, sessionID, opencode.MessageListOptions{Limit: 100, Order: "desc"})
-			err = listErr
-			if err == nil {
-				for _, message := range projectOpenCodeMessages(page.Data) {
-					messages = append(messages, agentstore.Message{
-						OpenCodeMessageID: message.ID, Role: message.Role, Body: message.Text,
-						Ordinal: message.Ordinal, CreatedAt: message.CreatedAt,
-					})
-				}
-			}
+		}
+		if err == nil {
+			messages, err = store.ListMessages(ctx, local.ID)
 		}
 		projected := make([]openCodeTranscriptMessage, 0, len(messages))
 		for _, message := range messages {
@@ -521,18 +447,15 @@ func (a *App) selectOpenCodeSession(sessionID string) error {
 				Ordinal: message.Ordinal, CreatedAt: message.CreatedAt,
 			})
 		}
-		status := "Session ready."
-		if !connected {
-			status = "Saved transcript loaded offline."
-		}
+		status := "Local session ready."
 		if err != nil {
-			status = "OpenCode could not load this session transcript."
+			status = "Could not load the local session transcript."
 		} else if reviewStatus != "" {
 			status = reviewStatus
 		}
 		a.sendOpenCodeReply(baseCtx, result, openCodeReply{
-			token: token, operation: openCodeOperationLoadMessages, client: client,
-			selectedSessionID: sessionID, localSessionID: local.ID, reviewable: reviewable,
+			token: token, operation: openCodeOperationLoadMessages,
+			selectedSessionID: sessionID, reviewable: reviewable,
 			messages: projected, panelStatus: status, err: err,
 		})
 	}()
@@ -562,12 +485,14 @@ func (a *App) reviewOpenCodeProposal() error {
 		a.refresh()
 		return nil
 	}
-	token, baseCtx := a.beginOpenCodeOperation(openCodeOperationReview)
-	client, store, directory := a.openCode.client, a.openCode.store, a.ws.Root
-	serverID := a.openCode.serverID
-	if serverID == "" {
-		serverID = a.openCodeServerID(openCodeSettingsValue(a.settings.OpenCode).ServerURL)
+	directory, err := canonicalWorkspaceRoot(a.ws.Root)
+	if err != nil {
+		a.openCode.panelStatus = "Could not resolve the selected workspace for proposal review."
+		a.refresh()
+		return nil
 	}
+	token, baseCtx := a.beginOpenCodeOperation(openCodeOperationReview)
+	store := a.openCode.store
 	sessionID, result := a.openCode.selectedSessionID, a.openCode.results
 	a.openCode.panelStatus = "Loading isolated proposal changes…"
 	a.openCode.proposals = nil
@@ -575,12 +500,17 @@ func (a *App) reviewOpenCodeProposal() error {
 	go func() {
 		ctx, cancel := context.WithTimeout(baseCtx, 30*time.Second)
 		defer cancel()
-		history, err := newOpenCodeSessionHistory(store, directory, serverID)
+		stored, err := store.ListSessions(ctx, directory)
 		var proposals []openCodeProposalFile
+		var local agentstore.Session
 		if err == nil {
-			var local agentstore.Session
-			local, err = history.FindSession(ctx, sessionID)
-			if err == nil && (local.WorktreeRoot == "" || !validOpenCodeCommitID(local.BaselineCommit)) {
+			for _, session := range stored {
+				if session.ID == sessionID && sameWorkspacePath(session.WorkspaceRoot, directory) {
+					local = session
+					break
+				}
+			}
+			if local.ID == "" || local.WorktreeRoot == "" || !validOpenCodeCommitID(local.BaselineCommit) {
 				err = errors.New("OpenCode session does not have a verified proposal baseline")
 			}
 			if err == nil {
@@ -604,7 +534,7 @@ func (a *App) reviewOpenCodeProposal() error {
 			proposals = make([]openCodeProposalFile, 0)
 		}
 		a.sendOpenCodeReply(baseCtx, result, openCodeReply{
-			token: token, operation: openCodeOperationReview, client: client,
+			token: token, operation: openCodeOperationReview,
 			selectedSessionID: sessionID, reviewable: err == nil,
 			proposals: proposals, panelStatus: status, err: err,
 		})
@@ -613,62 +543,9 @@ func (a *App) reviewOpenCodeProposal() error {
 }
 
 func (a *App) interruptOpenCodeSession() error {
-	if !a.openCode.connected || a.openCode.client == nil || a.openCode.selectedSessionID == "" || a.ws == nil || a.ws.Sample {
-		return nil
-	}
-	token, baseCtx := a.beginOpenCodeOperation(openCodeOperationInterrupt)
-	client, sessionID := a.openCode.client, a.openCode.selectedSessionID
-	directory, serverID, store := a.ws.Root, a.openCode.serverID, a.openCode.store
-	session := sessionForID(a.openCode.sessions, sessionID)
-	result := a.openCode.results
-	a.openCode.panelStatus = "Stopping the OpenCode agent…"
+	a.openCode.panelStatus = "There is no active local agent execution to stop."
 	a.refresh()
-	go func() {
-		ctx, cancel := context.WithTimeout(baseCtx, openCodeRequestTimeout)
-		interrupted, err := client.Interrupt(ctx, sessionID)
-		var messages []openCodeTranscriptMessage
-		if err == nil {
-			page, listErr := client.ListMessages(ctx, sessionID, opencode.MessageListOptions{Limit: 100, Order: "desc"})
-			if listErr == nil {
-				messages = projectOpenCodeMessages(page.Data)
-				if store != nil {
-					if history, historyErr := newOpenCodeSessionHistory(store, directory, serverID); historyErr == nil {
-						status := agentstore.SessionCompleted
-						if interrupted {
-							status = agentstore.SessionInterrupted
-						}
-						if local, persistErr := history.PersistSession(ctx, session, status); persistErr == nil {
-							if persisted, syncErr := history.SyncMessages(ctx, client, local.ID); syncErr == nil {
-								messages = make([]openCodeTranscriptMessage, 0, len(persisted))
-								for _, message := range persisted {
-									messages = append(messages, openCodeTranscriptMessage{ID: message.OpenCodeMessageID, Role: message.Role, Text: message.Body, Ordinal: message.Ordinal, CreatedAt: message.CreatedAt})
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-		cancel()
-		status := "No active OpenCode execution was running."
-		if interrupted {
-			status = "OpenCode execution stopped."
-		}
-		if err != nil {
-			status = "OpenCode could not stop this session."
-		}
-		a.sendOpenCodeReply(baseCtx, result, openCodeReply{token: token, operation: openCodeOperationInterrupt, client: client, messages: messages, panelStatus: status, err: err})
-	}()
 	return nil
-}
-
-func sessionForID(sessions []opencode.Session, id string) opencode.Session {
-	for _, session := range sessions {
-		if session.ID == id {
-			return session
-		}
-	}
-	return opencode.Session{}
 }
 
 func boolPointer(value bool) *bool { return &value }
@@ -708,6 +585,19 @@ func (a *App) receiveOpenCodePanelReply(reply openCodeReply) {
 	}
 	if reply.sessions != nil {
 		a.openCode.sessions = openCodeWorkspaceSessions(reply.sessions, a.ws.Root)
+		selected := false
+		for _, session := range a.openCode.sessions {
+			if session.ID == a.openCode.selectedSessionID {
+				selected = true
+				break
+			}
+		}
+		if !selected {
+			a.openCode.selectedSessionID = ""
+			a.openCode.messages = nil
+			a.openCode.reviewable = false
+			a.openCode.proposals = nil
+		}
 	}
 	if reply.selectedSessionID != "" {
 		a.openCode.selectedSessionID = reply.selectedSessionID

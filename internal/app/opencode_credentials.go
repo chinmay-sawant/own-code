@@ -8,39 +8,38 @@ import (
 	"github.com/chinmay-sawant/own-code/internal/secretstore"
 )
 
-// loadOpenCodeServerPassword checks the dedicated user-config secret first,
-// then the documented process environment names for existing setups.
-func loadOpenCodeServerPassword() (string, error) {
-	store, err := secretstore.DefaultOpenCodePassword()
+// loadOpenCodeConsoleAPIKey checks the dedicated user-config secret first,
+// then the environment names used by LazyCoder and existing OpenCode setups.
+func loadOpenCodeConsoleAPIKey() (string, error) {
+	store, err := secretstore.DefaultOpenCodeAPIKey()
 	if err != nil {
 		return "", err
 	}
-	password, err := store.Load()
+	apiKey, err := store.Load()
 	if err == nil {
-		return password, nil
+		return apiKey, nil
 	}
 	if !errors.Is(err, secretstore.ErrNotFound) {
 		return "", err
 	}
-
-	for _, name := range []string{"OPENCODE_PASSWORD", "OPENCODE_SERVER_PASSWORD"} {
-		if password := os.Getenv(name); strings.TrimSpace(password) != "" {
-			return password, nil
+	for _, name := range []string{"OPENCODE_API_KEY", "OPENCODE_ZEN_API_KEY"} {
+		if apiKey := strings.TrimSpace(os.Getenv(name)); apiKey != "" {
+			return apiKey, nil
 		}
 	}
 	return "", secretstore.ErrNotFound
 }
 
-func saveOpenCodeServerPassword(password string) error {
-	store, err := secretstore.DefaultOpenCodePassword()
+func saveOpenCodeConsoleAPIKey(apiKey string) error {
+	store, err := secretstore.DefaultOpenCodeAPIKey()
 	if err != nil {
 		return err
 	}
-	return store.Save(password)
+	return store.Save(apiKey)
 }
 
-func deleteOpenCodeServerPassword() error {
-	store, err := secretstore.DefaultOpenCodePassword()
+func deleteOpenCodeConsoleAPIKey() error {
+	store, err := secretstore.DefaultOpenCodeAPIKey()
 	if err != nil {
 		return err
 	}

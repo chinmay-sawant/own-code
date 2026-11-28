@@ -213,15 +213,11 @@ type View struct {
 	// v1 per-view overrides (0 when following the global zoom);
 	// EditorZoomLabel/TerminalZoomLabel render the override percent or "—".
 	SettingsTab string
-	// OpenCode* settings contain only connection metadata and status. Secret
-	// inputs stay in native form controls and never enter the rendered View.
-	OpenCodeMode           string
-	OpenCodeServerURL      string
-	OpenCodeIntegrationID  string
-	OpenCodeIntegrations   []openCodeIntegrationRow
-	OpenCodeProviderFields []OpenCodeProviderField
+	// OpenCode selection and status are safe to render. The API key stays in a
+	// native password input and never enters View.
+	OpenCodeModelSelection string
+	OpenCodeModels         []openCodeModelRow
 	OpenCodeStatus         string
-	OpenCodeClientReady    bool
 	OpenCodeConnected      bool
 	OpenCodePanel          openCodePanelView
 	OpenCodePrompt         string
