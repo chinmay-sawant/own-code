@@ -31,6 +31,12 @@ Thumbs.db
 # Kept here so a stray local session file never gets committed.
 session-*.json
 
+# Local environment files containing API keys and secrets
+.env
+.env.local
+.env.*
+!.env.example
+
 # Generated merge-conflict demo repo (testdata/merge-conflicts/setup.sh).
 # It holds a nested .git dir mid-merge and is rebuilt on demand.
 /testdata/merge-conflicts/demo/

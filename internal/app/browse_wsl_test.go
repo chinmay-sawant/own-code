@@ -139,6 +139,14 @@ func TestTryHandoffSpawnsAndHandlesSpawnError(t *testing.T) {
 	if called != "Ubuntu:/home/user" {
 		t.Fatalf("spawn called with %q", called)
 	}
+	wslHandoffSpawn = func(_, _ string) error { return wsl.ErrHandoffNoBinary }
+	a = &App{}
+	if a.tryHandoffToWSL(`\\wsl$\Ubuntu\home\user`) {
+		t.Fatal("missing companion binary should fall back to native open (handled=false)")
+	}
+	if a.fileAlert != "" {
+		t.Fatalf("missing companion binary should not set fileAlert, got %q", a.fileAlert)
+	}
 	wslHandoffSpawn = func(_, _ string) error { return errors.New("boom") }
 	a = &App{}
 	if !a.tryHandoffToWSL(`\\wsl$\Ubuntu\home\user`) {

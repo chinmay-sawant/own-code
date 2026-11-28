@@ -68,6 +68,15 @@
 .settings-area { width: 100%; display: block; box-sizing: border-box; background-color: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-family: var(--mono); font-size: 12px; line-height: 1.6; resize: vertical; margin: 0; }
 .settings-area:focus { outline: 0; border-color: var(--accent); box-shadow: none; }
 .settings-area.is-invalid { border-color: var(--red); }
+.settings-field { display: flex; flex-direction: column; gap: 5px; margin: 12px 0; color: var(--text); font-size: 12px; font-weight: 600; }
+.settings-field small { color: var(--muted); font-size: 10px; font-weight: 400; margin-left: 4px; }
+.settings-input { width: 100%; box-sizing: border-box; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background-color: var(--panel-2); color: var(--text); font: 12px var(--mono); }
+.settings-input::placeholder { color: var(--muted); opacity: 0.8; }
+.settings-input:focus { outline: 0; border-color: var(--accent); }
+.settings-opencode-status { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 10px; margin: 12px 0; border: 1px solid var(--line); border-radius: 6px; background-color: var(--panel-2); color: var(--muted); font-size: 11px; }
+.settings-opencode-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background-color: var(--muted); }
+.settings-opencode-dot.connected { background-color: var(--green); }
+.settings-btn:disabled { cursor: not-allowed; opacity: 0.55; }
 .settings-invalid { color: var(--red); background-color: var(--red-bg); border: 1px solid var(--red); border-radius: 6px; padding: 8px 10px; margin: 8px 0; font-size: 11px; line-height: 1.5; }
 .settings-note { color: var(--muted); font-size: 11px; line-height: 1.5; margin-top: 12px; }
 .settings-toggles { display: flex; flex-direction: column; gap: 2px; margin: 14px 0 6px; }

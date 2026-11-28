@@ -623,6 +623,7 @@ func (a *App) tickWatch(ctx context.Context) error {
 	a.pollPatches(ctx)
 	a.pollBlame(ctx)
 	a.receiveSearch(ctx)
+	a.receiveOpenCode(ctx)
 	a.receiveHistoryLoad(ctx)
 	a.pollAutoSave(ctx)
 	a.pollToast()
@@ -641,6 +642,10 @@ func (a *App) tickWatch(ctx context.Context) error {
 		if a.updateSettingsScrollMetrics() {
 			a.refresh()
 		}
+	}
+
+	if a.openCode.panelOpen && a.updateOpenCodeTranscriptMetrics() {
+		a.refresh()
 	}
 
 	return nil

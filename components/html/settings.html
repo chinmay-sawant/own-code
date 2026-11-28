@@ -9,6 +9,7 @@
         <button class="settings-nav-item{{if eq .SettingsTab "keyboard"}} settings-nav-active{{end}}" id="settings-tab-keyboard" data-action="settings-tab:keyboard" type="button" role="tab" aria-selected="{{if eq .SettingsTab "keyboard"}}true{{else}}false{{end}}">Keyboard</button>
         <button class="settings-nav-item{{if eq .SettingsTab "files"}} settings-nav-active{{end}}" id="settings-tab-files" data-action="settings-tab:files" type="button" role="tab" aria-selected="{{if eq .SettingsTab "files"}}true{{else}}false{{end}}">Files &amp; Search</button>
         <button class="settings-nav-item{{if eq .SettingsTab "lsp"}} settings-nav-active{{end}}" id="settings-tab-lsp" data-action="settings-tab:lsp" type="button" role="tab" aria-selected="{{if eq .SettingsTab "lsp"}}true{{else}}false{{end}}">Language servers</button>
+        <button class="settings-nav-item{{if eq .SettingsTab "opencode"}} settings-nav-active{{end}}" id="settings-tab-opencode" data-action="settings-tab:opencode" type="button" role="tab" aria-selected="{{if eq .SettingsTab "opencode"}}true{{else}}false{{end}}">OpenCode</button>
         <button class="settings-nav-item{{if eq .SettingsTab "help"}} settings-nav-active{{end}}" id="settings-tab-help" data-action="settings-tab:help" type="button" role="tab" aria-selected="{{if eq .SettingsTab "help"}}true{{else}}false{{end}}">Help</button>
         <button class="settings-nav-item{{if eq .SettingsTab "about"}} settings-nav-active{{end}}" id="settings-tab-about" data-action="settings-tab:about" type="button" role="tab" aria-selected="{{if eq .SettingsTab "about"}}true{{else}}false{{end}}">About</button>
       </div>
@@ -54,6 +55,18 @@
           <span class="settings-key-btns"><button class="settings-toggle" id="lsp-toggle-{{.Name}}" data-action="lsp-server-toggle:{{.Name}}" type="button" aria-pressed="{{if .Enabled}}true{{else}}false{{end}}" aria-label="Enable {{.Name}}"><span class="settings-check">{{if .Enabled}}✓{{end}}</span>Enabled</button></span>
         </div>
         {{end}}
+        {{else if eq .SettingsTab "opencode"}}
+        <div class="settings-title">OpenCode Console</div>
+        <div class="settings-caption">Connect directly to OpenCode with a workspace API key. own-code does not start or attach to an OpenCode server. The key is stored in your user config directory with owner-only permissions, outside settings.json and the SQLite session database.</div>
+        <div class="settings-opencode-status" id="opencode-status" role="status"><span class="settings-opencode-dot{{if .OpenCodeConnected}} connected{{end}}" aria-hidden="true"></span><span>{{if .OpenCodeStatus}}{{.OpenCodeStatus}}{{else}}Not connected. Enter a Console API key or use OPENCODE_API_KEY.{{end}}</span></div>
+        <label class="settings-field" for="opencode-api-key"><span>Workspace API key</span><input class="settings-input" id="opencode-api-key" type="password" maxlength="4096" autocomplete="new-password" spellcheck="false" aria-label="OpenCode Console workspace API key" placeholder="oc_sk_…" /></label>
+        <div class="settings-caption">A key entered here is saved only after OpenCode accepts it and returns the model catalog. LazyCoder's OPENCODE_API_KEY and OPENCODE_ZEN_API_KEY environment variables are also recognized.</div>
+        <div class="settings-foot"><button class="settings-btn primary" id="opencode-connect" data-action="opencode-connect" type="button">Connect and load models</button><button class="settings-btn" id="opencode-key-clear" data-action="opencode-key-clear" type="button">Clear saved key</button></div>
+        <label class="settings-field" for="opencode-model"><span>Model</span><select class="settings-input" id="opencode-model" data-bind="OpenCodeModelSelection" aria-label="OpenCode Console model">
+          <option value="">{{if .OpenCodeModels}}Choose a chat model{{else}}Connect to load available models{{end}}</option>
+          {{range .OpenCodeModels}}<option value="{{.Value}}"{{if eq .Value $.OpenCodeModelSelection}} selected{{end}}>{{.Label}} — {{.Details}}</option>{{end}}
+        </select></label>
+        <div class="settings-foot"><button class="settings-btn" id="opencode-model-save" data-action="opencode-model-save" type="button"{{if not .OpenCodeModels}} disabled{{end}}>Save model</button><span class="settings-foot-note">The catalog reflects models and providers enabled for this workspace key.</span></div>
         {{else if eq .SettingsTab "help"}}
         <div class="settings-title">Help</div>
         <div class="settings-caption">Every shortcut in one place. Bindings follow your Keyboard rebinds — a customized row names its default. Editing stays in the Keyboard tab.</div>

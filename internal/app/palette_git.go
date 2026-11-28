@@ -22,6 +22,7 @@ func (a *App) runExtraPaletteCommand(ctx context.Context, id string) (bool, erro
 	case id == paletteCmdComparePick:
 		return true, a.setPaletteQuery(ctx, ">compare ")
 	case id == paletteCmdStageHunk, id == paletteCmdUnstageHunk, id == paletteCmdStashPush, id == paletteCmdLSPToggle,
+		id == paletteCmdOpenCodePanel, id == paletteCmdOpenCodeNew, strings.HasPrefix(id, paletteCmdOCActionPrefix),
 		strings.HasPrefix(id, paletteCmdTaskPrefix), strings.HasPrefix(id, paletteCmdStashApplyPfx),
 		strings.HasPrefix(id, paletteCmdComparePfx):
 		owned = true
@@ -57,6 +58,21 @@ func (a *App) runExtraPaletteCommand(ctx context.Context, id string) (bool, erro
 			a.showToast("success", "Language servers on", "Servers start when you open a source file.")
 		} else {
 			a.showToast("info", "Language servers off", "Diagnostics, hover and go-to-definition fall back to the built-in index.")
+		}
+	case id == paletteCmdOpenCodePanel:
+		if err := a.opencodePanelAction(ctx, paletteCmdOpenCodePanel); err != nil {
+			return true, err
+		}
+	case id == paletteCmdOpenCodeNew:
+		if err := a.opencodePanelAction(ctx, paletteCmdOpenCodePanel); err != nil {
+			return true, err
+		}
+		if err := a.opencodePanelAction(ctx, paletteCmdOpenCodeNew); err != nil {
+			return true, err
+		}
+	case strings.HasPrefix(id, paletteCmdOCActionPrefix):
+		if err := a.runOpenCodeAction(ctx, id); err != nil {
+			return true, err
 		}
 	case strings.HasPrefix(id, paletteCmdTaskPrefix):
 		a.runTask(ctx, strings.TrimPrefix(id, paletteCmdTaskPrefix))

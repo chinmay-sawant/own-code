@@ -30,6 +30,8 @@ const (
 	paletteCmdStashPick     = "git-stash-pick"
 	paletteCmdComparePick   = "git-compare-pick"
 	paletteCmdLSPToggle     = "lsp-toggle"
+	paletteCmdOpenCodePanel = "opencode-panel-open"
+	paletteCmdOpenCodeNew   = "opencode-session-new"
 	paletteCmdTaskPrefix    = "task:"
 	paletteCmdStashApplyPfx = "stash-apply:"
 	paletteCmdComparePfx    = "compare:"
@@ -54,7 +56,7 @@ type stashRow struct {
 
 // paletteExtraCatalog lists the static commands this file owns.
 func paletteExtraCatalog() []paletteRow {
-	return []paletteRow{
+	rows := []paletteRow{
 		{Cmd: paletteCmdTaskPick, Name: "Task: Run Task…", Dir: "Run a Makefile target, npm script or go test in the terminal"},
 		{Cmd: paletteCmdStageHunk, Name: "Git: Stage Hunk at Cursor", Dir: "Stage the highlighted change hunk (Source Control view)"},
 		{Cmd: paletteCmdUnstageHunk, Name: "Git: Unstage Hunk at Cursor", Dir: "Move the highlighted staged hunk back to unstaged"},
@@ -62,7 +64,10 @@ func paletteExtraCatalog() []paletteRow {
 		{Cmd: paletteCmdStashPick, Name: "Git: Apply Stash…", Dir: "List stashes; applying keeps the stash entry"},
 		{Cmd: paletteCmdComparePick, Name: "Git: Compare Refs…", Dir: "Diff any two commits or branches: compare <a> <b>"},
 		{Cmd: paletteCmdLSPToggle, Name: "LSP: Toggle Language Servers", Dir: "Enable or disable every language server"},
+		{Cmd: paletteCmdOpenCodePanel, Name: "OpenCode: Open Session Panel", Dir: "Show saved OpenCode sessions for this workspace"},
+		{Cmd: paletteCmdOpenCodeNew, Name: "OpenCode: New Blank Session", Dir: "Create an empty session in this workspace when connected"},
 	}
+	return append(rows, openCodeActionRows()...)
 }
 
 // paletteCmdChords maps a command id to the keymap action whose chord it

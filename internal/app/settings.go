@@ -94,6 +94,9 @@ type globalSettings struct {
 	LSP *lspSettings `json:"lsp,omitempty"`
 	// Format configures format-on-save; see format_save.go.
 	Format *formatSettings `json:"format,omitempty"`
+	// OpenCode stores the selected provider and model. Console API keys live in
+	// the dedicated secret store and are never added to this schema.
+	OpenCode *opencodeSettings `json:"opencode,omitempty"`
 }
 
 // defaultSettingsPath returns the global file beside the per-workspace
@@ -158,6 +161,11 @@ func loadSettings(path string) (globalSettings, error) {
 			var l lspSettings
 			if json.Unmarshal(value, &l) == nil {
 				s.LSP = &l
+			}
+		case "opencode":
+			var o opencodeSettings
+			if json.Unmarshal(value, &o) == nil {
+				s.OpenCode = &o
 			}
 		}
 	}
@@ -235,6 +243,7 @@ func (s globalSettings) sanitize() globalSettings {
 	s.Theme = validTheme(s.Theme)
 	s.LSP = s.LSP.sanitize()
 	s.Format = s.Format.sanitize()
+	s.OpenCode = s.OpenCode.sanitize()
 	if s.FontSize == 0 {
 		s.FontSize = defaultFontSize
 	} else {
@@ -669,6 +678,7 @@ func keymapCatalog() []keymapEntry {
 		{"hunk-next", "Next hunk/change", "N", false},
 		{"hunk-prev", "Previous hunk/change", "P", false},
 		{"stage-hunk", "Stage hunk", "Shift+S", false},
+		{actionAgentChat, "Open / close agent chat", "Ctrl+Shift+L", false},
 		{"history-back", "Navigate back", "Alt+ArrowLeft", false},
 		{"history-forward", "Navigate forward", "Alt+ArrowRight", false},
 		// Window-owned and always fixed: listed read-only, never rebindable.
@@ -804,6 +814,10 @@ func (a *App) settingsSnapshot() globalSettings {
 		s.Keymap = keymap
 	}
 	s.LSP = a.settings.LSP
+	if a.settings.OpenCode != nil {
+		openCode := *a.settings.OpenCode
+		s.OpenCode = &openCode
+	}
 	return s.sanitize()
 }
 
@@ -1035,6 +1049,8 @@ func (a *App) runKeymapAction(ctx context.Context, action string) error {
 	case "line-card":
 		a.showInlineCardAtCurrent()
 		return a.page.Redraw(ctx)
+	case actionAgentChat:
+		return a.toggleAgentChat(ctx)
 	case actionMoveLineUp, actionMoveLineDown, actionDuplicateLn, actionDeleteLine, actionJoinLines:
 		return a.runLineOp(ctx, action)
 	case "mode-explorer":
@@ -1149,7 +1165,7 @@ func chordFromEvent(ctrl, shift bool, key string) string {
 // appearance for unknown or empty values.
 func (a *App) settingsTabName() string {
 	switch a.settingsTab {
-	case "keyboard", "files", "lsp", "help", "about":
+	case "keyboard", "files", "lsp", "opencode", "help", "about":
 		return a.settingsTab
 	default:
 		return "appearance"

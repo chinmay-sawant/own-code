@@ -198,3 +198,22 @@ cells, leaving the divider and number gutters available to this button. */
 .expand-btn.expand-all {
   font-weight: 600;
 }
+
+.agent-hunk-ctl { display: inline-flex; gap: 6px; align-items: center; margin-left: 8px; }
+/* .line-revert is a 16px absolute glyph button; the text buttons need auto
+   width. The state classes sit on .agent-hunk-ctl, a sibling that follows
+   .dhunk, so state styling targets the ctl's own buttons (a sibling-first
+   selector like ".state-x .dhunk" can never match). */
+.agent-hunk-btn {
+  position: static;
+  width: auto;
+  height: 18px;
+  padding: 0 6px;
+  font-size: 10.5px;
+  line-height: 16px;
+  white-space: nowrap;
+  opacity: 1;
+}
+.agent-hunk-ctl.state-accepted .agent-hunk-btn,
+.agent-hunk-ctl.state-rejected .agent-hunk-btn { opacity: .7; }
+.agent-hunk-note { color: var(--red); font-size: 11px; }

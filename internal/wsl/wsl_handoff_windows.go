@@ -3,19 +3,10 @@
 package wsl
 
 import (
-	"errors"
 	"os"
 	"os/exec"
 	"strings"
 	"syscall"
-)
-
-// errHandoffDisabled reports a runtime handoff blocked by -wsl=false or a
-// missing launcher. errHandoffNoBinary reports an untranslatable companion
-// path (for example an UNC-hosted exe with no /mnt mapping).
-var (
-	errHandoffDisabled = errors.New("wsl handoff disabled")
-	errHandoffNoBinary = errors.New("wsl companion binary not found")
 )
 
 // Available reports whether the WSL launcher is present. The folder browser
@@ -66,7 +57,10 @@ func ListDistros() []string {
 }
 
 // CompanionBin resolves the Linux companion binary inside WSL: the -wsl-bin
-// flag when set, otherwise this executable translated to /mnt/<drive>/....
+// flag when set, otherwise a sibling Linux binary next to this executable
+// translated to /mnt/<drive>/.... When -wsl-bin is unset and no sibling
+// Linux binary exists on disk, it reports false so callers open the WSL path
+// natively in the Windows binary instead of launching a broken wsl.exe child.
 func CompanionBin() (string, bool) {
 	if wslBin != "" {
 		return wslBin, true
@@ -77,6 +71,10 @@ func CompanionBin() (string, bool) {
 	}
 	if strings.HasSuffix(strings.ToLower(exe), wslExeSuffix) {
 		exe = exe[:len(exe)-len(wslExeSuffix)]
+	}
+	info, err := os.Stat(exe)
+	if err != nil || info.IsDir() {
+		return "", false
 	}
 	bin, ok := WindowsToWSLPath(exe)
 	if !ok {
@@ -91,11 +89,11 @@ func CompanionBin() (string, bool) {
 // -root at linuxPath) to mirror MaybeReexecInWSL without exiting itself.
 func SpawnHandoff(distro, linuxPath string) error {
 	if !wslEnabled || !wslAvailable() {
-		return errHandoffDisabled
+		return ErrHandoffDisabled
 	}
 	bin, ok := CompanionBin()
 	if !ok {
-		return errHandoffNoBinary
+		return ErrHandoffNoBinary
 	}
 	launcher, err := exec.LookPath("wsl.exe")
 	if err != nil {

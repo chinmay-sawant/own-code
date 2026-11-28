@@ -212,23 +212,31 @@ type View struct {
 	// FontLabel is the "12px" chip text; EditorZoom/TerminalZoom are the
 	// v1 per-view overrides (0 when following the global zoom);
 	// EditorZoomLabel/TerminalZoomLabel render the override percent or "—".
-	SettingsTab       string
-	FontLabel         string
-	EditorZoom        float64
-	TerminalZoom      float64
-	EditorZoomLabel   string
-	TerminalZoomLabel string
-	KeymapRows        []keymapRow
-	KeymapCapture     string
-	KeymapPending     string
-	HelpRows          []keymapRow
-	LSPOn             bool
-	LSPRows           []lspServerRow
-	AppName           string
-	AppVersion        string
-	AppScope          string
-	ScanText          string
-	SearchText        string
+	SettingsTab string
+	// OpenCode selection and status are safe to render. The API key stays in a
+	// native password input and never enters View.
+	OpenCodeModelSelection string
+	OpenCodeModels         []openCodeModelRow
+	OpenCodeStatus         string
+	OpenCodeConnected      bool
+	OpenCodePanel          openCodePanelView
+	OpenCodePrompt         string
+	FontLabel              string
+	EditorZoom             float64
+	TerminalZoom           float64
+	EditorZoomLabel        string
+	TerminalZoomLabel      string
+	KeymapRows             []keymapRow
+	KeymapCapture          string
+	KeymapPending          string
+	HelpRows               []keymapRow
+	LSPOn                  bool
+	LSPRows                []lspServerRow
+	AppName                string
+	AppVersion             string
+	AppScope               string
+	ScanText               string
+	SearchText             string
 	// ScanBad/SearchBad are the 1-based line numbers holding invalid globs.
 	ScanBad       []int
 	SearchBad     []int

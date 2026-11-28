@@ -244,11 +244,14 @@ type App struct {
 	searchResult    chan searchReply
 	searchCancel    context.CancelFunc
 
-	diffPath    string
-	diffSplit   bool
-	diffRows    []diffRow
-	diffRowsGen uint64
-	diffWrap    diffWrapCache
+	diffPath      string
+	diffSplit     bool
+	diffRows      []diffRow
+	diffRowsGen   uint64
+	diffRowsSeq   uint64
+	diffRowsCache map[diffRowsCacheKey]diffRowsCacheEntry
+	diffWrap      diffWrapCache
+	diffWrapCache map[diffWrapKey][]diffRow
 	// changeStarts caches diffChangeStarts for the current display rows.
 	// fillDiffFile and fileNavChangeRows both scanned every row on every
 	// frame; the rows only change when diffRowsGen moves or the wrap shape
@@ -265,6 +268,9 @@ type App struct {
 	changesDragAt    int
 	changesScale     float64
 	diffSource       string
+	agentChanges     changeSet // "agent" source: the session's proposals as diffs
+	agentPath        string
+	agentSession     string
 	selected         map[string]bool
 
 	// Merge editor state. The result text is the source of truth; parsed
@@ -463,6 +469,7 @@ type App struct {
 	settingsLast          string
 	settingsTab           string
 	settingsNote          string
+	openCode              openCodeRuntime
 	keymapCapture         string
 	keymapPendingAction   string
 	keymapPendingChord    string
@@ -675,6 +682,7 @@ func NewWithLimit(root string, limit int) (*App, error) {
 		zoom:            1,
 		settingsTab:     "appearance",
 		settings:        zeroSettings(),
+		openCode:        newOpenCodeRuntime(),
 	}
 	a.term.SetNotify(a.requestTerminalFrame)
 	a.startDirLoader()
@@ -708,7 +716,8 @@ func NewWithLimit(root string, limit int) (*App, error) {
 	page, err := ownframe.New(ownframe.Config{
 		DevTools:         true,
 		Title:            "Code Review",
-		HTML:             buildHTML(),
+		Render:           renderAppPage,
+		RetainState:      true,
 		Width:            defaultWidth,
 		Height:           defaultHeight,
 		MinWidth:         minWidth,
@@ -1016,6 +1025,18 @@ func (a *App) switchProject(ctx context.Context, root string) error {
 		return nil
 	}
 
+	// OpenCode work is scoped to a workspace. Retire pending network replies
+	// and clear the previous workspace's session state before publishing ws.
+	a.cancelOpenCodeOperation()
+	a.cancelAllOpenCodeRuns()
+	a.openCode.retryText = ""
+	a.openCode.token++
+	a.openCode.operation = openCodeOperationNone
+	a.openCode.sessions = nil
+	a.openCode.selectedSessionID = ""
+	a.openCode.messages = nil
+	a.openCode.panelStatus = ""
+
 	a.StopWatcher()
 	a.stopDirLoader()
 	a.lspReset()
@@ -1129,6 +1150,9 @@ func (a *App) switchProject(ctx context.Context, root string) error {
 	// Control rail never shows the previous project's commits (or an empty
 	// rail) until the watcher happens to fire.
 	a.ReloadChanges(ctx, false)
+	if a.openCode.panelOpen && a.openCode.connected && !ws.Sample {
+		_ = a.loadOpenCodeSessions()
+	}
 
 	return nil
 }
@@ -1178,6 +1202,12 @@ func (a *App) onScroll(offsetY, viewH int) bool {
 	}
 
 	if !a.split {
+		if a.mode == "changes" && !a.inlineCard.Show && viewH == a.viewportH && cols == a.viewportCols &&
+			offsetY/a.zx(rowH) == a.scrollY/a.zx(rowH) {
+			a.scrollY = offsetY
+			a.scrollGroup[0] = offsetY
+			return false
+		}
 		a.scrollY = offsetY
 		a.scrollGroup[0] = offsetY
 	}
@@ -1195,91 +1225,106 @@ func (a *App) onScroll(offsetY, viewH int) bool {
 func (a *App) buildView() View {
 	winW, _ := a.page.Size()
 	workspace := baseName(a.ws.Root)
+	opencodeSettings := a.openCodeSettingsView()
 	v := View{
-		Mode:           a.mode,
-		Filter:         clipFilterDisplay(clampFieldLen(a.filter)),
-		Details:        a.details,
-		DevOn:          a.devOn,
-		MenuOpen:       a.menuOpen,
-		MenuX:          a.menuX,
-		MenuY:          a.menuY,
-		MenuRows:       append([]menuViewRow(nil), a.menuItems...),
-		Modal:          a.paletteOpen || a.branchOpen || a.searchOpen || a.settingsOpen || a.confirmOpen || a.commitDialogOpen || a.fileMenu || a.browseOpen || a.termFocus || a.popupTrapsFocus(),
-		SettingsOpen:   a.settingsOpen,
-		FileMenu:       a.fileMenu,
-		ProjectOpen:    a.projectOpen,
-		ProjectQuery:   clampFieldLen(a.projectQuery),
-		RecentOpen:     a.recentOpen,
-		RecentFlyX:     a.recentFlyoutX(),
-		RecentFlyY:     a.recentFlyoutY(),
-		RecentRoots:    a.recentRootRows(),
-		QuickRoots:     a.quickRootRows(),
-		BrowseOpen:     a.browseOpen,
-		BrowseRoot:     a.browseRoot,
-		BrowseName:     clipBrowsePath(winW, a.browseDisplayName()),
-		BrowseQuery:    clampFieldLen(a.browseFilter),
-		BrowseEntries:  a.browseWindowedEntries(),
-		BrowseTotal:    len(a.browseFilteredEntries()),
-		IsWSL:          isWSL(),
-		IsWindows:      runtime.GOOS == "windows",
-		HasWSL:         wsl.Available(),
-		Alert:          a.fileAlert,
-		Themes:         a.themeRows(),
-		ThumbColor:     thumbColorFor(a.theme),
-		PanelColor:     panelColorFor(a.theme),
-		AutoSave:       validAutoSave(a.autoSave),
-		AutoSaveDelay:  clampAutoSaveDelay(firstNonZero(a.autoSaveDelayMs, autoSaveDefaultDelay)),
-		MaxFPS:         a.EffectiveMaxFPS(),
-		FPSLabel:       FPSLabel(a.EffectiveMaxFPS()),
-		FPSOptions:     fpsRows(a.EffectiveMaxFPS()),
-		SettingsTab:    a.settingsTabName(),
-		FontLabel:      a.fontLabel(),
-		KeymapRows:     a.keymapRows(),
-		HelpRows:       a.helpRows(),
-		AppName:        appName,
-		AppVersion:     appVersion,
-		AppScope:       appScope,
-		ScanText:       a.scanDraftText(),
-		SearchText:     a.searchDraftText(),
-		ScanBad:        invalidGlobLines(a.scanDraftText()),
-		SearchBad:      invalidGlobLines(a.searchDraftText()),
-		UseGitignore:   a.scanFilterAllowsGitignore(),
-		SearchIgnored:  a.scanFilterAllowsSearchIgnored(),
-		ScanMatch:      a.scanExcludeMatchCount(),
-		SearchSkip:     a.searchExcludeSkipCount(),
-		SettingsNote:   a.settingsNote,
-		Workspace:      workspace,
-		WorkspaceLabel: clipRunes(workspace, 20),
-		GitRoot:        a.ws.Root,
-		Branch:         a.changes.Branch,
-		NoGit:          a.changes.Branch == "no git",
-		Changed:        len(a.changes.Files) + len(a.changes.Conflicts),
-		DevNote:        a.changes.Note,
-		ScanBudget:     a.ws.ScanBudget(),
-		WatchNote:      a.watchNote,
-		FilterNote:     a.filterNote(),
-		DirLoadNote:    a.dirLoadNote,
-		HoverPath:      a.hoverPath,
-		Dirty:          a.dirtyCount(),
-		Toast:          a.toast,
-		LSP:            a.lspViewData(),
-		Wrap:           a.wrap,
-		ScrollX:        0,
-		FindQuery:      clampFieldLen(a.findQuery),
-		FindOpen:       a.findOpen,
-		FindCase:       a.findCase,
-		FindCurrent:    a.findCurrent(),
-		FindTotal:      len(a.findHits),
-
-		ReplaceOpen:      a.replaceOpen,
-		ReplaceQuery:     clampFieldLen(a.replaceQuery),
-		ReplaceRegex:     a.replaceRegex,
-		ReplaceWholeWord: a.replaceWholeWord,
-		FindError:        a.findError,
-		BranchQuery:      clampFieldLen(a.branchQuery),
-		Split:            a.split && a.mode == "explorer",
-		FocusGroup:       a.focusGroup,
-		FocusedPane:      0,
+		Mode:              a.mode,
+		Filter:            clipFilterDisplay(clampFieldLen(a.filter)),
+		Details:           a.details,
+		DevOn:             a.devOn,
+		MenuOpen:          a.menuOpen,
+		MenuX:             a.menuX,
+		MenuY:             a.menuY,
+		MenuRows:          append([]menuViewRow(nil), a.menuItems...),
+		Modal:             a.paletteOpen || a.branchOpen || a.searchOpen || a.settingsOpen || a.confirmOpen || a.commitDialogOpen || a.fileMenu || a.browseOpen || a.termFocus || a.popupTrapsFocus(),
+		SettingsOpen:      a.settingsOpen,
+		FileMenu:          a.fileMenu,
+		ProjectOpen:       a.projectOpen,
+		ProjectQuery:      clampFieldLen(a.projectQuery),
+		RecentOpen:        a.recentOpen,
+		BrowseOpen:        a.browseOpen,
+		IsWSL:             isWSL(),
+		IsWindows:         runtime.GOOS == "windows",
+		HasWSL:            wsl.Available(),
+		Alert:             a.fileAlert,
+		ThumbColor:        thumbColorFor(a.theme),
+		PanelColor:        panelColorFor(a.theme),
+		AutoSave:          validAutoSave(a.autoSave),
+		AutoSaveDelay:     clampAutoSaveDelay(firstNonZero(a.autoSaveDelayMs, autoSaveDefaultDelay)),
+		MaxFPS:            a.EffectiveMaxFPS(),
+		FPSLabel:          FPSLabel(a.EffectiveMaxFPS()),
+		SettingsTab:       a.settingsTabName(),
+		FontLabel:         a.fontLabel(),
+		AppName:           appName,
+		AppVersion:        appVersion,
+		AppScope:          appScope,
+		UseGitignore:      a.scanFilterAllowsGitignore(),
+		SearchIgnored:     a.scanFilterAllowsSearchIgnored(),
+		SettingsNote:      a.settingsNote,
+		OpenCodePanel:     a.openCodePanelView(),
+		OpenCodePrompt:    a.openCode.composer.text,
+		OpenCodeConnected: a.openCode.connected,
+		OpenCodeStatus:    a.openCode.status,
+		Workspace:         workspace,
+		WorkspaceLabel:    clipRunes(workspace, 20),
+		GitRoot:           a.ws.Root,
+		Branch:            a.changes.Branch,
+		NoGit:             a.changes.Branch == "no git",
+		Changed:           len(a.changes.Files) + len(a.changes.Conflicts),
+		DevNote:           a.changes.Note,
+		ScanBudget:        a.ws.ScanBudget(),
+		WatchNote:         a.watchNote,
+		FilterNote:        a.filterNote(),
+		DirLoadNote:       a.dirLoadNote,
+		HoverPath:         a.hoverPath,
+		Dirty:             a.dirtyCount(),
+		Toast:             a.toast,
+		LSP:               a.lspViewData(),
+		Wrap:              a.wrap,
+		ScrollX:           0,
+		FindQuery:         clampFieldLen(a.findQuery),
+		FindOpen:          a.findOpen,
+		FindCase:          a.findCase,
+		FindCurrent:       a.findCurrent(),
+		FindTotal:         len(a.findHits),
+		ReplaceOpen:       a.replaceOpen,
+		ReplaceQuery:      clampFieldLen(a.replaceQuery),
+		ReplaceRegex:      a.replaceRegex,
+		ReplaceWholeWord:  a.replaceWholeWord,
+		FindError:         a.findError,
+		BranchQuery:       clampFieldLen(a.branchQuery),
+		Split:             a.split && a.mode == "explorer",
+		FocusGroup:        a.focusGroup,
+		FocusedPane:       0,
+	}
+	if a.fileMenu || a.projectOpen || a.recentOpen {
+		v.RecentFlyX = a.recentFlyoutX()
+		v.RecentFlyY = a.recentFlyoutY()
+		v.RecentRoots = a.recentRootRows()
+		v.QuickRoots = a.quickRootRows()
+	}
+	if a.browseOpen {
+		v.BrowseRoot = a.browseRoot
+		v.BrowseName = clipBrowsePath(winW, a.browseDisplayName())
+		v.BrowseQuery = clampFieldLen(a.browseFilter)
+		v.BrowseEntries = a.browseWindowedEntries()
+		v.BrowseTotal = len(a.browseFilteredEntries())
+	}
+	if a.settingsOpen {
+		v.Themes = a.themeRows()
+		v.FPSOptions = fpsRows(a.EffectiveMaxFPS())
+		v.KeymapRows = a.keymapRows()
+		v.HelpRows = a.helpRows()
+		v.ScanText = a.scanDraftText()
+		v.SearchText = a.searchDraftText()
+		v.ScanBad = invalidGlobLines(v.ScanText)
+		v.SearchBad = invalidGlobLines(v.SearchText)
+		v.ScanMatch = a.scanExcludeMatchCount()
+		v.SearchSkip = a.searchExcludeSkipCount()
+		v.OpenCodeModelSelection = openCodeModelSelection(opencodeSettings.ProviderID, opencodeSettings.ModelID)
+		v.OpenCodeModels = openCodeModelRows(a.openCode.consoleModels)
+	}
+	if v.OpenCodeStatus == "" {
+		v.OpenCodeStatus = openCodeSetupStatus()
 	}
 
 	if v.Split {
@@ -1293,17 +1338,23 @@ func (a *App) buildView() View {
 		v.ScrollX = a.scrollXFor(0)
 	}
 
-	v.Tree, v.TreeTotal, v.TreeCount, v.Filtered = a.treeRows()
-	v.TreeStart = a.treeOffset
-	v.StickyTree = a.stickyTreeRows()
-	v.TreeVisible = a.treeVisibleRows()
+	if a.mode == "explorer" {
+		v.Tree, v.TreeTotal, v.TreeCount, v.Filtered = a.treeRows()
+		v.TreeStart = a.treeOffset
+		v.StickyTree = a.stickyTreeRows()
+		v.TreeVisible = a.treeVisibleRows()
+		a.fillTreeScroll(&v)
+	}
 	v.ExplorerInputOpen = a.explorerInput.Open
 	v.ExplorerInputTitle = a.explorerInputTitle()
 	v.ExplorerInputValue = clampFieldLen(a.explorerInput.Value)
 	v.ExplorerInputError = a.explorerInput.Error
-	a.fillTreeScroll(&v)
-	a.fillBrowseScroll(&v)
-	a.fillSettingsScroll(&v)
+	if a.browseOpen {
+		a.fillBrowseScroll(&v)
+	}
+	if a.settingsOpen {
+		a.fillSettingsScroll(&v)
+	}
 	v.Tabs, v.TabsPrev, v.TabsNext = a.windowTabRows(0)
 	v.Recent = a.recentRows()
 	v.ActiveTab = a.active
@@ -1608,9 +1659,17 @@ func (a *App) diffDisplayRows() []diffRow {
 	if a.diffWrap.valid && a.diffWrap.key == key {
 		return a.diffWrap.rows
 	}
+	if cached, ok := a.diffWrapCache[key]; ok {
+		a.diffWrap = diffWrapCache{key: key, rows: cached, valid: true}
+		return cached
+	}
 
 	wrapped := wrapDiffRows(rows, unified, split, true)
 	a.diffWrap = diffWrapCache{key: key, rows: wrapped, valid: true}
+	if a.diffWrapCache == nil || len(a.diffWrapCache) >= 32 {
+		a.diffWrapCache = make(map[diffWrapKey][]diffRow)
+	}
+	a.diffWrapCache[key] = wrapped
 
 	return wrapped
 }
@@ -1622,6 +1681,8 @@ func (a *App) diffViewPath() string {
 		return a.commitFile
 	case "branch":
 		return a.branchPath
+	case "agent":
+		return a.agentPath
 	default:
 		return a.diffPath
 	}
@@ -1633,12 +1694,15 @@ func (a *App) fillDiff(v *View) {
 	if a.diffSource == "branch" {
 		active = a.branchChanges
 	}
+	if a.diffSource == "agent" {
+		active = a.agentChanges
+	}
 
 	// Working-tree sections keep staged rows above unstaged rows. Branch and
 	// commit diffs keep the single combined list.
 	stagedAll := active.Staged
 	unstagedAll := active.Unstaged
-	sectioned := a.diffSource != "branch" && a.diffSource != "commit"
+	sectioned := a.diffSource != "branch" && a.diffSource != "commit" && a.diffSource != "agent"
 	if sectioned && len(stagedAll) == 0 && len(unstagedAll) == 0 {
 		unstagedAll = active.Files
 	}
@@ -1670,6 +1734,9 @@ func (a *App) fillDiff(v *View) {
 	}
 	if a.diffSource == "branch" {
 		selected = a.branchPath
+	}
+	if a.diffSource == "agent" {
+		selected = a.agentPath
 	}
 	if a.diffSource == "commit" {
 		selected = a.commitFile
@@ -1834,6 +1901,9 @@ func (a *App) fillDiff(v *View) {
 }
 
 func (a *App) sidebarChangeFiles() []changedFile {
+	if a.diffSource == "agent" {
+		return a.agentChanges.Files
+	}
 	if a.diffSource == "branch" {
 		return a.branchChanges.Files
 	}
@@ -1928,7 +1998,7 @@ func (a *App) fillDiffFile(v *View, d *diffView, file *changedFile) {
 	d.CanRevert = d.Source == "working" && !file.Binary && !file.Oversized && file.Status != "R"
 
 	doc := a.docs[file.Path]
-	if doc == nil {
+	if doc == nil && a.details {
 		doc = a.ws.openDoc(file.Path)
 		a.docs[file.Path] = doc
 	}
@@ -1953,6 +2023,28 @@ func (a *App) fillDiffFile(v *View, d *diffView, file *changedFile) {
 			v.Status = a.statuses[doc.Path]
 		}
 
+		v.StatusClass = "st-" + strings.ToLower(v.Status)
+	} else {
+		// Avoid synchronously reading and tokenizing the entire file when
+		// viewing its diff. Populate header/status metadata from the diff
+		// and workspace index instead.
+		v.Active = file.Path
+		v.ActiveDir = d.Dir
+		v.ActiveName = d.Name
+		v.Lang = d.Lang
+		v.LangLabel = languageInfo(d.Lang).Label
+		v.Badge = d.Badge
+		v.LineCount = file.TotalLines
+		if meta := a.ws.ByPath[file.Path]; meta != nil {
+			v.ByteSize = humanSize(meta.Size)
+			v.Encoding = meta.Encoding
+			v.Indent = meta.Indent
+		}
+		if d.Source == "commit" || d.Source == "branch" {
+			v.Status = file.Status
+		} else {
+			v.Status = a.statuses[file.Path]
+		}
 		v.StatusClass = "st-" + strings.ToLower(v.Status)
 	}
 
@@ -2489,6 +2581,8 @@ func (a *App) editorWidth() int {
 		w -= a.zx(detailsWidth)
 	}
 
+	w -= a.agentDockWidth()
+
 	if w < a.windowControlLeftPx()+a.zx(paneMinWidth) {
 		w = a.windowControlLeftPx() + a.zx(paneMinWidth)
 	}
@@ -2541,10 +2635,10 @@ func (a *App) toggleWrap() {
 	a.scrollTo(line * a.zx(rowH))
 }
 
-// scrollTo moves the page and rebuilds the visible slice, keeping an open
-// inline card on its line. It is the group-0 / single-pane path: split panes
-// scroll through scrollGroupTo, which mirrors group 0 here.
-func (a *App) scrollTo(y int) {
+// setScrollY updates the group-0 scroll offset and page scroll position
+// without publishing a full view refresh. Callers that update other state
+// (such as jumpToFirstChange) use it to avoid double refreshes.
+func (a *App) setScrollY(y int) {
 	target := a.clampScroll(y)
 	a.scrollY = target
 	a.scrollGroup[0] = target
@@ -2552,6 +2646,13 @@ func (a *App) scrollTo(y int) {
 	a.scrollPending = true
 	a.page.ScrollTo(0, target)
 	a.repositionInlineCard()
+}
+
+// scrollTo moves the page and rebuilds the visible slice, keeping an open
+// inline card on its line. It is the group-0 / single-pane path: split panes
+// scroll through scrollGroupTo, which mirrors group 0 here.
+func (a *App) scrollTo(y int) {
+	a.setScrollY(y)
 	a.refresh()
 }
 
@@ -3572,6 +3673,22 @@ func (a *App) selectFirstDiff() {
 	a.rebuildDiffRows()
 }
 
+type diffRowsCacheKey struct {
+	source string
+	path   string
+	split  bool
+}
+
+type diffRowsCacheEntry struct {
+	filePtr    *changedFile
+	hunksPtr   *hunk
+	hunksLen   int
+	totalLines int
+	add, del   int
+	rows       []diffRow
+	gen        uint64
+}
+
 // rebuildDiffRows renders every row for the selected file and split mode.
 func (a *App) rebuildDiffRows() {
 	if a.diffSource == "commit" {
@@ -3580,20 +3697,47 @@ func (a *App) rebuildDiffRows() {
 		return
 	}
 
-	a.diffRowsGen++
 	a.diffRows = nil
 
 	file := findFile(a.changes.Files, a.diffPath)
 	if a.diffSource == "branch" {
 		file = findFile(a.branchChanges.Files, a.branchPath)
 	}
+	if a.diffSource == "agent" {
+		a.diffRowsSeq++
+		a.diffRowsGen = a.diffRowsSeq
+		a.rebuildAgentDiffRows()
+		return
+	}
 	if file == nil {
+		a.diffRowsSeq++
+		a.diffRowsGen = a.diffRowsSeq
 		return
 	}
 
 	if file.TotalLines == 0 && !file.Oversized && a.diffSource != "branch" {
 		file.TotalLines = a.fileTotalLines(file.Path)
 	}
+
+	var hunksPtr *hunk
+	if len(file.Hunks) > 0 {
+		hunksPtr = &file.Hunks[0]
+	}
+	cacheKey := diffRowsCacheKey{source: a.diffSource, path: file.Path, split: a.diffSplit}
+	if entry, ok := a.diffRowsCache[cacheKey]; ok &&
+		entry.filePtr == file &&
+		entry.hunksLen == len(file.Hunks) &&
+		entry.hunksPtr == hunksPtr &&
+		entry.totalLines == file.TotalLines &&
+		entry.add == file.Add &&
+		entry.del == file.Del {
+		a.diffRows = entry.rows
+		a.diffRowsGen = entry.gen
+		return
+	}
+
+	a.diffRowsSeq++
+	a.diffRowsGen = a.diffRowsSeq
 
 	lang := languageOf(file.Path)
 	if a.diffSplit {
@@ -3609,6 +3753,20 @@ func (a *App) rebuildDiffRows() {
 			}
 		}
 		a.diffRows = rows
+	}
+
+	if a.diffRowsCache == nil || len(a.diffRowsCache) >= 32 {
+		a.diffRowsCache = make(map[diffRowsCacheKey]diffRowsCacheEntry)
+	}
+	a.diffRowsCache[cacheKey] = diffRowsCacheEntry{
+		filePtr:    file,
+		hunksPtr:   hunksPtr,
+		hunksLen:   len(file.Hunks),
+		totalLines: file.TotalLines,
+		add:        file.Add,
+		del:        file.Del,
+		rows:       a.diffRows,
+		gen:        a.diffRowsGen,
 	}
 }
 
@@ -3752,8 +3910,22 @@ func (a *App) pickBranch(ctx context.Context, ref string) {
 	a.refresh()
 }
 
+// refreshDiffOrPatch publishes a diff view update via retained PatchElements
+// when possible, falling back cleanly to a full refresh() when structural
+// chrome changed or ownframe refuses the patch.
+func (a *App) refreshDiffOrPatch(prev View) {
+	next := a.buildView()
+	a.view = next
+	if !a.patchDiffView(context.Background(), prev, next) {
+		a.publishPreviewImages()
+		a.page.SetData(&a.view)
+	}
+	a.persistSession()
+}
+
 // selectDiff shows one file's working-tree diff.
 func (a *App) selectDiff(path string) {
+	prev := a.view
 	if a.mode == "merge" {
 		a.leaveMergeMode()
 	}
@@ -3777,8 +3949,8 @@ func (a *App) selectDiff(path string) {
 	}
 	a.rebuildDiffRows()
 	a.resetScroll()
-	a.refresh()
-	a.jumpToFirstChange(path)
+	a.jumpToFirstChangeNoRefresh(path)
+	a.refreshDiffOrPatch(prev)
 }
 
 // toggleDiff previews one file while flipping its multi-select state for
@@ -3807,8 +3979,9 @@ func (a *App) toggleDiff(path string) {
 	}
 	a.rebuildDiffRows()
 	a.resetScroll()
-	a.refresh()
-	a.jumpToFirstChange(path)
+	if !a.jumpToFirstChange(path) {
+		a.refresh()
+	}
 }
 
 // showWorkingDiff returns the lower pane to the working tree.
@@ -4108,10 +4281,11 @@ func (a *App) rebuildCommitRows() {
 
 // setSplit switches between unified and split diff rows.
 func (a *App) setSplit(split bool) {
+	prev := a.view
 	a.diffSplit = split
 	a.rebuildDiffRows()
 	a.resetScroll()
-	a.refresh()
+	a.refreshDiffOrPatch(prev)
 }
 
 // jumpHunk moves to the previous or next change block in the current diff.

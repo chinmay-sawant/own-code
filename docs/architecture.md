@@ -120,6 +120,30 @@ All under `os.UserConfigDir()` (an `ownframe/code-view` folder):
   globs, frame rate). Precedence is session, then settings, then built-in.
 - `project_recent.go`: the recent-projects list used by `ResolveStartupRoot`.
 
+## OpenCode Console agent
+
+The agent runtime is local and talks to the Console directly. Nothing starts `opencode serve`.
+
+| Package | Role |
+|---------|------|
+| `internal/opencode` (`console.go`, `models.go`) | Console client for the model catalog (`GET /console/api/v1/models`) and its `ConsoleModel` metadata. |
+| `internal/secretstore` | The Console API key file (`opencode-console-api-key`, `0600`) under the user config directory. Kept out of settings and SQLite. |
+| `internal/agent` | Provider-neutral types, `ResolveModel` (chat + tool support + chat-completions, responses, Anthropic Messages, or Gemini `generate-content` + `base_url`, validated again per request), the inference client (bounded bodies, SSE frames, timeouts, key redaction, `x-opencode-session` header), and the bounded step loop (`loop.go`, default 12 steps). |
+| `internal/agenttools` | Tool registry, static allow/ask/deny `Policy`, approvals bound to session/turn/call/worktree/args hash, worktree-scoped file tools, `run_shell` (process-tree kill, timeout, bounded output), and proposal-only `write_file`/`edit_file`/`delete_file`/`move_file`. No dependency on `internal/app`, `internal/agent`, or storage. |
+| `internal/agentreview` | Pure review model: path mapping (`MapPath` rejects absolute, traversal, `.git`, and symlinked paths), pre-turn baseline capture, per-hunk diff/apply/revert, whole-file delete/rename units, and per-session/file review state restored from validated local proposal records. |
+| `internal/agentbridge` | Adapts `agenttools` to the interfaces `agent` defines, adding no policy. |
+| `internal/agentstore` | The only runtime database: SQLite at `<config>/agent-workbench/sessions.sqlite`, versioned migrations, a profile lock, and startup recovery. |
+
+Provider registry: `agent.ProviderRegistry` holds `ProviderDescriptor`s (ID, display name, catalog loader, request builder, resolver). OpenCode Console is the only registered backend; the UI asks the registry rather than hard-coding a vendor, and a session stores its backend ID.
+
+Chat panel and context: the panel is a right dock that carves the editor area (`opencode_model_menu.go` owns the dock width, the model dropdown, and the history dropdown). `opencode_mentions.go` drives the `@` popup and composer chips, built on `opencode_context*.go` (bounded snapshots with versions; sensitive, ignored, `.git`, traversal, and symlink-escaping paths are excluded). `opencode_inline.go` runs tool-less single-selection edits against an immutable snapshot and applies an accepted patch as one undoable buffer operation. `opencode_hunks.go` and `opencode_diffview.go` connect proposals to `internal/agentreview` and the existing diff views.
+
+Loop: each step rebuilds history from SQLite, requests a model response, and surfaces only complete tool calls. The loop validates each call, applies policy, asks the approver when needed, persists the approval, writes a dispatch claim (`BeginToolDispatch`), runs the executor, and stores a redacted, bounded result. A model can request a tool but cannot approve it. Cancellation is scoped to session and turn IDs, so sessions run concurrently without sharing state. On startup, `RecoverInterrupted` marks unfinished turns interrupted and uncertain calls unknown; they are never re-run without a fresh approval.
+
+Store: sessions, messages, ordered message parts, turns, and tool calls are keyed by local IDs and written idempotently, with separate provider and model IDs. Gemini thought signatures are stored opaquely on their parts and survive history reconstruction. Text, tool input, and tool output are size-bounded and redacted for bearer tokens and API keys. Older server-backed transcripts migrate in place and stay readable.
+
+Proposal review: write tools stage file bytes in private per-session directories under `agent-workbench/proposals` and persist proposal metadata plus hunk decisions under `agent-workbench/proposal-state`; neither path touches the checkout. Session loading validates staged hashes and reconstructs review state in its worker before the UI installs it. The panel offers Accept or Reject; edits also support per-hunk accept, reject, and revert, while deletes and renames are whole-file units. Applying rechecks the baseline, paths, symlinks, dirty buffers, and Git staged state; renames check both source and destination. Inference, SQLite writes, and tool execution run off the render loop and report back through the tick-drained result channels.
+
 ## Themes
 
 `themes.go` holds `themeCatalog()` (ten themes today); each is a row of

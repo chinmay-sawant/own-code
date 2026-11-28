@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,6 +88,11 @@ func (a *App) openTerminalLink(ctx context.Context, row, seg int) error {
 		a.refresh()
 		return nil
 	}
+	if abs != "" && !a.termLinkInsideWorkspace(abs) {
+		a.showToast("info", "Link not opened", raw+" is outside the active workspace.")
+		a.refresh()
+		return nil
+	}
 	if abs != "" {
 		info, err := os.Stat(abs)
 		if err != nil || info.IsDir() {
@@ -109,4 +115,34 @@ func (a *App) openTerminalLink(ctx context.Context, row, seg int) error {
 		return nil
 	}
 	return a.gotoLine(ctx, line, col)
+}
+
+// termLinkInsideWorkspace reports whether abs resolves, after symlinks, to a
+// regular file under the active workspace root. Terminal output is untrusted
+// text, so a link may never open a file outside the project (absolute paths,
+// "..", or a symlink that leaves the root).
+func (a *App) termLinkInsideWorkspace(abs string) bool {
+	if a.ws == nil || a.ws.Sample || strings.TrimSpace(a.ws.Root) == "" {
+		return false
+	}
+	root, err := filepath.EvalSymlinks(a.ws.Root)
+	if err != nil {
+		return false
+	}
+	real, err := filepath.EvalSymlinks(abs)
+	if errors.Is(err, os.ErrNotExist) {
+		// Missing: the caller reports "not on disk"; only a lexical escape
+		// is refused here.
+		rel, rerr := filepath.Rel(filepath.Clean(a.ws.Root), filepath.Clean(abs))
+		return rerr == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	}
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(root, real)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return false
+	}
+	info, err := os.Stat(real)
+	return err == nil && info.Mode().IsRegular()
 }

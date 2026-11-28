@@ -28,6 +28,19 @@ func openWorkingDiff(t *testing.T, app *App, ctx context.Context, path string) {
 	}
 }
 
+func diffRowPressY(t *testing.T, app *App, codeBody ownframe.Box, editID string) float64 {
+	t.Helper()
+	_, pageY := app.Page().Scroll().ScrollOffset()
+	rowHeight := app.zx(rowH)
+	for i, row := range app.View().Diff.Rows {
+		if row.EditID == editID {
+			return codeBody.Y + float64(pageY) - float64(app.scrollY) + float64(app.View().Diff.TrackTop) + float64(i*rowHeight) + float64(rowHeight)/2
+		}
+	}
+	t.Fatalf("no visible diff row with EditID %q", editID)
+	return 0
+}
+
 func TestDiffEditLineKeepsColumn(t *testing.T) {
 	dir, _ := historyRepo(t)
 
@@ -57,11 +70,6 @@ func TestDiffEditLineKeepsColumn(t *testing.T) {
 	ctx := context.Background()
 	openWorkingDiff(t, app, ctx, "brfs.css")
 
-	btn, ok := boxByID(app.Page().Boxes(), "diff-edit-line-82")
-	if !ok {
-		t.Fatal("no diff-edit-line-82 button")
-	}
-
 	codeBody, ok := boxByID(app.Page().Boxes(), "code-body")
 	if !ok {
 		t.Fatal("no code-body")
@@ -69,9 +77,9 @@ func TestDiffEditLineKeepsColumn(t *testing.T) {
 
 	const wantCol = 11
 	x := codeBody.X + diffUnifiedText + float64(wantCol)*diffCellW
-	y := btn.Y + btn.H/2
+	y := diffRowPressY(t, app, codeBody, "diff-edit-line-82")
 
-	if _, err := app.onPress(ctx, btn, x, y); err != nil {
+	if _, err := app.onPress(ctx, codeBody, x, y); err != nil {
 		t.Fatal(err)
 	}
 
@@ -309,11 +317,6 @@ func TestDiffDelRowRedirectsToNearestNewLine(t *testing.T) {
 	ctx := context.Background()
 	openWorkingDiff(t, app, ctx, "editerror.html")
 
-	btn, ok := boxByID(app.Page().Boxes(), "diff-edit-line-del-42")
-	if !ok {
-		t.Fatal("deleted old line 42 has no edit button")
-	}
-
 	codeBody, ok := boxByID(app.Page().Boxes(), "code-body")
 	if !ok {
 		t.Fatal("no code-body")
@@ -321,9 +324,9 @@ func TestDiffDelRowRedirectsToNearestNewLine(t *testing.T) {
 
 	const wantCol = 11
 	x := codeBody.X + diffUnifiedText + float64(wantCol)*diffCellW
-	y := btn.Y + btn.H/2
+	y := diffRowPressY(t, app, codeBody, "diff-edit-line-del-42")
 
-	if _, err := app.onPress(ctx, btn, x, y); err != nil {
+	if _, err := app.onPress(ctx, codeBody, x, y); err != nil {
 		t.Fatal(err)
 	}
 
@@ -384,11 +387,6 @@ func TestDiffWrapTailRedirectKeepsColumn(t *testing.T) {
 		t.Fatal("long changed line did not wrap into a clickable tail chunk")
 	}
 
-	btn, ok := boxByID(app.Page().Boxes(), tailID)
-	if !ok {
-		t.Fatalf("no box %s", tailID)
-	}
-
 	codeBody, ok := boxByID(app.Page().Boxes(), "code-body")
 	if !ok {
 		t.Fatal("no code-body")
@@ -396,9 +394,9 @@ func TestDiffWrapTailRedirectKeepsColumn(t *testing.T) {
 
 	const tailCol = 5
 	x := codeBody.X + diffUnifiedText + float64(tailCol)*diffCellW
-	y := btn.Y + btn.H/2
+	y := diffRowPressY(t, app, codeBody, tailID)
 
-	if _, err := app.onPress(ctx, btn, x, y); err != nil {
+	if _, err := app.onPress(ctx, codeBody, x, y); err != nil {
 		t.Fatal(err)
 	}
 

@@ -1,8 +1,8 @@
 package app
 
 import (
+	"bytes"
 	"context"
-	"html/template"
 	"strconv"
 	"strings"
 	"testing"
@@ -11,15 +11,10 @@ import (
 func renderAppHTML(t *testing.T, app *App) string {
 	t.Helper()
 
-	tmpl, err := template.New("test").Parse(app.Page().HTML())
-	if err != nil {
-		t.Fatalf("parse template: %v", err)
-	}
-
-	var buf strings.Builder
+	var buf bytes.Buffer
 	v := app.View()
-	if err := tmpl.Execute(&buf, &v); err != nil {
-		t.Fatalf("execute template: %v", err)
+	if err := renderAppPage(&buf, &v); err != nil {
+		t.Fatalf("renderAppPage: %v", err)
 	}
 
 	return buf.String()
@@ -272,7 +267,7 @@ func TestHScrollHTMLTemplateStyling(t *testing.T) {
 	ctx := context.Background()
 
 	// Verify the template structure contains the horizontal translation rule.
-	tmpl := app.Page().HTML()
+	tmpl := buildHTML()
 	if !strings.Contains(tmpl, `style="left: -{{.ScrollX}}px"`) {
 		t.Fatalf("Template does not contain 'style=\"left: -{{.ScrollX}}px\"'")
 	}

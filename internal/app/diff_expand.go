@@ -432,6 +432,8 @@ func (a *App) expandDiffGap(idx int, dir expandDir) {
 	}
 
 	expandHunkGap(file, gap, dir, lines)
+	clear(a.diffRowsCache)
+	clear(a.diffWrapCache)
 
 	a.rebuildDiffRows()
 	a.refresh()

@@ -57,6 +57,9 @@ func (a *App) clearDoubleClick() {
 // onClick routes every control. State changes end in one refresh; the page
 // redraws after the handler returns.
 func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
+	a.dismissOpenCodeMentions(box.ID)
+	a.dismissOpenCodeDropdowns(box)
+
 	if a.dismissOpenMenu(box.ID, box.Action) {
 		return nil
 	}
@@ -568,6 +571,13 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.settingsTab = strings.TrimPrefix(action, "settings-tab:")
 		a.resetSettingsScroll()
 		return a.redrawSettings(ctx)
+	case strings.HasPrefix(action, "opencode-panel-") ||
+		strings.HasPrefix(action, "opencode-session-") ||
+		strings.HasPrefix(action, "opencode-switch-") ||
+		strings.HasPrefix(action, "opencode-proposal-"):
+		return a.opencodePanelAction(ctx, action)
+	case strings.HasPrefix(action, "opencode-"):
+		return a.opencodeAction(ctx, action)
 	case action == "font-inc":
 		return a.setFontSize(ctx, a.baseFontSize()+1)
 	case action == "font-dec":
@@ -780,6 +790,10 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		}
 	case strings.HasPrefix(action, "discard-file:"):
 		a.openDiscardConfirm("discard-file", []string{strings.TrimPrefix(action, "discard-file:")})
+	case strings.HasPrefix(action, "agent-hunk:"):
+		if err := a.agentHunkAction(strings.TrimPrefix(action, "agent-hunk:")); err != nil {
+			return err
+		}
 	case strings.HasPrefix(action, "revert-hunk:"):
 		if idx, ok := actionIndex(action, "revert-hunk:"); ok {
 			if err := a.revertClickedBlock(ctx, idx, box.ID); err != nil {
@@ -1066,6 +1080,8 @@ func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 
 		a.branchQuery = next
 		a.refresh()
+	case "opencode-prompt":
+		a.onOpenCodePromptChange(a.view.OpenCodePrompt)
 	case "palette":
 		next := clampFieldLen(a.view.PaletteQuery)
 		if next == a.paletteQuery {
@@ -1221,6 +1237,10 @@ func (a *App) onWheel(ctx context.Context, x, y, dx, dy float64) (bool, error) {
 		}
 	}
 
+	if a.openCodeWheelAt(x, y, dy) {
+		return true, a.page.Redraw(ctx)
+	}
+
 	if a.termOpen && dy != 0 {
 		box, ok := findBoxID(a.page.Boxes(), "term-body")
 		if ok && x >= box.X && x <= box.X+box.W && y >= box.Y && y <= box.Y+box.H {
@@ -1372,7 +1392,7 @@ func (a *App) scrollTree(rows int) {
 }
 
 // onHover shows the commit message card while a history row is hovered.
-func (a *App) onHover(_ context.Context, _, next ownframe.Box) (bool, error) {
+func (a *App) onHover(ctx context.Context, _, next ownframe.Box) (bool, error) {
 	if a.historyDrag {
 		return false, nil
 	}
@@ -1400,8 +1420,7 @@ func (a *App) onHover(_ context.Context, _, next ownframe.Box) (bool, error) {
 	if path != "" {
 		if doc := a.docs[path]; doc != nil {
 			if path != a.hoverPath {
-				a.hoverPath = path
-				a.refresh()
+				a.patchHoverPath(ctx, path)
 			}
 
 			return false, nil
@@ -1410,8 +1429,7 @@ func (a *App) onHover(_ context.Context, _, next ownframe.Box) (bool, error) {
 		for _, file := range a.ws.Files {
 			if file.Path == path {
 				if path != a.hoverPath {
-					a.hoverPath = path
-					a.refresh()
+					a.patchHoverPath(ctx, path)
 				}
 
 				return false, nil
@@ -1430,8 +1448,8 @@ func (a *App) onHover(_ context.Context, _, next ownframe.Box) (bool, error) {
 	}
 
 	if short == a.hoverCommit && a.hoverPath != "" {
-		a.hoverPath = ""
-		a.refresh()
+		a.patchHoverPath(ctx, "")
+		return false, nil
 	}
 
 	a.hoverCommit = short
@@ -1693,6 +1711,10 @@ func (a *App) onDragStart(ctx context.Context, box ownframe.Box) (bool, error) {
 		a.cardStartTop = a.inlineCard.Top
 		return true, nil
 	}
+	if box.ID == openCodeDockGripID && a.openCode.panelOpen {
+		a.startOpenCodeDockDrag()
+		return true, nil
+	}
 	if box.ID == "term-resize" && (a.termOpen || a.problemsOpen) {
 		a.termDrag = true
 		a.termDragStartH = int(float64(a.termPanelHeight()) / a.uiZoom())
@@ -1814,6 +1836,10 @@ func (a *App) onDragStart(ctx context.Context, box ownframe.Box) (bool, error) {
 		return a.startSettingsThumbDrag(), nil
 	}
 
+	if (box.ID == openCodeModelThumbID || box.ID == openCodeModelRailID) && a.openCode.modelMenuOpen {
+		return a.startOpenCodeModelThumbDrag(), nil
+	}
+
 	if box.ID == "drawer-resize" {
 		a.drawerDrag = true
 		a.drawerDragExtra = a.drawerExtra
@@ -1862,6 +1888,20 @@ func (a *App) onDragMove(ctx context.Context, dx, dy float64) error {
 		if !a.setSplitRatio(ratio) {
 			return nil
 		}
+
+		return a.page.Redraw(ctx)
+	}
+	if a.openCode.dockDrag {
+		a.moveOpenCodeDockDrag(dx)
+		a.refresh()
+
+		return a.page.Redraw(ctx)
+	}
+	if a.openCode.modelMenuDrag {
+		if !a.moveOpenCodeModelThumbDrag(dy) {
+			return nil
+		}
+		a.refresh()
 
 		return a.page.Redraw(ctx)
 	}
@@ -2042,6 +2082,19 @@ func (a *App) onDragEnd(ctx context.Context) error {
 		return a.page.Form().Focus(ctx, "")
 	}
 
+	if a.openCode.dockDrag {
+		a.openCode.dockDrag = false
+		a.persistOpenCodeDockWidth()
+		a.refresh()
+
+		return a.page.Redraw(ctx)
+	}
+	if a.openCode.modelMenuDrag {
+		a.openCode.modelMenuDrag = false
+		a.openCode.modelMenuDragScale = 0
+		return nil
+	}
+
 	if a.termDrag {
 		a.termDrag = false
 		a.termDragDy = 0
@@ -2109,6 +2162,10 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 	}
 
 	if a.popupKeyDown(key) {
+		return a.page.Redraw(ctx)
+	}
+
+	if a.page != nil && a.page.Form().FocusID() == "opencode-prompt" && a.openCodeMentionKey(key) {
 		return a.page.Redraw(ctx)
 	}
 
@@ -2401,6 +2458,25 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 		a.showInlineCardAtCurrent()
 
 		return a.page.Redraw(ctx)
+	}
+
+	// Ctrl+Shift+L opens or closes the agent chat. It sits after the terminal
+	// branch (a focused shell swallows every key first) and before editing,
+	// so it works from the editor. Rebinding kills the old chord.
+	if a.ctrl && a.shift && key == "l" && a.keymapAllows(actionAgentChat, key) {
+		return a.toggleAgentChat(ctx)
+	}
+
+	// OpenCode text inputs own all normal typing (including bare letters like
+	// f, w, r, 1-3) so typing in "Ask the agent" never triggers the Explorer
+	// filter, closes tabs, or leaks into the code editor.
+	if isOpenCodeTextFocus(a.page.Form().FocusID()) {
+		if key == "escape" && (a.openCode.modelMenuOpen || a.openCode.historyOpen) {
+			a.openCode.modelMenuOpen, a.openCode.historyOpen = false, false
+			a.refresh()
+			return a.page.Redraw(ctx)
+		}
+		return nil
 	}
 
 	// The goto and symbol overlays open while editing, so their navigation

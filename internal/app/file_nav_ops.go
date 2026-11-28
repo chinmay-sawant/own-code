@@ -28,6 +28,9 @@ func (a *App) fileNavChangeStep(delta int) {
 		if a.diffSource == "branch" && a.branchPath != path {
 			a.openChangedPath(path)
 		}
+		if a.diffSource == "agent" && a.agentPath != path {
+			a.openChangedPath(path)
+		}
 		if (a.diffSource == "commit" && a.commitFile != path) || (a.diffSource == "working" && a.diffPath != path) {
 			a.openChangedPath(path)
 		}
@@ -102,6 +105,11 @@ func (a *App) fileNavChangeRows(path string) []int {
 }
 
 func (a *App) currentFileNav() *modifiedNav {
+	if a.mode == "changes" && a.diffSource == "agent" {
+		nav := newModifiedNav(a.agentChanges)
+		nav.Select(a.agentPath)
+		return nav
+	}
 	if a.mode == "changes" && a.diffSource == "branch" {
 		nav := newModifiedNav(a.branchChanges)
 		nav.Select(a.branchPath)
@@ -155,6 +163,9 @@ func (a *App) fileNavViewState() fileNavView {
 	file := findFile(a.changes.Files, path)
 	if a.mode == "changes" && a.diffSource == "branch" {
 		file = findFile(a.branchChanges.Files, path)
+	}
+	if a.mode == "changes" && a.diffSource == "agent" {
+		file = findFile(a.agentChanges.Files, path)
 	}
 	if a.mode == "changes" && a.diffSource == "commit" {
 		file = nil
@@ -221,6 +232,10 @@ func (a *App) openChangedPath(path string) {
 	}
 
 	if a.mode == "changes" {
+		if a.diffSource == "agent" {
+			a.selectAgentFile(path)
+			return
+		}
 		if a.diffSource == "branch" {
 			a.selectBranchFile(path)
 			return
@@ -241,8 +256,10 @@ func (a *App) openChangedPath(path string) {
 	a.refresh()
 }
 
-// jumpToFirstChange selects the first change even when it is the only one.
-func (a *App) jumpToFirstChange(path string) bool {
+// jumpToFirstChangeNoRefresh moves scroll and changeNav to the first change
+// without calling refresh(), so callers can choose retained PatchElements or
+// a single full refresh.
+func (a *App) jumpToFirstChangeNoRefresh(path string) bool {
 	rows := a.fileNavChangeRows(path)
 	if len(rows) == 0 {
 		return false
@@ -251,13 +268,21 @@ func (a *App) jumpToFirstChange(path string) bool {
 	if a.split && a.mode != "changes" {
 		a.scrollGroupTo(group, rows[0]*a.zx(rowH))
 	} else {
-		a.scrollTo(rows[0] * a.zx(rowH))
+		a.setScrollY(rows[0] * a.zx(rowH))
 	}
 	scroll := a.scrollY
 	if a.split && a.mode != "changes" {
 		scroll = a.scrollGroup[group]
 	}
 	a.changeNav = changeNavigation{path: path, mode: a.mode, group: group, row: rows[0], scroll: scroll, valid: true}
+	return true
+}
+
+// jumpToFirstChange selects the first change even when it is the only one.
+func (a *App) jumpToFirstChange(path string) bool {
+	if !a.jumpToFirstChangeNoRefresh(path) {
+		return false
+	}
 	a.refresh()
 	return true
 }

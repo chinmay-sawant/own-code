@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"runtime"
 	"strings"
 
@@ -51,6 +52,12 @@ func (a *App) tryHandoffToWSL(root string) bool {
 		return false
 	}
 	if err := wslHandoffSpawn(distro, linuxPath); err != nil {
+		// When no Linux companion binary is installed next to the Windows
+		// binary (or handoff is disabled), fall through to switchProject so
+		// the Windows binary opens the \\wsl$\... path directly.
+		if errors.Is(err, wsl.ErrHandoffNoBinary) || errors.Is(err, wsl.ErrHandoffDisabled) {
+			return false
+		}
 		a.fileAlert = "Could not open in WSL: " + err.Error()
 		if a.page != nil {
 			a.refresh()
