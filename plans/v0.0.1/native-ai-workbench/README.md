@@ -4,10 +4,10 @@
 |---|---|
 | Repository | `github.com/chinmay-sawant/own-code` |
 | Issue | [#9 Native AI coding & agentic workbench](https://github.com/chinmay-sawant/own-code/issues/9) |
-| Status | Proposed plan. Every implementation item remains open. |
+| Status | In progress. OpenCode connection and provider onboarding, SQLite session history, a read-only native panel, context snapshots, private worktree creation, and bounded proposal snapshots are implemented in the current worktree. Prompting and proposal review are still disabled pending integration and safety validation. |
 | Scope | OpenCode first, then session history, inline editing, workspace context, review, and terminal workflows. |
 
-This plan lives under `plans/v0.0.1` as requested. It is a separate plan for issue #9. It does not change the historical v0.0.1 release checklist.
+This plan lives under `plans/v0.0.1` as requested. It is a separate plan for issue #9. It does not change the historical v0.0.1 release checklist. The current worktree adds OpenCode Server connection settings, transient provider credential submission, a user-config server password file, a SQLite session/message store, a native session panel with offline history, a bounded editor-selection snapshot, isolated session worktrees with stored base commits, and a bounded read-only proposal snapshot shown in the session panel. New sessions receive a deny-all OpenCode permission ruleset and prompt submission remains paused. Proposal acceptance and inline application are not implemented. Issue #9 remains open: event streaming, explicit permission UX, inline edit review, full context sources, and end-to-end validation remain in the slice checklists.
 
 ## Goal
 
@@ -22,7 +22,7 @@ The workbench also needs an inline edit flow and explicit prompt context. The us
 - Discover provider integrations and their available authentication methods from OpenCode. Send a typed provider key to OpenCode's `connect/key` endpoint so OpenCode owns the provider credential. Do not write that key to own-code settings, the session database, workspace files, or logs.
 - Treat LazyCoder's OpenCode Go integration as a different product path. It calls the hosted inference API directly. That API's bearer key, model routes, Responses support, and `x-opencode-session` header do not define the local OpenCode Server session protocol.
 - Store own-code's server connection secret outside `settings.json` and the SQLite session database. Prefer an OS credential store. If a file is needed, keep it in the user config directory with owner-only permissions. Do not write credentials into an opened project. If implementation adds a repository-local environment file, add its ignore rules before creating it.
-- The current `/api/event` stream is volatile and misses events during disconnects. `session.prompt` returns after queueing work. Reconnect by reading persisted messages or by using the experimental durable session log only where its version dependency is acceptable.
+- The current `/api/event` stream is volatile and misses events during disconnects. The API reference also documents `GET /api/experimental/session/{sessionID}/log` as a durable session log, but it is experimental and not yet used here. `session.prompt` returns after queueing work. Reconnect by reading persisted messages or by adopting that log only with an explicit supported-version boundary.
 - Keep the workbench in Go and the existing native OwnFrame UI. Do not add a browser or Electron runtime.
 
 ## Work files

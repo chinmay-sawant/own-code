@@ -34,6 +34,7 @@ func (a *App) Close() {
 		return
 	}
 
+	a.closeOpenCodeRuntime()
 	a.stopDirLoader()
 	a.lspShutdown()
 

@@ -94,6 +94,9 @@ type globalSettings struct {
 	LSP *lspSettings `json:"lsp,omitempty"`
 	// Format configures format-on-save; see format_save.go.
 	Format *formatSettings `json:"format,omitempty"`
+	// OpenCode stores connection metadata only. Server passwords and provider
+	// API keys are transient inputs and must never be added to this schema.
+	OpenCode *opencodeSettings `json:"opencode,omitempty"`
 }
 
 // defaultSettingsPath returns the global file beside the per-workspace
@@ -158,6 +161,11 @@ func loadSettings(path string) (globalSettings, error) {
 			var l lspSettings
 			if json.Unmarshal(value, &l) == nil {
 				s.LSP = &l
+			}
+		case "opencode":
+			var o opencodeSettings
+			if json.Unmarshal(value, &o) == nil {
+				s.OpenCode = &o
 			}
 		}
 	}
@@ -235,6 +243,7 @@ func (s globalSettings) sanitize() globalSettings {
 	s.Theme = validTheme(s.Theme)
 	s.LSP = s.LSP.sanitize()
 	s.Format = s.Format.sanitize()
+	s.OpenCode = s.OpenCode.sanitize()
 	if s.FontSize == 0 {
 		s.FontSize = defaultFontSize
 	} else {
@@ -804,6 +813,10 @@ func (a *App) settingsSnapshot() globalSettings {
 		s.Keymap = keymap
 	}
 	s.LSP = a.settings.LSP
+	if a.settings.OpenCode != nil {
+		openCode := *a.settings.OpenCode
+		s.OpenCode = &openCode
+	}
 	return s.sanitize()
 }
 
@@ -1149,7 +1162,7 @@ func chordFromEvent(ctrl, shift bool, key string) string {
 // appearance for unknown or empty values.
 func (a *App) settingsTabName() string {
 	switch a.settingsTab {
-	case "keyboard", "files", "lsp", "help", "about":
+	case "keyboard", "files", "lsp", "opencode", "help", "about":
 		return a.settingsTab
 	default:
 		return "appearance"

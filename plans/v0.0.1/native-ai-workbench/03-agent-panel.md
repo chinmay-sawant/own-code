@@ -2,12 +2,14 @@
 
 **Goal:** Show OpenCode sessions, responses, and tool activity inside the existing own-code workspace.
 
+**Implementation note:** The current slice adds a native bottom panel with a workspace-filtered session list, create/select, bounded text transcript snapshots, and cached local history while disconnected. New sessions are created in private detached worktrees below the user config directory and persist their original workspace, worktree path, and base commit in SQLite. Session listing maps verified worktree paths back to the selected workspace. The panel can show a bounded read-only snapshot of isolated changes. New sessions send OpenCode a deny-all permission ruleset; prompts and interrupt remain disabled. Network waits and SQLite sync run on worker goroutines; reply tokens drop stale results, and workspace changes retire the previous operation and clear prior session state. Transcript updates do not yet consume `/api/event` or provide incremental Markdown streaming. Panel interaction, cancellation, and workspace-switch cases still need focused fixtures and a live native-window pass. Rename/archive/retry, turn/model status display, tool activity, forms, explicit permission UX, and supported-version handling remain open.
+
 ## Phase 1: Manage sessions
 
 - [ ] Add a session list for the selected workspace with create, select, rename, archive, and resume actions supported by the chosen API.
 - [ ] Show active, queued, completed, failed, interrupted, and disconnected states.
 - [ ] Let the user start more than one session and switch between them without mixing their messages or events.
-- [ ] Show the local SQLite history when the server is temporarily disconnected, with a clear offline state.
+- [x] Show the local SQLite history when the server is temporarily disconnected, with a clear offline state.
 - [ ] Do not automatically change the current workspace when a user selects a saved session. Ask for or visibly confirm a workspace switch.
 
 **Gate:** Session action tests cover create, list, switch, resume, archive, workspace mismatch, and disconnected-server states.

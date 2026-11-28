@@ -568,6 +568,10 @@ func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 		a.settingsTab = strings.TrimPrefix(action, "settings-tab:")
 		a.resetSettingsScroll()
 		return a.redrawSettings(ctx)
+	case strings.HasPrefix(action, "opencode-panel-") || strings.HasPrefix(action, "opencode-session-") || action == "opencode-context-toggle":
+		return a.opencodePanelAction(ctx, action)
+	case strings.HasPrefix(action, "opencode-"):
+		return a.opencodeAction(ctx, action)
 	case action == "font-inc":
 		return a.setFontSize(ctx, a.baseFontSize()+1)
 	case action == "font-dec":

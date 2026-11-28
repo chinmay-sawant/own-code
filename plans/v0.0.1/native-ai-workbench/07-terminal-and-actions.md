@@ -19,4 +19,6 @@
 - [ ] Route each action through the same session, context, and review contracts as the visible controls.
 - [ ] Show clear no-server, no-provider, no-session, permission-needed, and offline states.
 
+**Implementation note:** The palette now has `OpenCode: Open Session Panel`, which opens the existing session panel, and `OpenCode: New Blank Session`, which opens the panel and requests an empty session through the existing connected-server guard. Prompt and interrupt commands were not added while isolated edit review remains incomplete. This covers only two palette entry points; the remaining actions and the phase gate are still pending, so all checklist rows remain open. No tests were run for this partial change.
+
 **Gate:** Palette filtering, dispatch, keymap conflicts, terminal focus, and empty-state tests pass. Each command produces the intended session action without bypassing the review flow.

@@ -463,6 +463,7 @@ type App struct {
 	settingsLast          string
 	settingsTab           string
 	settingsNote          string
+	openCode              openCodeRuntime
 	keymapCapture         string
 	keymapPendingAction   string
 	keymapPendingChord    string
@@ -675,6 +676,7 @@ func NewWithLimit(root string, limit int) (*App, error) {
 		zoom:            1,
 		settingsTab:     "appearance",
 		settings:        zeroSettings(),
+		openCode:        newOpenCodeRuntime(),
 	}
 	a.term.SetNotify(a.requestTerminalFrame)
 	a.startDirLoader()
@@ -1016,6 +1018,16 @@ func (a *App) switchProject(ctx context.Context, root string) error {
 		return nil
 	}
 
+	// OpenCode work is scoped to a workspace. Retire pending network replies
+	// and clear the previous workspace's session state before publishing ws.
+	a.cancelOpenCodeOperation()
+	a.openCode.token++
+	a.openCode.operation = openCodeOperationNone
+	a.openCode.sessions = nil
+	a.openCode.selectedSessionID = ""
+	a.openCode.messages = nil
+	a.openCode.panelStatus = ""
+
 	a.StopWatcher()
 	a.stopDirLoader()
 	a.lspReset()
@@ -1129,6 +1141,9 @@ func (a *App) switchProject(ctx context.Context, root string) error {
 	// Control rail never shows the previous project's commits (or an empty
 	// rail) until the watcher happens to fire.
 	a.ReloadChanges(ctx, false)
+	if a.openCode.panelOpen && a.openCode.connected && !ws.Sample {
+		_ = a.loadOpenCodeSessions()
+	}
 
 	return nil
 }
@@ -1195,81 +1210,92 @@ func (a *App) onScroll(offsetY, viewH int) bool {
 func (a *App) buildView() View {
 	winW, _ := a.page.Size()
 	workspace := baseName(a.ws.Root)
+	opencodeSettings := a.openCodeSettingsView()
 	v := View{
-		Mode:           a.mode,
-		Filter:         clipFilterDisplay(clampFieldLen(a.filter)),
-		Details:        a.details,
-		DevOn:          a.devOn,
-		MenuOpen:       a.menuOpen,
-		MenuX:          a.menuX,
-		MenuY:          a.menuY,
-		MenuRows:       append([]menuViewRow(nil), a.menuItems...),
-		Modal:          a.paletteOpen || a.branchOpen || a.searchOpen || a.settingsOpen || a.confirmOpen || a.commitDialogOpen || a.fileMenu || a.browseOpen || a.termFocus || a.popupTrapsFocus(),
-		SettingsOpen:   a.settingsOpen,
-		FileMenu:       a.fileMenu,
-		ProjectOpen:    a.projectOpen,
-		ProjectQuery:   clampFieldLen(a.projectQuery),
-		RecentOpen:     a.recentOpen,
-		RecentFlyX:     a.recentFlyoutX(),
-		RecentFlyY:     a.recentFlyoutY(),
-		RecentRoots:    a.recentRootRows(),
-		QuickRoots:     a.quickRootRows(),
-		BrowseOpen:     a.browseOpen,
-		BrowseRoot:     a.browseRoot,
-		BrowseName:     clipBrowsePath(winW, a.browseDisplayName()),
-		BrowseQuery:    clampFieldLen(a.browseFilter),
-		BrowseEntries:  a.browseWindowedEntries(),
-		BrowseTotal:    len(a.browseFilteredEntries()),
-		IsWSL:          isWSL(),
-		IsWindows:      runtime.GOOS == "windows",
-		HasWSL:         wsl.Available(),
-		Alert:          a.fileAlert,
-		Themes:         a.themeRows(),
-		ThumbColor:     thumbColorFor(a.theme),
-		PanelColor:     panelColorFor(a.theme),
-		AutoSave:       validAutoSave(a.autoSave),
-		AutoSaveDelay:  clampAutoSaveDelay(firstNonZero(a.autoSaveDelayMs, autoSaveDefaultDelay)),
-		MaxFPS:         a.EffectiveMaxFPS(),
-		FPSLabel:       FPSLabel(a.EffectiveMaxFPS()),
-		FPSOptions:     fpsRows(a.EffectiveMaxFPS()),
-		SettingsTab:    a.settingsTabName(),
-		FontLabel:      a.fontLabel(),
-		KeymapRows:     a.keymapRows(),
-		HelpRows:       a.helpRows(),
-		AppName:        appName,
-		AppVersion:     appVersion,
-		AppScope:       appScope,
-		ScanText:       a.scanDraftText(),
-		SearchText:     a.searchDraftText(),
-		ScanBad:        invalidGlobLines(a.scanDraftText()),
-		SearchBad:      invalidGlobLines(a.searchDraftText()),
-		UseGitignore:   a.scanFilterAllowsGitignore(),
-		SearchIgnored:  a.scanFilterAllowsSearchIgnored(),
-		ScanMatch:      a.scanExcludeMatchCount(),
-		SearchSkip:     a.searchExcludeSkipCount(),
-		SettingsNote:   a.settingsNote,
-		Workspace:      workspace,
-		WorkspaceLabel: clipRunes(workspace, 20),
-		GitRoot:        a.ws.Root,
-		Branch:         a.changes.Branch,
-		NoGit:          a.changes.Branch == "no git",
-		Changed:        len(a.changes.Files) + len(a.changes.Conflicts),
-		DevNote:        a.changes.Note,
-		ScanBudget:     a.ws.ScanBudget(),
-		WatchNote:      a.watchNote,
-		FilterNote:     a.filterNote(),
-		DirLoadNote:    a.dirLoadNote,
-		HoverPath:      a.hoverPath,
-		Dirty:          a.dirtyCount(),
-		Toast:          a.toast,
-		LSP:            a.lspViewData(),
-		Wrap:           a.wrap,
-		ScrollX:        0,
-		FindQuery:      clampFieldLen(a.findQuery),
-		FindOpen:       a.findOpen,
-		FindCase:       a.findCase,
-		FindCurrent:    a.findCurrent(),
-		FindTotal:      len(a.findHits),
+		Mode:                   a.mode,
+		Filter:                 clipFilterDisplay(clampFieldLen(a.filter)),
+		Details:                a.details,
+		DevOn:                  a.devOn,
+		MenuOpen:               a.menuOpen,
+		MenuX:                  a.menuX,
+		MenuY:                  a.menuY,
+		MenuRows:               append([]menuViewRow(nil), a.menuItems...),
+		Modal:                  a.paletteOpen || a.branchOpen || a.searchOpen || a.settingsOpen || a.confirmOpen || a.commitDialogOpen || a.fileMenu || a.browseOpen || a.termFocus || a.popupTrapsFocus(),
+		SettingsOpen:           a.settingsOpen,
+		FileMenu:               a.fileMenu,
+		ProjectOpen:            a.projectOpen,
+		ProjectQuery:           clampFieldLen(a.projectQuery),
+		RecentOpen:             a.recentOpen,
+		RecentFlyX:             a.recentFlyoutX(),
+		RecentFlyY:             a.recentFlyoutY(),
+		RecentRoots:            a.recentRootRows(),
+		QuickRoots:             a.quickRootRows(),
+		BrowseOpen:             a.browseOpen,
+		BrowseRoot:             a.browseRoot,
+		BrowseName:             clipBrowsePath(winW, a.browseDisplayName()),
+		BrowseQuery:            clampFieldLen(a.browseFilter),
+		BrowseEntries:          a.browseWindowedEntries(),
+		BrowseTotal:            len(a.browseFilteredEntries()),
+		IsWSL:                  isWSL(),
+		IsWindows:              runtime.GOOS == "windows",
+		HasWSL:                 wsl.Available(),
+		Alert:                  a.fileAlert,
+		Themes:                 a.themeRows(),
+		ThumbColor:             thumbColorFor(a.theme),
+		PanelColor:             panelColorFor(a.theme),
+		AutoSave:               validAutoSave(a.autoSave),
+		AutoSaveDelay:          clampAutoSaveDelay(firstNonZero(a.autoSaveDelayMs, autoSaveDefaultDelay)),
+		MaxFPS:                 a.EffectiveMaxFPS(),
+		FPSLabel:               FPSLabel(a.EffectiveMaxFPS()),
+		FPSOptions:             fpsRows(a.EffectiveMaxFPS()),
+		SettingsTab:            a.settingsTabName(),
+		FontLabel:              a.fontLabel(),
+		KeymapRows:             a.keymapRows(),
+		HelpRows:               a.helpRows(),
+		AppName:                appName,
+		AppVersion:             appVersion,
+		AppScope:               appScope,
+		ScanText:               a.scanDraftText(),
+		SearchText:             a.searchDraftText(),
+		ScanBad:                invalidGlobLines(a.scanDraftText()),
+		SearchBad:              invalidGlobLines(a.searchDraftText()),
+		UseGitignore:           a.scanFilterAllowsGitignore(),
+		SearchIgnored:          a.scanFilterAllowsSearchIgnored(),
+		ScanMatch:              a.scanExcludeMatchCount(),
+		SearchSkip:             a.searchExcludeSkipCount(),
+		SettingsNote:           a.settingsNote,
+		OpenCodeMode:           opencodeSettings.Mode,
+		OpenCodeServerURL:      opencodeSettings.ServerURL,
+		OpenCodeIntegrationID:  opencodeSettings.IntegrationID,
+		OpenCodeIntegrations:   openCodeIntegrationRows(a.openCode.integrations),
+		OpenCodeProviderFields: openCodeProviderFields(a.openCode.integrations, opencodeSettings.IntegrationID),
+		OpenCodePanel:          a.openCodePanelView(),
+		OpenCodePrompt:         "",
+		OpenCodeClientReady:    true,
+		OpenCodeConnected:      a.openCode.connected,
+		OpenCodeStatus:         a.openCode.status,
+		Workspace:              workspace,
+		WorkspaceLabel:         clipRunes(workspace, 20),
+		GitRoot:                a.ws.Root,
+		Branch:                 a.changes.Branch,
+		NoGit:                  a.changes.Branch == "no git",
+		Changed:                len(a.changes.Files) + len(a.changes.Conflicts),
+		DevNote:                a.changes.Note,
+		ScanBudget:             a.ws.ScanBudget(),
+		WatchNote:              a.watchNote,
+		FilterNote:             a.filterNote(),
+		DirLoadNote:            a.dirLoadNote,
+		HoverPath:              a.hoverPath,
+		Dirty:                  a.dirtyCount(),
+		Toast:                  a.toast,
+		LSP:                    a.lspViewData(),
+		Wrap:                   a.wrap,
+		ScrollX:                0,
+		FindQuery:              clampFieldLen(a.findQuery),
+		FindOpen:               a.findOpen,
+		FindCase:               a.findCase,
+		FindCurrent:            a.findCurrent(),
+		FindTotal:              len(a.findHits),
 
 		ReplaceOpen:      a.replaceOpen,
 		ReplaceQuery:     clampFieldLen(a.replaceQuery),
@@ -1280,6 +1306,9 @@ func (a *App) buildView() View {
 		Split:            a.split && a.mode == "explorer",
 		FocusGroup:       a.focusGroup,
 		FocusedPane:      0,
+	}
+	if v.OpenCodeStatus == "" {
+		v.OpenCodeStatus = openCodeSetupStatus()
 	}
 
 	if v.Split {

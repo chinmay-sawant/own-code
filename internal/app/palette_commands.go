@@ -30,6 +30,8 @@ const (
 	paletteCmdStashPick     = "git-stash-pick"
 	paletteCmdComparePick   = "git-compare-pick"
 	paletteCmdLSPToggle     = "lsp-toggle"
+	paletteCmdOpenCodePanel = "opencode-panel-open"
+	paletteCmdOpenCodeNew   = "opencode-session-new"
 	paletteCmdTaskPrefix    = "task:"
 	paletteCmdStashApplyPfx = "stash-apply:"
 	paletteCmdComparePfx    = "compare:"
@@ -62,6 +64,8 @@ func paletteExtraCatalog() []paletteRow {
 		{Cmd: paletteCmdStashPick, Name: "Git: Apply Stash…", Dir: "List stashes; applying keeps the stash entry"},
 		{Cmd: paletteCmdComparePick, Name: "Git: Compare Refs…", Dir: "Diff any two commits or branches: compare <a> <b>"},
 		{Cmd: paletteCmdLSPToggle, Name: "LSP: Toggle Language Servers", Dir: "Enable or disable every language server"},
+		{Cmd: paletteCmdOpenCodePanel, Name: "OpenCode: Open Session Panel", Dir: "Show saved OpenCode sessions for this workspace"},
+		{Cmd: paletteCmdOpenCodeNew, Name: "OpenCode: New Blank Session", Dir: "Create an empty session in this workspace when connected"},
 	}
 }
 

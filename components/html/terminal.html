@@ -6,6 +6,7 @@
 <nav class="panel-switcher" aria-label="Bottom panel">
   <button class="panel-tab{{if .LSP.Open}} on{{end}}" id="bottom-problems-tab" data-action="problems-open" type="button" aria-pressed="{{if .LSP.Open}}true{{else}}false{{end}}"{{if and .Modal (not .Terminal.Focus)}} tabindex="-1"{{end}}>Problems</button>
   <button class="panel-tab{{if .Terminal.Open}} on{{end}}" id="bottom-terminal-tab" data-action="terminal-show" type="button" aria-pressed="{{if .Terminal.Open}}true{{else}}false{{end}}"{{if and .Modal (not .Terminal.Focus)}} tabindex="-1"{{end}}>Terminal</button>
+  <button class="panel-tab{{if .OpenCodePanel.Open}} on{{end}}" id="bottom-agent-tab" data-action="opencode-panel-open" type="button" aria-pressed="{{if .OpenCodePanel.Open}}true{{else}}false{{end}}"{{if .Modal}} tabindex="-1"{{end}}>Agent</button>
 </nav>
 {{end}}
 

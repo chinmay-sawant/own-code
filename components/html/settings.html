@@ -9,6 +9,7 @@
         <button class="settings-nav-item{{if eq .SettingsTab "keyboard"}} settings-nav-active{{end}}" id="settings-tab-keyboard" data-action="settings-tab:keyboard" type="button" role="tab" aria-selected="{{if eq .SettingsTab "keyboard"}}true{{else}}false{{end}}">Keyboard</button>
         <button class="settings-nav-item{{if eq .SettingsTab "files"}} settings-nav-active{{end}}" id="settings-tab-files" data-action="settings-tab:files" type="button" role="tab" aria-selected="{{if eq .SettingsTab "files"}}true{{else}}false{{end}}">Files &amp; Search</button>
         <button class="settings-nav-item{{if eq .SettingsTab "lsp"}} settings-nav-active{{end}}" id="settings-tab-lsp" data-action="settings-tab:lsp" type="button" role="tab" aria-selected="{{if eq .SettingsTab "lsp"}}true{{else}}false{{end}}">Language servers</button>
+        <button class="settings-nav-item{{if eq .SettingsTab "opencode"}} settings-nav-active{{end}}" id="settings-tab-opencode" data-action="settings-tab:opencode" type="button" role="tab" aria-selected="{{if eq .SettingsTab "opencode"}}true{{else}}false{{end}}">OpenCode</button>
         <button class="settings-nav-item{{if eq .SettingsTab "help"}} settings-nav-active{{end}}" id="settings-tab-help" data-action="settings-tab:help" type="button" role="tab" aria-selected="{{if eq .SettingsTab "help"}}true{{else}}false{{end}}">Help</button>
         <button class="settings-nav-item{{if eq .SettingsTab "about"}} settings-nav-active{{end}}" id="settings-tab-about" data-action="settings-tab:about" type="button" role="tab" aria-selected="{{if eq .SettingsTab "about"}}true{{else}}false{{end}}">About</button>
       </div>
@@ -54,6 +55,53 @@
           <span class="settings-key-btns"><button class="settings-toggle" id="lsp-toggle-{{.Name}}" data-action="lsp-server-toggle:{{.Name}}" type="button" aria-pressed="{{if .Enabled}}true{{else}}false{{end}}" aria-label="Enable {{.Name}}"><span class="settings-check">{{if .Enabled}}✓{{end}}</span>Enabled</button></span>
         </div>
         {{end}}
+        {{else if eq .SettingsTab "opencode"}}
+        <div class="settings-title">OpenCode connection</div>
+        <div class="settings-caption">Connect own-code to an OpenCode local server. Server passwords authenticate to that server; provider API keys are sent to OpenCode for provider setup. Neither credential is stored in own-code settings.</div>
+        <div class="settings-sub">Server mode</div>
+        <div class="settings-stepper" role="group" aria-label="OpenCode server mode">
+          <button class="settings-btn{{if eq .OpenCodeMode "owned"}} primary{{end}}" id="opencode-mode-owned" data-action="opencode-mode:owned" type="button" aria-pressed="{{if eq .OpenCodeMode "owned"}}true{{else}}false{{end}}">Start local server</button>
+          <button class="settings-btn{{if eq .OpenCodeMode "attach"}} primary{{end}}" id="opencode-mode-attach" data-action="opencode-mode:attach" type="button" aria-pressed="{{if eq .OpenCodeMode "attach"}}true{{else}}false{{end}}">Attach to server</button>
+        </div>
+        <div class="settings-opencode-status" id="opencode-status" role="status"><span class="settings-opencode-dot{{if .OpenCodeConnected}} connected{{end}}" aria-hidden="true"></span><span>{{if .OpenCodeStatus}}{{.OpenCodeStatus}}{{else}}Not connected. Enter the OpenCode server address and check the connection.{{end}}</span></div>
+        <label class="settings-field" for="opencode-server-url"><span>Server address</span><input class="settings-input" id="opencode-server-url" type="url" data-bind="OpenCodeServerURL" maxlength="255" spellcheck="false" autocomplete="url" aria-label="OpenCode server address" placeholder="http://127.0.0.1:4096" /></label>
+        <div class="settings-caption">Use HTTP only for localhost or a loopback IP. Remote servers require HTTPS. Credentials in the URL are not allowed.</div>
+        <label class="settings-field" for="opencode-server-password"><span>Server password <small>Basic auth</small></span><input class="settings-input" id="opencode-server-password" type="password" maxlength="255" autocomplete="new-password" aria-label="OpenCode server password" /></label>
+        <div class="settings-caption">This is the OpenCode server password, separate from a provider API key. It is kept only in this input until the connection action handles it.</div>
+        <label class="settings-field" for="opencode-integration-id"><span>Provider integration</span><select class="settings-input" id="opencode-integration-id" data-bind="OpenCodeIntegrationID" aria-label="OpenCode provider integration">
+          <option value="">{{if .OpenCodeIntegrations}}Choose an integration{{else}}Check connection to load integrations{{end}}</option>
+          {{range .OpenCodeIntegrations}}{{if .KeyAuth}}<option value="{{.ID}}"{{if eq .ID $.OpenCodeIntegrationID}} selected{{end}}>{{if .Name}}{{.Name}}{{else}}{{.ID}}{{end}} ({{.ID}}){{if .Connected}} · configured{{end}}</option>{{end}}{{end}}
+        </select></label>
+        <div class="settings-foot"><button class="settings-btn" id="opencode-provider-fields" data-action="opencode-provider-fields" type="button"{{if not .OpenCodeIntegrations}} disabled{{end}}>Load provider fields</button><span class="settings-foot-note">OpenCode defines the fields required by each provider.</span></div>
+        <label class="settings-field" for="opencode-api-key"><span>Provider API key</span><input class="settings-input" id="opencode-api-key" type="password" maxlength="255" autocomplete="new-password" aria-label="Provider API key for OpenCode" /></label>
+        {{range .OpenCodeProviderFields}}
+        {{if not .Hidden}}
+        <label class="settings-field" for="opencode-provider-{{.Key}}"><span>{{if .Title}}{{.Title}}{{else}}{{.Key}}{{end}}{{if .Required}} <small>Required</small>{{end}}</span>
+          {{if and (eq .Type "string") .Options (not .Custom)}}
+          <select class="settings-input" id="opencode-provider-{{.Key}}" aria-label="{{if .Title}}{{.Title}}{{else}}{{.Key}}{{end}}">
+            <option value="">Choose…</option>{{range .Options}}<option value="{{.Value}}">{{if .Label}}{{.Label}}{{else}}{{.Value}}{{end}}</option>{{end}}
+          </select>
+          {{else if eq .Type "boolean"}}
+          <select class="settings-input" id="opencode-provider-{{.Key}}" aria-label="{{if .Title}}{{.Title}}{{else}}{{.Key}}{{end}}"><option value="">Choose…</option><option value="true">Yes</option><option value="false">No</option></select>
+          {{else}}
+          <input class="settings-input" id="opencode-provider-{{.Key}}" type="{{if .Sensitive}}password{{else if or (eq .Type "integer") (eq .Type "number")}}number{{else}}text{{end}}" maxlength="16384" autocomplete="off" spellcheck="false" aria-label="{{if .Title}}{{.Title}}{{else}}{{.Key}}{{end}}" placeholder="{{if eq .Type "multiselect"}}JSON string array{{else}}{{.Placeholder}}{{end}}" />
+          {{end}}
+        </label>
+        {{if .Description}}<div class="settings-caption">{{.Description}}</div>{{end}}
+        {{end}}
+        {{end}}
+        <div class="settings-caption">The API key is submitted to OpenCode's provider connection endpoint and then cleared from this form. It is not sent to own-code storage.</div>
+        <div class="settings-foot">
+          <button class="settings-btn primary" id="opencode-save" data-action="opencode-save" type="button">Save connection settings</button>
+          {{if .OpenCodeClientReady}}
+          <button class="settings-btn" id="opencode-check-connection" data-action="opencode-check-connection" type="button">Check connection</button>
+          <button class="settings-btn" id="opencode-connect-provider" data-action="opencode-connect-provider" type="button">Connect provider key</button>
+          {{else}}
+          <button class="settings-btn" id="opencode-check-connection" type="button" disabled aria-disabled="true">Check connection</button>
+          <button class="settings-btn" id="opencode-connect-provider" type="button" disabled aria-disabled="true">Connect provider key</button>
+          {{end}}
+        </div>
+        {{if not .OpenCodeClientReady}}<div class="settings-note">OpenCode transport is not initialized yet. Connection actions will be enabled when the integration is available.</div>{{end}}
         {{else if eq .SettingsTab "help"}}
         <div class="settings-title">Help</div>
         <div class="settings-caption">Every shortcut in one place. Bindings follow your Keyboard rebinds — a customized row names its default. Editing stays in the Keyboard tab.</div>
