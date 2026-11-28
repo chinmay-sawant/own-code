@@ -4,16 +4,18 @@
 
 ## Phase 1: Define context sources
 
-- [ ] Support the active file, current selection, selected files, working-tree Git diff, and selected LSP Problems entries.
-- [ ] Add per-source controls so the user can include or remove context before sending the prompt.
-- [ ] Show file names, line ranges, and diagnostic summaries in a context preview.
-- [ ] Capture each source as a bounded snapshot. Record its workspace root and file version so stale context can be identified.
-- [ ] Exclude `.env`, key files, credential files, ignored files, and other sensitive paths by default. Never attach own-code credentials or OpenCode authorization data.
-- [ ] Bound file count, bytes, lines, diagnostics, and total prompt context. Report truncation clearly.
+- [x] Support the active file, current selection, selected files, working-tree Git diff, and selected LSP Problems entries.
+- [x] Add per-source controls so the user can include or remove context before sending the prompt.
+- [x] Show file names, line ranges, and diagnostic summaries in a context preview.
+- [x] Capture each source as a bounded snapshot. Record its workspace root and file version so stale context can be identified.
+- [x] Exclude `.env`, key files, credential files, ignored files, and other sensitive paths by default. Never attach own-code credentials or OpenCode authorization data.
+- [x] Bound file count, bytes, lines, diagnostics, and total prompt context. Report truncation clearly.
 
 **Implementation note:** The same `captureAgentContext` helper snapshots a caller-supplied active editor buffer and selection, records its canonical workspace root and full-buffer version, and returns a clearly marked bounded excerpt. The OpenCode panel has a toggle and exact preview for this snapshot. Focused helper tests passed with `go test internal/app/opencode_context.go internal/app/opencode_context_test.go -count=1`. Prompt submission to Console inference remains open pending the local agent loop and edit-review flow. Context-source selection, Git diff and LSP capture, ignored-file checks, and broader prompt serialization are not wired yet; the complete phase gate is unmet and all checklist items remain open.
 
 **Additional helper:** `collectSelectedAgentFiles` in `internal/app/opencode_context_sources.go` accepts only an explicit ordered path list and an optional ignored-path set. It rejects traversal, symlinks, non-regular files, `.git` metadata, common sensitive paths, and non-UTF-8 content; bounds output to 8 files, 32 KiB per file, 128 KiB total, and 400 lines per file; preserves selection order; and returns truncation and exclusion details. The UI and prompt path do not call it yet. The package build attempt currently fails in the separately added `opencode_worktree.go`, so this helper has not been independently build-verified; no tests were run. For truncated files its version token combines the opened file size and modification time with the captured excerpt hash, so it is a snapshot identifier rather than a full-file content hash. The checklist remains open.
+
+**Composer implementation (verified):** `internal/app/opencode_mentions.go` adds the `@` mention popup (editor sources `@selection`, `@file`, `@diff`, `@problems` plus up to 8 fuzzy-matched workspace files; `.env`, key, credential, ignored and `.git` paths never listed) and removable chips. Chips are the only context sent: `composeOpenCodeUserText` appends `renderOpenCodeContextBlock` (the same text the panel preview shows) to the user message in `submitOpenCodePrompt`, and a stale source (workspace root, file version, or editor buffer hash changed) blocks the send. Limits: 8 chips, 32 KiB per chip, 128 KiB total, 400 lines per file, 800 diff lines / 48 KiB diff, 25 problems; every cut sets a TRUNCATED note in the chip and the sent block. Evidence: `go test -count=1 -p 1 -run 'TestMention' ./internal/app/` (query parsing, sensitive/ignored exclusion, bounded candidates, file chip + stale + root mismatch, count/total limits with truncation, compose/retry/remove, stale blocks send, Git diff excludes secret files). Known gaps: `@problems` attaches the first N workspace problems rather than a hand-picked subset; untracked files are not in `@diff`; Git diff and problems chips are not re-verified for staleness at send; the old unwired "Include current editor selection" toggle is still in the template; gate tests for Unicode serialization of every source are not complete, so the phase gate stays open.
 
 **Gate:** Serialization tests cover every source, ordering, Unicode, stale buffers, missing files, size limits, excluded secrets, and workspace-root enforcement.
 

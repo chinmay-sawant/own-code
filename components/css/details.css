@@ -1,7 +1,7 @@
 .details {
   position: fixed;
   top: var(--titlebar-h);
-  right: 0;
+  right: var(--agent-w, 0px);
   z-index: 22;
   width: 280px;
   height: calc(100vh - var(--titlebar-h) - var(--status-h));
@@ -9,7 +9,7 @@
   flex-direction: column;
   border-left: 1px solid var(--line-soft);
   background-color: var(--panel);
-  transform: translateX(100%);
+  transform: translateX(calc(100% + var(--agent-w, 0px)));
   pointer-events: none;
 }
 

@@ -7,7 +7,7 @@ const shellHead = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Code Review</title><style>`
 
 // shellBody opens the app shell after the styles.
-const shellBody = `</style></head><body class="mode-{{.Mode}}{{if .Details}} with-details{{end}}{{if or .Terminal.Open .LSP.Open .OpenCodePanel.Open}} term-open{{end}}" style="--term-h:{{.Terminal.Height}}px"><div class="app" id="app-shell">`
+const shellBody = `</style></head><body class="mode-{{.Mode}}{{if .Details}} with-details{{end}}{{if or .Terminal.Open .LSP.Open}} term-open{{end}}" style="--term-h:{{.Terminal.Height}}px;--agent-w:{{.OpenCodePanel.DockWidth}}px"><div class="app" id="app-shell">`
 
 // buildHTML assembles the code view from its component fragments.
 func buildHTML() string {

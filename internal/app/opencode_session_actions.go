@@ -31,7 +31,7 @@ func (a *App) openCodeRequestNotice() string {
 	}
 	st := openCodeSettingsValue(a.settings.OpenCode)
 	if _, _, ok := a.findOpenCodeModel(openCodeModelSelection(st.ProviderID, st.ModelID)); !ok {
-		return "A new request needs an available Console model. Choose one in Settings."
+		return "A new request needs an available Console model. Choose one from the model menu."
 	}
 	return ""
 }

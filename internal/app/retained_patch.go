@@ -213,11 +213,23 @@ func canPatchOpenCodePanel(prev, next openCodePanelView) bool {
 		prev.IncludeSelection != next.IncludeSelection ||
 		prev.ContextPreview != next.ContextPreview ||
 		prev.ContextAvailable != next.ContextAvailable ||
+		!sameOpenCodeComposer(prev, next) ||
 		prev.CanReview != next.CanReview ||
 		prev.Running != next.Running ||
 		prev.CanRetry != next.CanRetry ||
 		prev.Notice != next.Notice ||
 		prev.TranscriptTop != next.TranscriptTop ||
+		prev.ProviderName != next.ProviderName ||
+		prev.SessionTitle != next.SessionTitle ||
+		prev.DockWidth != next.DockWidth ||
+		prev.HistoryOpen != next.HistoryOpen ||
+		prev.HistoryTop != next.HistoryTop ||
+		prev.ModelMenuOpen != next.ModelMenuOpen ||
+		prev.ModelMenuTop != next.ModelMenuTop ||
+		prev.ModelLabel != next.ModelLabel ||
+		prev.ModelState != next.ModelState ||
+		prev.ModelNote != next.ModelNote ||
+		!sameOpenCodeModelGroups(prev.ModelGroups, next.ModelGroups) ||
 		(prev.PendingSwitch == nil) != (next.PendingSwitch == nil) ||
 		len(prev.OtherSessions) != len(next.OtherSessions) ||
 		len(prev.Archived) != len(next.Archived) ||
@@ -305,7 +317,7 @@ func renderOpenCodeTranscriptHTML(v openCodePanelView) string {
 			b.WriteString(`"><b>`)
 			switch m.Role {
 			case "assistant":
-				b.WriteString(`OpenCode`)
+				b.WriteString(`Assistant`)
 			case "tool":
 				b.WriteString(`Tool`)
 			case "system":

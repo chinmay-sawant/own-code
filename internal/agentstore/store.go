@@ -29,6 +29,7 @@ const (
 )
 
 var ErrNotFound = errors.New("agent store: record not found")
+
 // ErrArchived is returned when a turn is started in an archived session.
 var ErrArchived = errors.New("agent store: session is archived")
 

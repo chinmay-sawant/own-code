@@ -32,7 +32,7 @@
 
 - [x] Fetch and refresh the workspace catalog asynchronously after credential save or an explicit refresh. Do not block the UI render loop.
 - [x] Show provider, model name, model type, context/output limits, and tool-call capability from the catalog. Preserve provider ID and model ID as request identifiers.
-- [x] Store the chosen provider/model identifiers as non-secret settings, and validate them against the current catalog before sending inference. Evidence: `resolveOpenCodeSessionModel` re-checks the saved provider/model against the live catalog at request time; `TestResolveSessionModelRejectsIneligible`.
+- [x] Store the chosen provider/model identifiers as non-secret settings, and validate them against the current catalog before sending inference. The composer model dropdown also validates at selection time (`pickOpenCodeModel`, `TestModelMenuStatesPersistAndValidate`). Evidence: `resolveOpenCodeSessionModel` re-checks the saved provider/model against the live catalog at request time; `TestResolveSessionModelRejectsIneligible`.
 - [x] Report catalog failures with actionable status while retaining the last known model list only if its age and workspace association are clear. Failed catalog requests clear the active catalog and report status; no stale catalog is shown.
 
 **Gate:** Settings display a real workspace catalog and never mix model choices from different API keys/workspaces. Refresh, key replacement, empty catalog, and network failure are covered.

@@ -247,7 +247,7 @@ func applySchemaV4(ctx context.Context, tx *sql.Tx) error {
 }
 
 // applySchemaV5 makes the local session ID the only identity of a session.
-// agent_sessions is rebuilt so server_id/opencode_session_id default to '' and
+// agent_sessions is rebuilt so server_id/opencode_session_id default to ” and
 // their uniqueness applies only to legacy rows that still carry a server pair;
 // archived_at adds soft archiving. Legacy rows, their messages, tool_activity
 // and event_checkpoints are copied unchanged and stay readable as

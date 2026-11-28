@@ -1,26 +1,19 @@
 {{if .OpenCodePanel.Open}}
-<section class="bottom-panel opencode-panel" id="opencode-panel" style="left:{{.BottomPanelLeft}}px;width:{{.BottomPanelWidth}}px;height:{{.Terminal.Height}}px" aria-label="OpenCode agent sessions">
-  {{template "bottom-panel-grip" .}}
-  <header class="term-head">
-    {{template "bottom-panel-tabs" .}}
-    <div class="opencode-panel-heading" id="opencode-panel-heading"><b>OpenCode</b><span id="opencode-panel-status">{{.OpenCodePanel.Status}}</span></div>
+<section class="opencode-panel" id="opencode-panel" style="width:{{.OpenCodePanel.DockWidth}}px" aria-label="{{.OpenCodePanel.ProviderName}} chat">
+  <button class="opencode-dock-resize" id="opencode-dock-resize" type="button" tabindex="-1" title="Drag to resize chat" aria-label="Drag to resize the chat panel"></button>
+  <header class="opencode-head">
+    <div class="opencode-panel-heading" id="opencode-panel-heading"><b title="{{.OpenCodePanel.SessionTitle}}">{{.OpenCodePanel.SessionTitle}}</b><span id="opencode-panel-status">{{.OpenCodePanel.Status}}</span></div>
     <div class="term-tools">
-      <button class="term-tool" id="opencode-session-refresh" data-action="opencode-panel-refresh" type="button" title="Refresh local sessions" aria-label="Refresh OpenCode sessions"{{if not .OpenCodePanel.WorkspaceAvailable}} disabled{{end}}>↻</button>
-      <button class="term-tool" id="opencode-session-review" data-action="opencode-session-review" type="button" title="Review isolated changes" aria-label="Review isolated OpenCode changes"{{if or (not .OpenCodePanel.CanReview) .OpenCodePanel.Busy}} disabled{{end}}>Review</button>
-      <button class="term-tool term-add" id="opencode-session-new" data-action="opencode-session-new" type="button" title="New local session in this workspace" aria-label="New local OpenCode session"{{if or (not .OpenCodeConnected) .OpenCodePanel.Busy (not .OpenCodePanel.WorkspaceAvailable)}} disabled{{end}}>+</button>
-      <button class="term-tool" id="opencode-panel-hide" data-action="opencode-panel-hide" type="button" title="Hide panel" aria-label="Hide OpenCode panel">×</button>
+      <button class="term-tool term-add" id="opencode-session-new" data-action="opencode-session-new" type="button" title="New chat in this workspace" aria-label="New chat"{{if or (not .OpenCodeConnected) .OpenCodePanel.Busy (not .OpenCodePanel.WorkspaceAvailable)}} disabled{{end}}>+</button>
+      <button class="term-tool{{if .OpenCodePanel.HistoryOpen}} on{{end}}" id="opencode-history-toggle" data-action="opencode-panel-history-toggle" type="button" title="Session history" aria-label="Session history" aria-expanded="{{if .OpenCodePanel.HistoryOpen}}true{{else}}false{{end}}">&#9662;</button>
+      <button class="term-tool" id="opencode-session-review" data-action="opencode-session-review" type="button" title="Review isolated changes" aria-label="Review isolated changes"{{if or (not .OpenCodePanel.CanReview) .OpenCodePanel.Busy}} disabled{{end}}>Review</button>
+      <button class="term-tool" id="opencode-session-refresh" data-action="opencode-panel-refresh" type="button" title="Refresh local sessions" aria-label="Refresh sessions"{{if not .OpenCodePanel.WorkspaceAvailable}} disabled{{end}}>&#8635;</button>
+      <button class="term-tool" id="opencode-panel-hide" data-action="opencode-panel-hide" type="button" title="Close chat" aria-label="Close chat panel">&times;</button>
     </div>
   </header>
-  {{if .OpenCodePanel.PendingSwitch}}
-  <section class="opencode-banner opencode-switch" id="opencode-switch" role="alertdialog" aria-label="Switch workspace">
-    <span>Session "{{.OpenCodePanel.PendingSwitch.Title}}" belongs to another workspace: <code>{{.OpenCodePanel.PendingSwitch.Root}}</code>. Opening it switches the project folder.</span>
-    <button class="settings-btn" id="opencode-switch-cancel" data-action="opencode-switch-cancel" type="button">Cancel</button>
-    <button class="settings-btn primary" id="opencode-switch-confirm" data-action="opencode-switch-confirm" type="button">Switch workspace</button>
-  </section>
-  {{end}}
-  {{if .OpenCodePanel.Notice}}<div class="opencode-banner opencode-notice{{if .OpenCodePanel.Offline}} offline{{end}}" id="opencode-notice" role="status">{{.OpenCodePanel.Notice}}</div>{{end}}
-  <div class="opencode-panel-main">
-    <aside class="opencode-session-list" aria-label="OpenCode sessions">
+  {{if .OpenCodePanel.HistoryOpen}}
+  <div class="opencode-history-menu" id="opencode-history-menu" role="menu" aria-label="Session history">
+    <div class="opencode-history-inner" id="opencode-history-menu-inner" style="top:{{.OpenCodePanel.HistoryTop}}px">
       {{range .OpenCodePanel.Sessions}}
       <div class="opencode-session-row">
         {{if .Renaming}}
@@ -48,11 +41,22 @@
       <button class="opencode-session other" id="opencode-other-{{.ID}}" data-action="opencode-session-other:{{.ID}}" type="button" title="{{.Root}}"{{if $.OpenCodePanel.Busy}} disabled{{end}}><b>{{.Title}}</b><span>{{.Root}}</span></button>
       {{end}}
       {{end}}
-    </aside>
-    <div class="opencode-transcript" id="opencode-transcript" role="log" aria-label="OpenCode transcript" aria-live="polite">
+    </div>
+  </div>
+  {{end}}
+  {{if .OpenCodePanel.PendingSwitch}}
+  <section class="opencode-banner opencode-switch" id="opencode-switch" role="alertdialog" aria-label="Switch workspace">
+    <span>Session "{{.OpenCodePanel.PendingSwitch.Title}}" belongs to another workspace: <code>{{.OpenCodePanel.PendingSwitch.Root}}</code>. Opening it switches the project folder.</span>
+    <button class="settings-btn" id="opencode-switch-cancel" data-action="opencode-switch-cancel" type="button">Cancel</button>
+    <button class="settings-btn primary" id="opencode-switch-confirm" data-action="opencode-switch-confirm" type="button">Switch workspace</button>
+  </section>
+  {{end}}
+  {{if .OpenCodePanel.Notice}}<div class="opencode-banner opencode-notice{{if .OpenCodePanel.Offline}} offline{{end}}" id="opencode-notice" role="status">{{.OpenCodePanel.Notice}}</div>{{end}}
+  <div class="opencode-panel-main">
+    <div class="opencode-transcript" id="opencode-transcript" role="log" aria-label="Chat transcript" aria-live="polite">
      <div class="opencode-transcript-inner" id="opencode-transcript-inner" style="top:{{.OpenCodePanel.TranscriptTop}}px">
       {{range .OpenCodePanel.Messages}}
-      <article class="opencode-message role-{{.Role}}" id="opencode-message-{{.ID}}"><b>{{if eq .Role "assistant"}}OpenCode{{else if eq .Role "tool"}}Tool{{else if eq .Role "system"}}Notice{{else if eq .Role "turn"}}Turn{{else}}You{{end}}</b>{{.Body}}{{if .Note}}<span class="opencode-message-note">{{.Note}}</span>{{end}}</article>
+      <article class="opencode-message role-{{.Role}}" id="opencode-message-{{.ID}}"><b>{{if eq .Role "assistant"}}Assistant{{else if eq .Role "tool"}}Tool{{else if eq .Role "system"}}Notice{{else if eq .Role "turn"}}Turn{{else}}You{{end}}</b>{{.Body}}{{if .Note}}<span class="opencode-message-note">{{.Note}}</span>{{end}}</article>
       {{else}}
       <div class="opencode-transcript-empty">{{if .OpenCodePanel.SelectedID}}No saved messages yet. Send a message to start.{{else}}Choose or create a local session.{{end}}</div>
       {{end}}
@@ -89,12 +93,31 @@
   <footer class="opencode-prompt-area">
     {{if .OpenCodePanel.IncludeSelection}}<pre class="opencode-context-preview" id="opencode-context-preview">{{.OpenCodePanel.ContextPreview}}</pre>{{end}}
     <div class="opencode-context-tools"><button class="settings-toggle" id="opencode-context-toggle" data-action="opencode-context-toggle" type="button" aria-pressed="{{if .OpenCodePanel.IncludeSelection}}true{{else}}false{{end}}"><span class="settings-check">{{if .OpenCodePanel.IncludeSelection}}✓{{end}}</span>{{if .OpenCodePanel.IncludeSelection}}Remove editor context{{else}}Include current editor selection{{end}}</button>{{if .OpenCodePanel.IncludeSelection}}{{if .OpenCodePanel.ContextAvailable}}<span>Exact context preview</span>{{else}}<span class="opencode-context-error">{{.OpenCodePanel.ContextPreview}}</span>{{end}}{{end}}</div>
-    <textarea class="opencode-prompt" id="opencode-prompt" data-bind="OpenCodePrompt" rows="2" maxlength="12000" aria-label="Message OpenCode" placeholder="Message OpenCode"{{if or (not .OpenCodePanel.CanPrompt) (not .OpenCodeConnected) (not .OpenCodePanel.SelectedID) .OpenCodePanel.Busy}} disabled{{end}}>{{.OpenCodePrompt}}</textarea>
+    {{if .OpenCodePanel.Chips}}<div class="opencode-chips" id="opencode-chips" aria-label="Attached context">{{range .OpenCodePanel.Chips}}<span class="opencode-chip{{if .Truncated}} truncated{{end}}" id="opencode-chip-{{.ID}}" title="{{.Title}}"><b>{{.Label}}</b><i>{{.Detail}}{{if .Truncated}} (truncated){{end}}</i><button class="opencode-chip-x" id="opencode-chip-remove-{{.ID}}" data-action="opencode-panel-chip-remove:{{.ID}}" type="button" aria-label="Remove {{.Label}} from context">×</button></span>{{end}}</div>
+    <pre class="opencode-context-preview" id="opencode-composer-preview" aria-label="Exact context that will be sent">{{.OpenCodePanel.ComposerPreview}}</pre>{{end}}
+    {{if .OpenCodePanel.Mentions}}<div class="opencode-mentions" id="opencode-mentions" role="listbox" aria-label="Attach context">{{range .OpenCodePanel.Mentions}}<button class="opencode-mention" id="opencode-mention-{{.Index}}" data-action="opencode-panel-mention:{{.Index}}" type="button" role="option"><b>{{.Label}}</b><span>{{.Detail}}</span></button>{{end}}</div>{{end}}
+    <textarea class="opencode-prompt" id="opencode-prompt" data-bind="OpenCodePrompt" rows="2" maxlength="12000" aria-label="Message the agent" placeholder="Ask the agent"{{if or (not .OpenCodePanel.CanPrompt) (not .OpenCodeConnected) (not .OpenCodePanel.SelectedID) .OpenCodePanel.Busy}} disabled{{end}}>{{.OpenCodePrompt}}</textarea>
+    <div class="opencode-model-row">
+      <button class="opencode-model-btn{{if .OpenCodePanel.ModelState}} state-{{.OpenCodePanel.ModelState}}{{end}}" id="opencode-model-btn" data-action="opencode-panel-model-toggle" type="button" title="Choose the model for this chat" aria-haspopup="listbox" aria-expanded="{{if .OpenCodePanel.ModelMenuOpen}}true{{else}}false{{end}}"{{if .OpenCodePanel.Running}} disabled{{end}}><span class="opencode-model-name">{{.OpenCodePanel.ModelLabel}}</span><span aria-hidden="true">&#9662;</span></button>
+      {{if .OpenCodePanel.ModelMenuOpen}}
+      <div class="opencode-model-menu" id="opencode-model-menu" role="listbox" aria-label="Models">
+        <div class="opencode-model-inner" id="opencode-model-menu-inner" style="top:{{.OpenCodePanel.ModelMenuTop}}px">
+          {{range .OpenCodePanel.ModelGroups}}
+          <div class="opencode-model-group">{{.Name}}</div>
+          {{range .Models}}<button class="opencode-model-item{{if .Active}} active{{end}}" id="opencode-model-{{.Key}}" data-action="opencode-panel-model-pick:{{.Key}}" type="button" role="option" aria-selected="{{if .Active}}true{{else}}false{{end}}">{{if .Active}}&#10003; {{end}}{{.Name}}</button>{{end}}
+          {{else}}
+          <div class="opencode-model-empty" id="opencode-model-empty">{{.OpenCodePanel.ModelNote}}</div>
+          {{end}}
+        </div>
+      </div>
+      {{end}}
+    </div>
+    {{if .OpenCodePanel.ModelNote}}<div class="opencode-model-note" id="opencode-model-note">{{.OpenCodePanel.ModelNote}}</div>{{end}}
     <div class="opencode-prompt-tools">
-      <span>{{if or .OpenCodePanel.Busy .OpenCodePanel.Running}}Working…{{else}}Shell commands always ask for your approval.{{end}}</span>
+      <span>{{if or .OpenCodePanel.Busy .OpenCodePanel.Running}}Working&hellip;{{else}}Shell commands ask for approval.{{end}}</span>
       <button class="settings-btn" id="opencode-retry" data-action="opencode-session-retry" type="button" title="Send the last message again as a new request"{{if not .OpenCodePanel.CanRetry}} disabled{{end}}>Retry</button>
-      <button class="settings-btn" id="opencode-interrupt" data-action="opencode-session-interrupt" type="button"{{if not .OpenCodePanel.CanInterrupt}} disabled{{end}}>Stop</button>
-      <button class="settings-btn primary" id="opencode-prompt-send" data-action="opencode-session-prompt" type="button"{{if or (not .OpenCodePanel.CanPrompt) (not .OpenCodeConnected) (not .OpenCodePanel.SelectedID) .OpenCodePanel.Busy}} disabled{{end}}>Send</button>
+      {{if .OpenCodePanel.Running}}<button class="settings-btn primary" id="opencode-interrupt" data-action="opencode-session-interrupt" type="button">Stop</button>
+      {{else}}<button class="settings-btn primary" id="opencode-prompt-send" data-action="opencode-session-prompt" type="button"{{if or (not .OpenCodePanel.CanPrompt) (not .OpenCodeConnected) (not .OpenCodePanel.SelectedID) .OpenCodePanel.Busy}} disabled{{end}}>Send</button>{{end}}
     </div>
   </footer>
 </section>

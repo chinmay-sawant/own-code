@@ -217,6 +217,8 @@ type openCodeTurnParams struct {
 	prompt    string
 	// client, when set, replaces the Console client built from the saved key.
 	client agent.Provider
+	// backend builds the request provider and resolves routing.
+	backend agent.ProviderDescriptor
 	// configDir holds the private per-session proposal directories.
 	configDir string
 }
@@ -237,10 +239,14 @@ func (a *App) submitOpenCodePrompt(prompt string) error {
 		return fail("Connect to OpenCode Console in Settings to send a message.")
 	case prompt == "":
 		return fail("Type a message first.")
-	case len(prompt) > 12000:
+	case len(openCodeTypedPart(prompt)) > 12000:
 		return fail("The message is too long.")
 	case a.openCodeRunFor(a.openCode.selectedSessionID) != nil:
 		return fail("This session already has a running turn.")
+	}
+	prompt, err := a.composeOpenCodeUserText(prompt)
+	if err != nil {
+		return fail(err.Error())
 	}
 	if err := a.ensureOpenCodeStore(); err != nil {
 		return fail("Local session history is unavailable.")
@@ -267,10 +273,12 @@ func (a *App) submitOpenCodePrompt(prompt string) error {
 	}
 	a.openCode.runs[sessionID] = run
 	a.openCode.retryText = ""
+	a.clearOpenCodeComposer()
 	a.openCode.panelStatus = "Sending to OpenCode Console…"
 	a.refresh()
 	params := openCodeTurnParams{
-		store: a.openCode.store, manager: manager,
+		backend: a.openCodeBackend(),
+		store:   a.openCode.store, manager: manager,
 		models:  append([]opencode.ConsoleModel(nil), a.openCode.consoleModels...),
 		results: a.openCode.results, lifeCtx: a.openCode.lifeCtx,
 		sessionID: sessionID, turnID: turnID, directory: directory, prompt: prompt,
@@ -352,7 +360,7 @@ func executeOpenCodeTurn(ctx context.Context, p openCodeTurnParams) {
 			finish("Could not read the OpenCode Console API key.")
 			return
 		}
-		client, cerr := agent.NewClient(key, agent.Options{})
+		client, cerr := p.backend.NewRequestProvider(key)
 		if cerr != nil {
 			finish("The OpenCode Console API key is invalid.")
 			return

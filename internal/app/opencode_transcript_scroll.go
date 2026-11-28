@@ -59,22 +59,26 @@ func (a *App) updateOpenCodeTranscriptMetrics() bool {
 	if a == nil || a.page == nil || !a.openCode.panelOpen {
 		return false
 	}
+	menus := a.openCodeMenuMetrics()
 	boxes := a.page.Boxes()
 	vp, ok := findBoxID(boxes, openCodeTranscriptViewportID)
 	if !ok {
-		return false
+		return menus
 	}
 	inner, ok := findBoxID(boxes, openCodeTranscriptInnerID)
 	if !ok {
 		return false
 	}
-	return a.openCode.scroll.measure(int(vp.H), int(inner.H))
+	return a.openCode.scroll.measure(int(vp.H), int(inner.H)) || menus
 }
 
 // openCodeWheelAt scrolls the transcript when the wheel lands on it.
 func (a *App) openCodeWheelAt(x, y, dy float64) bool {
 	if !a.openCode.panelOpen || dy == 0 {
 		return false
+	}
+	if a.openCodeMenuWheel(x, y, dy) {
+		return true
 	}
 	vp, ok := findBoxID(a.page.Boxes(), openCodeTranscriptViewportID)
 	if !ok || x < vp.X || x > vp.X+vp.W || y < vp.Y || y > vp.Y+vp.H {

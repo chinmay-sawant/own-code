@@ -28,12 +28,16 @@ type openCodePanelView struct {
 	IncludeSelection   bool
 	ContextPreview     string
 	ContextAvailable   bool
-	CanReview          bool
-	Proposals          []openCodePanelProposalRow
-	AgentProposals     []openCodePanelAgentProposalRow
-	Running            bool
-	CanRetry           bool
-	Approval           *openCodePanelApproval
+	// Composer attachments (opencode_mentions.go).
+	Mentions        []openCodeMentionRow
+	Chips           []openCodeChipRow
+	ComposerPreview string
+	CanReview       bool
+	Proposals       []openCodePanelProposalRow
+	AgentProposals  []openCodePanelAgentProposalRow
+	Running         bool
+	CanRetry        bool
+	Approval        *openCodePanelApproval
 	// Notice is the offline / missing credential or model indicator for new
 	// requests; cached history stays visible regardless.
 	Notice        string
@@ -42,6 +46,18 @@ type openCodePanelView struct {
 	Archived      []openCodePanelSessionRow
 	PendingSwitch *openCodePanelSwitch
 	TranscriptTop int
+	// Docked chat chrome.
+	ProviderName  string
+	SessionTitle  string
+	DockWidth     int
+	HistoryOpen   bool
+	HistoryTop    int
+	ModelMenuOpen bool
+	ModelMenuTop  int
+	ModelLabel    string
+	ModelState    string
+	ModelNote     string
+	ModelGroups   []openCodeModelGroupRow
 }
 
 // openCodePanelOtherRow is a saved session from a different workspace.
@@ -173,6 +189,8 @@ func (a *App) openCodePanelView() openCodePanelView {
 		})
 	}
 	v.AgentProposals = a.agentProposalRows(v.SelectedID)
+	a.fillOpenCodeChrome(&v)
+	a.openCodeComposerView(&v)
 	if v.IncludeSelection {
 		if snapshot, err := a.currentOpenCodeContext(); err == nil {
 			v.ContextAvailable = true
@@ -279,7 +297,12 @@ func (a *App) currentOpenCodeContext() (agentContextSnapshot, error) {
 }
 
 func (a *App) opencodePanelAction(ctx context.Context, action string) error {
+	if strings.HasPrefix(action, "opencode-session-pick:") || action == "opencode-session-new" || action == "opencode-panel-hide" {
+		a.openCode.historyOpen, a.openCode.modelMenuOpen = false, false
+	}
 	switch {
+	case strings.HasPrefix(action, "opencode-panel-model-") || strings.HasPrefix(action, "opencode-panel-history-"):
+		return a.openCodeChromeAction(action)
 	case action == "opencode-panel-toggle":
 		if a.openCode.panelOpen {
 			a.denyOpenCodeApprovals()
@@ -294,6 +317,14 @@ func (a *App) opencodePanelAction(ctx context.Context, action string) error {
 		a.denyOpenCodeApprovals() // dismissal is denial
 		a.openCode.panelOpen = false
 		a.refresh()
+		return nil
+	case strings.HasPrefix(action, "opencode-panel-mention:"):
+		if i, err := strconv.Atoi(strings.TrimPrefix(action, "opencode-panel-mention:")); err == nil {
+			return a.pickOpenCodeMention(i)
+		}
+		return nil
+	case strings.HasPrefix(action, "opencode-panel-chip-remove:"):
+		a.removeOpenCodeChip(strings.TrimPrefix(action, "opencode-panel-chip-remove:"))
 		return nil
 	case action == "opencode-context-toggle":
 		a.openCode.includeSelection = !a.openCode.includeSelection
@@ -330,6 +361,7 @@ func (a *App) opencodePanelAction(ctx context.Context, action string) error {
 	case action == "opencode-session-prompt":
 		prompt := strings.TrimSpace(a.opencodeCredentialInput("opencode-prompt"))
 		a.page.Form().SetFormValue("opencode-prompt", "")
+		a.openCode.composer.text = ""
 		return a.submitOpenCodePrompt(prompt)
 	case action == "opencode-session-interrupt":
 		return a.interruptOpenCodeSession()
@@ -350,9 +382,7 @@ func (a *App) opencodePanelAction(ctx context.Context, action string) error {
 
 func (a *App) openOpenCodePanel(ctx context.Context) error {
 	a.openCode.panelOpen = true
-	a.termOpen = false
 	a.termFocus = false
-	a.problemsOpen = false
 	a.openCode.panelStatus = ""
 	if a.ws == nil || a.ws.Sample {
 		a.openCode.panelStatus = "Open a project folder to use OpenCode sessions."

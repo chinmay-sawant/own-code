@@ -30,26 +30,35 @@ const (
 )
 
 type openCodeRuntime struct {
-	consoleClient     *opencode.ConsoleClient
-	consoleModels     []opencode.ConsoleModel
-	store             *agentstore.Store
-	worktrees         *openCodeWorktreeManager
-	status            string
-	connected         bool
-	token             uint64
-	operation         openCodeOperation
-	cancel            context.CancelFunc
-	lifeCtx           context.Context
-	lifeCancel        context.CancelFunc
-	results           chan openCodeReply
-	panelOpen         bool
-	panelStatus       string
-	sessions          []opencode.Session
-	selectedSessionID string
-	messages          []openCodeTranscriptMessage
-	includeSelection  bool
-	reviewable        bool
-	proposals         []openCodeProposalFile
+	consoleClient *opencode.ConsoleClient
+	consoleModels []opencode.ConsoleModel
+	store         *agentstore.Store
+	worktrees     *openCodeWorktreeManager
+	status        string
+	connected     bool
+	token         uint64
+	operation     openCodeOperation
+	cancel        context.CancelFunc
+	lifeCtx       context.Context
+	lifeCancel    context.CancelFunc
+	results       chan openCodeReply
+	panelOpen     bool
+	// Docked chat chrome (see opencode_model_menu.go).
+	registry                   *agent.ProviderRegistry
+	modelMenuOpen, historyOpen bool
+	modelScroll, historyScroll openCodeTranscriptScroll
+	dockWidth                  int // base px; 0 = default
+	dockDrag                   bool
+	dockDragStart              int
+	dockDragDx                 float64
+	panelStatus                string
+	sessions                   []opencode.Session
+	selectedSessionID          string
+	messages                   []openCodeTranscriptMessage
+	includeSelection           bool
+	composer                   openCodeComposer
+	reviewable                 bool
+	proposals                  []openCodeProposalFile
 	// agentProposals holds pending write_file/edit_file proposals per session.
 	agentProposals map[string][]*openCodeAgentProposal
 	// runs holds one run context per local session, keyed by session ID.

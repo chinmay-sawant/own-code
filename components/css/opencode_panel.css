@@ -1,9 +1,32 @@
-.opencode-panel { z-index: 21; }
-.opencode-panel-heading { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0 10px; overflow: hidden; }
-.opencode-panel-heading b { flex: 0 0 auto; color: var(--text); font-size: 11px; }
+/* Right-docked chat (VS Code chat style). Width is Go-owned inline geometry:
+   the editor subtracts it, so no CSS width override lives here. */
+.opencode-panel { position: fixed; top: var(--titlebar-h); right: 0; bottom: var(--status-h); z-index: 21; display: flex; flex-direction: column; overflow: hidden; border-left: 1px solid var(--line); background-color: var(--panel); }
+.opencode-dock-resize { position: absolute; top: 0; left: 0; bottom: 0; z-index: 6; width: 5px; padding: 0; border: 0; background-color: transparent; cursor: ew-resize; }
+.opencode-dock-resize:hover { background-color: var(--accent-soft); }
+.opencode-dock-resize:focus, .opencode-dock-resize:focus-visible { outline: 0; }
+.opencode-head { flex: 0 0 34px; height: 34px; display: flex; align-items: center; gap: 4px; padding: 0 6px 0 12px; border-bottom: 1px solid var(--line-soft); background-color: var(--panel-2); }
+.opencode-head .term-tools { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; }
+.opencode-head .term-tool.on { background-color: var(--panel-3); color: var(--text); }
+.opencode-history-menu { position: absolute; top: 34px; left: 0; right: 0; z-index: 5; max-height: 55%; overflow: hidden; border-bottom: 1px solid var(--line); background-color: var(--panel-2); box-shadow: 0 6px 14px rgba(0, 0, 0, .35); }
+.opencode-history-inner { position: relative; padding: 6px; }
+.opencode-model-row { position: relative; display: flex; align-items: center; min-height: 24px; }
+.opencode-model-btn { max-width: 100%; min-height: 22px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border: 1px solid var(--line); border-radius: 11px; background-color: var(--panel); color: var(--text); font-size: 10px; }
+.opencode-model-btn:hover { background-color: var(--panel-3); }
+.opencode-model-btn:disabled { opacity: .5; }
+.opencode-model-btn.state-missing-key, .opencode-model-btn.state-no-models, .opencode-model-btn.state-unavailable { border-color: var(--amber); color: var(--amber); }
+.opencode-model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.opencode-model-note { padding: 2px 2px 0; color: var(--amber); font-size: 9px; line-height: 1.4; }
+.opencode-model-menu { position: absolute; left: 0; right: 0; bottom: 100%; z-index: 7; max-height: 240px; overflow: hidden; margin-bottom: 4px; border: 1px solid var(--line); border-radius: 5px; background-color: var(--panel-2); box-shadow: 0 -6px 14px rgba(0, 0, 0, .35); }
+.opencode-model-inner { position: relative; padding: 4px; }
+.opencode-model-group { padding: 6px 8px 2px; color: var(--muted); font-size: 9px; text-transform: uppercase; }
+.opencode-model-item { width: 100%; min-height: 24px; display: block; padding: 0 8px; overflow: hidden; border: 0; border-radius: 3px; background: transparent; color: var(--text); font-size: 10px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.opencode-model-item:hover { background-color: var(--panel-3); }
+.opencode-model-item.active { color: var(--accent); }
+.opencode-model-empty { padding: 8px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.opencode-panel-heading { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1px; overflow: hidden; }
+.opencode-panel-heading b { overflow: hidden; color: var(--text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .opencode-panel-heading span { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .opencode-panel-main { flex: 1 1 auto; min-height: 0; display: flex; overflow: hidden; }
-.opencode-session-list { width: 210px; flex: 0 1 210px; min-width: 110px; max-width: 38%; overflow: auto; padding: 6px; border-right: 1px solid var(--line-soft); background-color: var(--panel-2); }
 .opencode-session { width: 100%; min-height: 43px; display: flex; flex-direction: column; justify-content: center; gap: 3px; margin-bottom: 3px; padding: 5px 8px; overflow: hidden; border-radius: 4px; text-align: left; }
 .opencode-session b { overflow: hidden; color: var(--text); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .opencode-session span { color: var(--muted); font-size: 9px; }
@@ -65,3 +88,12 @@
 .opencode-message .md-p, .opencode-message .md-li, .opencode-message .md-h { margin: 0 0 5px; color: var(--text); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
 .opencode-message .md-h { font-weight: 700; }
 .opencode-message .md-code { margin: 0 0 6px; padding: 6px 8px; border: 1px solid var(--line-soft); border-radius: 4px; background-color: var(--panel-2); font-size: 10px; }
+.opencode-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+.opencode-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 1px 2px 1px 7px; border: 1px solid var(--line); border-radius: 10px; background-color: var(--panel); color: var(--text); font-size: 10px; }
+.opencode-chip.truncated { border-color: var(--amber); }
+.opencode-chip i { overflow: hidden; color: var(--muted); font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.opencode-chip-x { padding: 0 5px; border: 0; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; }
+.opencode-mentions { display: flex; flex-direction: column; max-height: 160px; overflow: auto; margin-bottom: 4px; border: 1px solid var(--line); border-radius: 5px; background-color: var(--panel); }
+.opencode-mention { display: flex; align-items: baseline; gap: 8px; padding: 3px 8px; border: 0; background: transparent; color: var(--text); font-size: 10px; text-align: left; cursor: pointer; }
+.opencode-mention:hover { background-color: var(--accent-soft); }
+.opencode-mention span { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }

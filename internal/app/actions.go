@@ -1070,6 +1070,8 @@ func (a *App) onChange(ctx context.Context, box ownframe.Box) error {
 
 		a.branchQuery = next
 		a.refresh()
+	case "opencode-prompt":
+		a.onOpenCodePromptChange(a.view.OpenCodePrompt)
 	case "palette":
 		next := clampFieldLen(a.view.PaletteQuery)
 		if next == a.paletteQuery {
@@ -1699,6 +1701,10 @@ func (a *App) onDragStart(ctx context.Context, box ownframe.Box) (bool, error) {
 		a.cardStartTop = a.inlineCard.Top
 		return true, nil
 	}
+	if box.ID == openCodeDockGripID && a.openCode.panelOpen {
+		a.startOpenCodeDockDrag()
+		return true, nil
+	}
 	if box.ID == "term-resize" && (a.termOpen || a.problemsOpen) {
 		a.termDrag = true
 		a.termDragStartH = int(float64(a.termPanelHeight()) / a.uiZoom())
@@ -1868,6 +1874,12 @@ func (a *App) onDragMove(ctx context.Context, dx, dy float64) error {
 		if !a.setSplitRatio(ratio) {
 			return nil
 		}
+
+		return a.page.Redraw(ctx)
+	}
+	if a.openCode.dockDrag {
+		a.moveOpenCodeDockDrag(dx)
+		a.refresh()
 
 		return a.page.Redraw(ctx)
 	}
@@ -2046,6 +2058,13 @@ func (a *App) onDragEnd(ctx context.Context) error {
 		a.refresh()
 
 		return a.page.Form().Focus(ctx, "")
+	}
+
+	if a.openCode.dockDrag {
+		a.openCode.dockDrag = false
+		a.refresh()
+
+		return a.page.Redraw(ctx)
 	}
 
 	if a.termDrag {

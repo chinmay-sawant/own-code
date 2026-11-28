@@ -1270,7 +1270,7 @@ func (a *App) buildView() View {
 		OpenCodeModelSelection: openCodeModelSelection(opencodeSettings.ProviderID, opencodeSettings.ModelID),
 		OpenCodeModels:         openCodeModelRows(a.openCode.consoleModels),
 		OpenCodePanel:          a.openCodePanelView(),
-		OpenCodePrompt:         "",
+		OpenCodePrompt:         a.openCode.composer.text,
 		OpenCodeConnected:      a.openCode.connected,
 		OpenCodeStatus:         a.openCode.status,
 		Workspace:              workspace,
@@ -2516,6 +2516,8 @@ func (a *App) editorWidth() int {
 	if a.details {
 		w -= a.zx(detailsWidth)
 	}
+
+	w -= a.agentDockWidth()
 
 	if w < a.windowControlLeftPx()+a.zx(paneMinWidth) {
 		w = a.windowControlLeftPx() + a.zx(paneMinWidth)
