@@ -332,3 +332,142 @@ func TestOpenCodeAgentProposalAcceptRefusalsAndReject(t *testing.T) {
 		t.Fatalf("rows after decisions = %+v", rows)
 	}
 }
+
+func e2eWholeProposal(t *testing.T, repo, tool string, args map[string]string) agenttools.Proposal {
+	t.Helper()
+	root := t.TempDir()
+	for _, rel := range []string{args["path"], args["from"]} {
+		if rel == "" {
+			continue
+		}
+		if src, err := os.ReadFile(filepath.Join(repo, rel)); err == nil {
+			os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755)
+			os.WriteFile(filepath.Join(root, rel), src, 0o644)
+		}
+	}
+	var got agenttools.Proposal
+	reg, err := agenttools.NewRegistry(root, agenttools.WithProposalRoot(t.TempDir()), agenttools.WithProposalSink(func(_ context.Context, p agenttools.Proposal) error { got = p; return nil }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(args)
+	pc, err := reg.Prepare(tool, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := agenttools.Binding{SessionID: "s", TurnID: "t", CallID: "c", WorktreeRoot: root}
+	if _, err = pc.Execute(agenttools.WithBinding(context.Background(), b), &agenttools.Approval{SessionID: "s", TurnID: "t", CallID: "c", WorktreeRoot: root, ArgsHash: pc.ArgsHash, Granted: true}); err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
+func TestOpenCodeAgentDeleteAndRenameProposals(t *testing.T) {
+	repo := t.TempDir()
+	e2eGit(t, repo, "init", "-q")
+	for _, f := range []string{"a.txt", "b.txt", "c.txt", "d.txt", "e.txt"} {
+		os.WriteFile(filepath.Join(repo, f), []byte("base\n"), 0o644)
+	}
+	e2eGit(t, repo, "add", ".")
+	e2eGit(t, repo, "commit", "-q", "-m", "init")
+	a := newProposalApp(t, repo)
+	exists := func(f string) bool { _, err := os.Stat(filepath.Join(repo, f)); return err == nil }
+
+	// Nothing is touched before accept; the unit is registered without hunks.
+	pa := e2eWholeProposal(t, repo, agenttools.ToolDeleteFile, map[string]string{"path": "a.txt"})
+	a.addAgentProposal("s1", pa)
+	if !exists("a.txt") || a.agentReviewRegistry().Get("s1", "a.txt") == nil || len(a.agentReviewRegistry().Get("s1", "a.txt").Hunks) != 0 {
+		t.Fatal("staging touched the checkout or created hunks")
+	}
+	if rows := a.agentProposalRows("s1"); rows[0].Change != "Delete" {
+		t.Fatalf("rows %+v", rows)
+	}
+
+	// Dirty buffer refuses; then staged state refuses; then accept closes the open doc.
+	a.dirty["a.txt"] = true
+	_ = a.acceptOpenCodeProposal(openCodeAgentProposalID(pa))
+	if !exists("a.txt") || !strings.Contains(a.openCode.panelStatus, "unsaved") {
+		t.Fatalf("dirty not refused: %q", a.openCode.panelStatus)
+	}
+	delete(a.dirty, "a.txt")
+	os.WriteFile(filepath.Join(repo, "a.txt"), []byte("staged\n"), 0o644)
+	e2eGit(t, repo, "add", "a.txt")
+	os.WriteFile(filepath.Join(repo, "a.txt"), []byte("base\n"), 0o644)
+	_ = a.acceptOpenCodeProposal(openCodeAgentProposalID(pa))
+	if !exists("a.txt") || !strings.Contains(a.openCode.panelStatus, "Refused") {
+		t.Fatalf("staged not refused: %q", a.openCode.panelStatus)
+	}
+	e2eGit(t, repo, "reset", "-q", "a.txt")
+	a.docs["a.txt"] = a.ws.openDoc("a.txt")
+	a.tabs = append(a.tabs, "a.txt")
+	_ = a.acceptOpenCodeProposal(openCodeAgentProposalID(pa))
+	if exists("a.txt") {
+		t.Fatalf("accept did not delete: %q", a.openCode.panelStatus)
+	}
+	if _, ok := a.docs["a.txt"]; ok {
+		t.Fatal("open doc not closed")
+	}
+	for _, tab := range a.tabs {
+		if tab == "a.txt" {
+			t.Fatal("tab not closed")
+		}
+	}
+
+	// Reject leaves the file alone.
+	pb := e2eWholeProposal(t, repo, agenttools.ToolDeleteFile, map[string]string{"path": "b.txt"})
+	a.addAgentProposal("s1", pb)
+	_ = a.rejectOpenCodeProposal(openCodeAgentProposalID(pb))
+	if !exists("b.txt") || len(a.agentProposalRows("s1")) != 0 {
+		t.Fatal("reject touched the checkout")
+	}
+
+	// Baseline changed: refused.
+	pc := e2eWholeProposal(t, repo, agenttools.ToolDeleteFile, map[string]string{"path": "c.txt"})
+	a.addAgentProposal("s1", pc)
+	e2eGit(t, repo, "add", "c.txt")
+	os.WriteFile(filepath.Join(repo, "c.txt"), []byte("other\n"), 0o644)
+	e2eGit(t, repo, "add", "c.txt")
+	e2eGit(t, repo, "commit", "-q", "-m", "c")
+	_ = a.acceptOpenCodeProposal(openCodeAgentProposalID(pc))
+	if !exists("c.txt") || !strings.Contains(a.openCode.panelStatus, "changed") {
+		t.Fatalf("baseline change not refused: %q", a.openCode.panelStatus)
+	}
+
+	// Rename: collision refused (untracked destination), then clean accept.
+	pd := e2eWholeProposal(t, repo, agenttools.ToolMoveFile, map[string]string{"from": "d.txt", "to": "moved.txt"})
+	a.addAgentProposal("s1", pd)
+	os.WriteFile(filepath.Join(repo, "moved.txt"), []byte("mine\n"), 0o644)
+	_ = a.acceptOpenCodeProposal(openCodeAgentProposalID(pd))
+	if !exists("d.txt") || !strings.Contains(a.openCode.panelStatus, "Refused") {
+		t.Fatalf("collision not refused: %q", a.openCode.panelStatus)
+	}
+	if b, _ := os.ReadFile(filepath.Join(repo, "moved.txt")); string(b) != "mine\n" {
+		t.Fatal("destination clobbered")
+	}
+	os.Remove(filepath.Join(repo, "moved.txt"))
+	// Dirty source buffer refuses a rename too.
+	a.dirty["d.txt"] = true
+	_ = a.acceptOpenCodeProposal(openCodeAgentProposalID(pd))
+	if !exists("d.txt") || !strings.Contains(a.openCode.panelStatus, "unsaved") {
+		t.Fatalf("dirty source not refused: %q", a.openCode.panelStatus)
+	}
+	delete(a.dirty, "d.txt")
+	_ = a.acceptOpenCodeProposal(openCodeAgentProposalID(pd))
+	if exists("d.txt") || !exists("moved.txt") {
+		t.Fatalf("rename not applied: %q", a.openCode.panelStatus)
+	}
+
+	// Symlink target: refused, outside file survives.
+	outside := filepath.Join(t.TempDir(), "secret")
+	os.WriteFile(outside, []byte("s\n"), 0o644)
+	pe := e2eWholeProposal(t, repo, agenttools.ToolDeleteFile, map[string]string{"path": "e.txt"})
+	a.addAgentProposal("s1", pe)
+	os.Remove(filepath.Join(repo, "e.txt"))
+	if err := os.Symlink(outside, filepath.Join(repo, "e.txt")); err == nil {
+		a.openCode.panelStatus = ""
+		_ = a.acceptOpenCodeProposal(openCodeAgentProposalID(pe))
+		if _, err := os.Stat(outside); err != nil || !strings.Contains(a.openCode.panelStatus, "Refused") {
+			t.Fatalf("symlink delete not refused: %q", a.openCode.panelStatus)
+		}
+	}
+}

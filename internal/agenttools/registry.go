@@ -22,6 +22,8 @@ const (
 	ToolRunShell    = "run_shell"
 	ToolWriteFile   = "write_file"
 	ToolEditFile    = "edit_file"
+	ToolDeleteFile  = "delete_file"
+	ToolMoveFile    = "move_file"
 
 	// MaxArgsBytes bounds raw tool arguments before any parsing.
 	MaxArgsBytes = 16 * 1024
@@ -162,7 +164,7 @@ func newRegistry(worktreeRoot string, opts ...Option) (*registry, error) {
 		}
 	}
 	if r.proposalRoot != "" {
-		for _, t := range []tool{writeFileTool(), editFileTool()} {
+		for _, t := range []tool{writeFileTool(), editFileTool(), deleteFileTool(), moveFileTool()} {
 			r.tools[t.spec.Name] = t
 		}
 	}

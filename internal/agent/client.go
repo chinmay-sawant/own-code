@@ -142,13 +142,15 @@ func (c *Client) run(ctx context.Context, req Request, stream bool, emit func(Ev
 	if err := req.Model.Validate(); err != nil {
 		return fail(&Error{Kind: ErrKindInvalid, Message: "model is not eligible: " + err.Error()})
 	}
-	endpoint, _ := req.Model.endpoint()
+	endpoint, _ := req.Model.endpointFor(stream)
 	var proto protocolAdapter = chatAdapter{}
 	switch req.Model.Protocol {
 	case ProtocolResponses:
 		proto = responsesAdapter{}
 	case ProtocolMessages:
 		proto = anthropicAdapter{}
+	case ProtocolGenerateContent:
+		proto = geminiAdapter{}
 	}
 	body, err := proto.encode(req, stream)
 	if err != nil {

@@ -36,6 +36,9 @@ func (a *App) recordAgentReview(sid string, p agenttools.Proposal) string {
 	if err != nil {
 		return "Hunk review unavailable: path is outside the workspace."
 	}
+	if p.Deleted || p.RenamedFrom != "" {
+		return a.recordWholeFileReview(sid, root, rel, p)
+	}
 	var data []byte
 	if p.BaselineExists {
 		data, err = os.ReadFile(abs)
@@ -57,9 +60,35 @@ func (a *App) recordAgentReview(sid string, p agenttools.Proposal) string {
 	return a.userOwnedNote(sid, rel)
 }
 
+// recordWholeFileReview registers a delete or rename as one reviewable unit
+// (accept or reject the whole proposal; there are no hunks).
+func (a *App) recordWholeFileReview(sid, root, rel string, p agenttools.Proposal) string {
+	kind, src := agentreview.Delete, rel
+	if p.RenamedFrom != "" {
+		kind = agentreview.Rename
+		_, srel, err := agentreview.MapPath(root, p.RenamedFrom)
+		if err != nil {
+			return "Review unavailable: the rename source is outside the workspace."
+		}
+		src = srel
+	}
+	data, err := os.ReadFile(filepath.Join(root, src))
+	sum := sha256.Sum256(data)
+	if err != nil || hex.EncodeToString(sum[:]) != p.BaselineHash {
+		a.agentReviewRegistry().Forget(sid, rel)
+		return "Review unavailable: the file changed since the proposal was made."
+	}
+	if _, err := a.agentReviewRegistry().PutWhole(sid, rel, kind, filepath.ToSlash(src)); err != nil {
+		return "Review unavailable for this change."
+	}
+	if kind == agentreview.Delete {
+		return "Whole-file delete: accept or reject it as one unit (no per-hunk review)."
+	}
+	return "Whole-file rename from " + p.RenamedFrom + ": accept or reject it as one unit (no per-hunk review)."
+}
+
 // unsupportedChangeNote explains why a change kind has no hunk review. Delete
-// and rename have no agent tool today, so they could only appear through a
-// future one; they are shown as unsupported rather than applied.
+// and rename are reviewed as one whole-file unit instead.
 func unsupportedChangeNote(k agentreview.Kind) string {
 	switch k {
 	case agentreview.Binary:
@@ -67,9 +96,9 @@ func unsupportedChangeNote(k agentreview.Kind) string {
 	case agentreview.Oversized:
 		return "Hunk review unavailable: the file is over the review size limit. Accept or reject the whole proposal."
 	case agentreview.Delete:
-		return "Unsupported: deleting files is not applied by hunk review."
+		return "Deletes are reviewed as one whole-file unit, not per hunk."
 	case agentreview.Rename:
-		return "Unsupported: renames are not applied by hunk review."
+		return "Renames are reviewed as one whole-file unit, not per hunk."
 	}
 	return "Hunk review unavailable for this change."
 }

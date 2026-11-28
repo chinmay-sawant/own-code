@@ -71,7 +71,7 @@ Unimplemented or unverified (kept open):
 - 05: not reading arbitrary files named in agent output is unchecked.
 - 06: delete and rename proposals are reported unsupported rather than reviewable.
 - 07: terminal manager reuse, terminal focus preservation while the panel is open, and new keybindings are unchecked.
-- Unsupported model protocols: Anthropic Messages and Gemini models are hidden (only `chat-completions` and `responses` are offered). Free-tier chat models accept requests only from OpenCode, so they are not offered.
+- Supported model protocols: `chat-completions`, `responses`, `messages` (Anthropic) and `generate-content` (Gemini); models with none are hidden. Free-tier chat models accept requests only from OpenCode, so they are not offered.
 
 ## Manual acceptance (needs manual run)
 

@@ -224,7 +224,7 @@ func TestReviewClassify(t *testing.T) {
 		{true, true, []byte("a"), []byte("b"), "", Modify, true},
 		{false, true, nil, []byte("b"), "", Create, true},
 		{true, false, []byte("a"), nil, "", Delete, true},
-		{true, true, []byte("a"), []byte("a"), "old.go", Rename, false},
+		{true, true, []byte("a"), []byte("a"), "old.go", Rename, true},
 		{true, true, []byte("a"), []byte{0, 1}, "", Binary, false},
 		{true, true, []byte("a"), []byte{0xff, 0xfe}, "", Binary, false},
 		{true, true, big, []byte("a"), "", Oversized, false},
@@ -275,5 +275,25 @@ func TestReviewCaptureBaselineAttributesUserChanges(t *testing.T) {
 	}
 	if err := b.RecordFile(root, "../x"); err == nil {
 		t.Error("RecordFile must reject traversal")
+	}
+}
+
+func TestWholeFileUnitHasNoHunksAndResolvesOnce(t *testing.T) {
+	r := NewRegistry()
+	fr, err := r.PutWhole("s", "a.go", Delete, "")
+	if err != nil || len(fr.Hunks) != 0 || !Delete.Whole() || !Rename.Whole() || Modify.Whole() {
+		t.Fatalf("%v %+v", err, fr)
+	}
+	if _, err := r.PutWhole("s", "b.go", Modify, ""); err == nil {
+		t.Fatal("modify is not a whole-file unit")
+	}
+	if _, err := r.Accept("s", "a.go", "h", ""); err == nil {
+		t.Fatal("per-hunk accept must not apply to a whole-file unit")
+	}
+	if err := r.ResolveWhole("s", "a.go", Rejected); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ResolveWhole("s", "a.go", Accepted); err == nil {
+		t.Fatal("already resolved")
 	}
 }

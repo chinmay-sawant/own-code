@@ -52,7 +52,7 @@ func (a *App) openAgentDiff(path string) {
 	sid := a.openCode.selectedSessionID
 	cs := a.agentChangeSet(sid)
 	if len(cs.Files) == 0 {
-		a.openCode.panelStatus = "No hunk-level review is available for this proposal."
+		a.openCode.panelStatus = "No hunk-level review is available for this proposal. Deletes and renames are accepted or rejected as one unit."
 		a.refresh()
 		return
 	}

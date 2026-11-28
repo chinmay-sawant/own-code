@@ -51,8 +51,8 @@ Use each linked file as the checklist for that slice. Keep checkboxes open until
 ## Remaining work (final audit)
 
 Genuine feature gaps:
-- Anthropic Messages and Gemini `generateContent` adapters are not implemented (`internal/agent` supports only chat-completions and responses; models offering only those APIs are ineligible). Open in 01 (two rows). The Anthropic adapter needs its own request builder, SSE event parser, tool_use/tool_result history mapping and fixtures; not attempted in the last pass.
-- 06: delete and rename hunks stay unsupported. A `delete_file` tool was deliberately not added: `Proposal` only models new content (no deletion flag), so it would need changes to proposal staging/persistence, `ApplyProposal` recheck, the proposal snapshot and the agentreview hunk model plus a UI path, which is not safe in a small batch. Rename is the same plus two-path baseline checks.
+- Anthropic Messages and Gemini `generateContent` adapters are implemented in `internal/agent` (01 rows 10-11 ticked). Not live-verified: Gemini catalog `base_url` shape and `alt=sse`; thoughtSignature is not round-tripped.
+- 06: delete and rename are done as whole-file units (`delete_file`, `move_file`; no per-hunk review). Still open: persisting proposals across restarts and the read-only worktree snapshot still rejects renames.
 - 03: malformed-frame coverage exists for the chat-completions stream (`TestMalformedEvent`) but is not asserted per protocol for Responses.
 
 Manual or live checks (no code gap expected):

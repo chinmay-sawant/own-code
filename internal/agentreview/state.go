@@ -25,6 +25,11 @@ type FileReview struct {
 	Proposed string
 	Hunks    []Hunk
 	States   []State
+	// Kind is Delete or Rename for a whole-file unit (no Hunks, no per-hunk
+	// states); Whole then holds its single review state.
+	Kind        Kind
+	RenamedFrom string
+	Whole       State
 }
 
 // Registry holds hunk state per session and file, in memory.
@@ -46,6 +51,38 @@ func (r *Registry) Put(session, path, base, proposed string) *FileReview {
 	fr := &FileReview{Session: session, Path: path, Base: base, Proposed: proposed, Hunks: hs, States: make([]State, len(hs))}
 	r.files[session][path] = fr
 	return fr
+}
+
+// PutWhole records a whole-file delete or rename as one pending reviewable
+// unit with no hunks. path is the destination for a rename.
+func (r *Registry) PutWhole(session, path string, kind Kind, renamedFrom string) (*FileReview, error) {
+	if !kind.Whole() {
+		return nil, fmt.Errorf("agentreview: %s is not a whole-file change", kind)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.files[session] == nil {
+		r.files[session] = map[string]*FileReview{}
+	}
+	fr := &FileReview{Session: session, Path: path, Kind: kind, RenamedFrom: renamedFrom}
+	r.files[session][path] = fr
+	return fr, nil
+}
+
+// ResolveWhole marks a whole-file unit Accepted or Rejected while it is
+// pending. It never touches any file.
+func (r *Registry) ResolveWhole(session, path string, st State) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	fr := r.files[session][path]
+	if fr == nil || !fr.Kind.Whole() {
+		return fmt.Errorf("agentreview: no whole-file proposal for %s", path)
+	}
+	if fr.Whole != Pending || st == Pending {
+		return fmt.Errorf("agentreview: proposal is %s", fr.Whole)
+	}
+	fr.Whole = st
+	return nil
 }
 
 // Get returns the review for session and path.

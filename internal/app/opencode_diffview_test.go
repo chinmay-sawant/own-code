@@ -211,8 +211,8 @@ func TestAgentProposalClassificationAndBaselineAttribution(t *testing.T) {
 	if n := a.agentProposalRows("s1")[1].Note; !strings.Contains(n, "size limit") {
 		t.Fatalf("oversized note %q", n)
 	}
-	if !strings.Contains(unsupportedChangeNote(agentreview.Delete), "Unsupported") || !strings.Contains(unsupportedChangeNote(agentreview.Rename), "Unsupported") {
-		t.Fatal("delete/rename must be reported unsupported")
+	if !strings.Contains(unsupportedChangeNote(agentreview.Delete), "whole-file") || !strings.Contains(unsupportedChangeNote(agentreview.Rename), "whole-file") {
+		t.Fatal("delete/rename must be reported as whole-file units")
 	}
 	// Baseline: the user's staged edit and an unsaved buffer predate the turn.
 	if err := os.WriteFile(file, []byte(hunkBase+"user\n"), 0o644); err != nil {

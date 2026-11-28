@@ -23,7 +23,7 @@ func ResolveModel(m opencode.ConsoleModel) (ModelTarget, error) {
 	if !m.ToolsKnown || !m.ToolsSupported {
 		return ModelTarget{}, errors.New("model does not advertise tool support")
 	}
-	for _, protocol := range []string{ProtocolChatCompletions, ProtocolResponses, ProtocolMessages} {
+	for _, protocol := range []string{ProtocolChatCompletions, ProtocolResponses, ProtocolMessages, ProtocolGenerateContent} {
 		api, ok := m.APIs[protocol]
 		if !ok || strings.TrimSpace(api.BaseURL) == "" {
 			continue
@@ -37,7 +37,7 @@ func ResolveModel(m opencode.ConsoleModel) (ModelTarget, error) {
 		}
 		return target, nil
 	}
-	return ModelTarget{}, errors.New("model advertises no supported protocol (chat-completions, responses, or messages) with a base_url")
+	return ModelTarget{}, errors.New("model advertises no supported protocol (chat-completions, responses, messages, or generate-content) with a base_url")
 }
 
 // Eligible reports whether the model may be selected for agent runs.
@@ -54,7 +54,7 @@ func (t ModelTarget) Validate() error {
 	if !t.ToolsSupported {
 		return errors.New("model does not advertise tool support")
 	}
-	if t.Protocol != ProtocolChatCompletions && t.Protocol != ProtocolResponses && t.Protocol != ProtocolMessages {
+	if t.Protocol != ProtocolChatCompletions && t.Protocol != ProtocolResponses && t.Protocol != ProtocolMessages && t.Protocol != ProtocolGenerateContent {
 		return fmt.Errorf("unsupported inference protocol %q", t.Protocol)
 	}
 	_, err := t.endpoint()
@@ -62,7 +62,11 @@ func (t ModelTarget) Validate() error {
 }
 
 // endpoint builds the request URL. https is required except for loopback hosts.
-func (t ModelTarget) endpoint() (string, error) {
+func (t ModelTarget) endpoint() (string, error) { return t.endpointFor(false) }
+
+// endpointFor builds the request URL; stream only matters for Gemini, whose
+// streaming route is a different method (streamGenerateContent?alt=sse).
+func (t ModelTarget) endpointFor(stream bool) (string, error) {
 	base := strings.TrimSpace(t.BaseURL)
 	if base == "" {
 		return "", errors.New("model base_url is required")
@@ -77,6 +81,9 @@ func (t ModelTarget) endpoint() (string, error) {
 		return "", errors.New("model base_url must use https")
 	}
 	u.RawQuery, u.Fragment = "", ""
+	if t.Protocol == ProtocolGenerateContent {
+		return t.geminiEndpoint(u, stream)
+	}
 	suffix := "/chat/completions"
 	switch t.Protocol {
 	case ProtocolResponses:

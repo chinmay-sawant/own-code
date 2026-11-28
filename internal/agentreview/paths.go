@@ -83,10 +83,14 @@ func (k Kind) String() string {
 	return [...]string{"modify", "create", "delete", "rename", "binary", "oversized"}[k]
 }
 
-// Reviewable reports whether per-hunk review applies. Delete is reviewable as
-// a whole-file change; rename, binary and oversized are shown but never
-// applied hunk by hunk.
-func (k Kind) Reviewable() bool { return k == Modify || k == Create || k == Delete }
+// Reviewable reports whether the change can be accepted or rejected. Delete and
+// rename are reviewable only as one whole-file unit (see Whole); binary and
+// oversized are shown but never applied hunk by hunk.
+func (k Kind) Reviewable() bool { return k == Modify || k == Create || k == Delete || k == Rename }
+
+// Whole reports whether the change is a single accept/reject unit with no
+// per-hunk review.
+func (k Kind) Whole() bool { return k == Delete || k == Rename }
 
 // Classify decides how a change is handled. renamedFrom is non-empty when the
 // agent moved the file.

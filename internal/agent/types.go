@@ -17,6 +17,11 @@ const (
 	// exact api key the Console catalog uses (see internal/opencode/console_test.go
 	// fixture and the Inference API docs: /inference/anthropic/v1/messages).
 	ProtocolMessages = "messages"
+	// ProtocolGenerateContent is the Gemini family. "generate-content" is the
+	// api key named by the Console Model list API docs
+	// (https://opencode.ai/docs/console/api/models); the route is
+	// /inference/google/v1beta/models/<model>:generateContent.
+	ProtocolGenerateContent = "generate-content"
 )
 
 // Role identifies the author of a Message.

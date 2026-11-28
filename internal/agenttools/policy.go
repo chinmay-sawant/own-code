@@ -36,6 +36,8 @@ type Policy struct {
 //	run_shell    ask    (explicit approval for every command)
 //	write_file   ask    (stages a proposal in the proposal worktree only)
 //	edit_file    ask    (stages a proposal in the proposal worktree only)
+//	delete_file  ask    (stages a delete proposal; the checkout is untouched)
+//	move_file    ask    (stages a rename proposal; the checkout is untouched)
 func DefaultPolicy() *Policy {
 	return &Policy{rules: map[string]Decision{
 		ToolReadFile:    DecisionAllow,
@@ -44,6 +46,8 @@ func DefaultPolicy() *Policy {
 		ToolRunShell:    DecisionAsk,
 		ToolWriteFile:   DecisionAsk,
 		ToolEditFile:    DecisionAsk,
+		ToolDeleteFile:  DecisionAsk,
+		ToolMoveFile:    DecisionAsk,
 	}}
 }
 

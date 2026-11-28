@@ -16,7 +16,7 @@ import (
 
 const openCodeProposalDirectory = "agent-workbench/proposals"
 
-// openCodeAgentProposal is one write_file/edit_file proposal awaiting a native
+// openCodeAgentProposal is one write_file/edit_file/delete_file/move_file proposal awaiting a native
 // Accept or Reject. It lives in memory only; the staged copy sits in a private
 // per-session proposal directory that is never the worktree or the checkout.
 type openCodeAgentProposal struct {
@@ -77,7 +77,12 @@ func (a *App) agentProposalRows(sessionID string) []openCodePanelAgentProposalRo
 	var rows []openCodePanelAgentProposalRow
 	for _, e := range a.openCode.agentProposals[sessionID] {
 		change := "Edit"
-		if !e.Proposal.BaselineExists {
+		switch {
+		case e.Proposal.Deleted:
+			change = "Delete"
+		case e.Proposal.RenamedFrom != "":
+			change = "Rename"
+		case !e.Proposal.BaselineExists:
 			change = "Create"
 		}
 		rows = append(rows, openCodePanelAgentProposalRow{ID: e.ID, Path: e.Proposal.Path, Change: change, Diff: e.Proposal.Diff, Note: e.Note})
@@ -199,29 +204,51 @@ func (a *App) acceptOpenCodeProposal(id string) error {
 	if err != nil {
 		return fail("Refused: could not resolve the workspace.")
 	}
-	rel := filepath.FromSlash(e.Proposal.Path)
-	if a.dirtyBufferFor(root, rel) {
-		return fail("Refused: " + e.Proposal.Path + " has unsaved edits in an open editor. Save or discard them, then accept again.")
+	// Every path the apply touches gets the same dirty-buffer and Git-state
+	// refusals: the target, plus the source of a rename.
+	paths := []string{e.Proposal.Path}
+	if e.Proposal.RenamedFrom != "" {
+		paths = append(paths, e.Proposal.RenamedFrom)
 	}
 	ctx, cancel := context.WithTimeout(a.openCode.lifeCtx, 15*time.Second)
 	defer cancel()
-	changed, gerr := userChangesAt(ctx, root, rel)
-	if gerr != nil {
-		return fail("Refused: could not check Git state for " + e.Proposal.Path + ".")
-	}
-	if changed {
-		return fail("Refused: " + e.Proposal.Path + " has staged, unstaged, or untracked changes that would be overwritten. They were preserved.")
+	for _, sp := range paths {
+		rel := filepath.FromSlash(sp)
+		if a.dirtyBufferFor(root, rel) {
+			return fail("Refused: " + sp + " has unsaved edits in an open editor. Save or discard them, then accept again.")
+		}
+		changed, gerr := userChangesAt(ctx, root, rel)
+		if gerr != nil {
+			return fail("Refused: could not check Git state for " + sp + ".")
+		}
+		if changed {
+			return fail("Refused: " + sp + " has staged, unstaged, or untracked changes that would be overwritten. They were preserved.")
+		}
 	}
 	if err := agenttools.ApplyProposal(e.Proposal, root); err != nil {
 		switch {
 		case errors.Is(err, agenttools.ErrBaselineChanged):
 			return fail("Refused: " + e.Proposal.Path + " changed since the proposal was made. Your file was not modified.")
+		case errors.Is(err, agenttools.ErrDestExists):
+			return fail("Refused: " + e.Proposal.Path + " already exists. Nothing was moved.")
 		case errors.Is(err, agenttools.ErrOutside):
 			return fail("Refused: " + e.Proposal.Path + " is a symlink or leaves the workspace.")
 		}
 		return fail("Refused: the proposal could not be applied safely.")
 	}
 	a.dropAgentProposal(sid, i)
+	switch {
+	case e.Proposal.Deleted:
+		a.forgetExplorerDocs([]string{e.Proposal.Path}, nil) // closes any open tab/buffer (never dirty here)
+		a.openCode.panelStatus = "Deleted " + e.Proposal.Path + " from your checkout."
+		a.refresh()
+		return nil
+	case e.Proposal.RenamedFrom != "":
+		a.forgetExplorerDocs(nil, map[string]string{e.Proposal.RenamedFrom: e.Proposal.Path})
+		a.openCode.panelStatus = "Moved " + e.Proposal.RenamedFrom + " to " + e.Proposal.Path + "."
+		a.refresh()
+		return nil
+	}
 	if doc := a.docs[e.Proposal.Path]; doc != nil {
 		a.docs[e.Proposal.Path] = a.ws.openDoc(e.Proposal.Path)
 	}

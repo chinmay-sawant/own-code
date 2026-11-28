@@ -21,7 +21,7 @@ import (
 const (
 	openCodeApprovalTimeout = 5 * time.Minute
 	openCodeApprovalNotice  = "This command runs with your user's filesystem and network access. The worktree directory is not a sandbox."
-	openCodeSystemPrompt    = "You are a coding assistant working in an isolated Git worktree of the user's project. Use the provided tools to read and search files. write_file and edit_file only propose changes for the user to review. Shell commands require the user's approval and may be denied."
+	openCodeSystemPrompt    = "You are a coding assistant working in an isolated Git worktree of the user's project. Use the provided tools to read and search files. write_file, edit_file, delete_file, and move_file only propose changes (including deletes and renames) for the user to review; nothing changes in the checkout until the user accepts. Shell commands require the user's approval and may be denied."
 	openCodeToolTextLimit   = 2000
 )
 
