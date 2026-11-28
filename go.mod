@@ -3,7 +3,7 @@ module github.com/chinmay-sawant/own-code
 go 1.26.11
 
 require (
-	github.com/chinmay-sawant/ownframe v0.0.10
+	github.com/chinmay-sawant/ownframe v0.0.11
 	github.com/creack/pty v1.1.24
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/hajimehoshi/ebiten/v2 v2.10.6
@@ -21,7 +21,7 @@ require (
 	github.com/andybalholm/brotli v1.2.7 // indirect
 	github.com/benoitkugler/textlayout v0.3.2 // indirect
 	github.com/benoitkugler/textprocessing v0.0.6 // indirect
-	github.com/chinmay-sawant/blinkless v0.1.11 // indirect
+	github.com/chinmay-sawant/blinkless v0.1.12 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/ebitengine/gomobile v0.0.0-20260820040257-d11f821a26a6 // indirect
 	github.com/ebitengine/hideconsole v1.0.0 // indirect
@@ -53,9 +53,4 @@ require (
 	modernc.org/memory v1.12.1 // indirect
 	modernc.org/token v1.1.0 // indirect
 	star-tex.org/x/tex v0.7.1 // indirect
-)
-
-replace (
-	github.com/chinmay-sawant/blinkless => ../blinkless
-	github.com/chinmay-sawant/ownframe => ../ownframe
 )
