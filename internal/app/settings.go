@@ -678,6 +678,7 @@ func keymapCatalog() []keymapEntry {
 		{"hunk-next", "Next hunk/change", "N", false},
 		{"hunk-prev", "Previous hunk/change", "P", false},
 		{"stage-hunk", "Stage hunk", "Shift+S", false},
+		{actionAgentChat, "Open / close agent chat", "Ctrl+Shift+L", false},
 		{"history-back", "Navigate back", "Alt+ArrowLeft", false},
 		{"history-forward", "Navigate forward", "Alt+ArrowRight", false},
 		// Window-owned and always fixed: listed read-only, never rebindable.
@@ -1048,6 +1049,8 @@ func (a *App) runKeymapAction(ctx context.Context, action string) error {
 	case "line-card":
 		a.showInlineCardAtCurrent()
 		return a.page.Redraw(ctx)
+	case actionAgentChat:
+		return a.toggleAgentChat(ctx)
 	case actionMoveLineUp, actionMoveLineDown, actionDuplicateLn, actionDeleteLine, actionJoinLines:
 		return a.runLineOp(ctx, action)
 	case "mode-explorer":

@@ -390,6 +390,9 @@ func executeOpenCodeInline(ctx context.Context, id string, req agent.Request, pr
 			return
 		}
 		provider = client
+		if f, ok := client.(interface{ Forget() }); ok {
+			defer f.Forget()
+		}
 	}
 	res, err := provider.Stream(ctx, req, func(e agent.Event) {
 		if e.Kind == agent.EventTextDelta && e.Text != "" {

@@ -87,6 +87,9 @@ type openCodePanelSessionRow struct {
 	// Interrupted, Disconnected). Renaming shows the inline title editor.
 	State    string
 	Renaming bool
+	// Continue says whether a new turn can use the current key and model.
+	Continue    string
+	CanContinue bool
 }
 
 type openCodePanelMessageRow struct {
@@ -150,6 +153,7 @@ func (a *App) openCodePanelView() openCodePanelView {
 			title = "Untitled session"
 		}
 		state := a.openCodeSessionState(session.ID, v.Connected)
+		cont := a.openCodeSessionContinue(session.ID)
 		status := state
 		if !v.Connected {
 			status = "Disconnected · saved history"
@@ -161,6 +165,7 @@ func (a *App) openCodePanelView() openCodePanelView {
 			Status:   status,
 			State:    state,
 			Renaming: session.ID == a.openCode.renamingID,
+			Continue: cont, CanContinue: strings.HasPrefix(cont, "Can "),
 		})
 	}
 	v.OtherSessions = a.openCodeOtherWorkspaceSessions()
@@ -372,6 +377,28 @@ func (a *App) opencodePanelAction(ctx context.Context, action string) error {
 	default:
 		return nil
 	}
+}
+
+// actionAgentChat is the keymap action that opens or closes the agent chat.
+const actionAgentChat = "agent-chat"
+
+// toggleAgentChat closes the docked chat, or opens it and focuses the composer.
+func (a *App) toggleAgentChat(ctx context.Context) error {
+	if a.openCode.panelOpen {
+		if err := a.opencodePanelAction(ctx, "opencode-panel-hide"); err != nil {
+			return err
+		}
+		return a.page.Redraw(ctx)
+	}
+	if err := a.openOpenCodePanel(ctx); err != nil {
+		return err
+	}
+	if a.ws != nil && !a.ws.Sample {
+		if err := a.focusOpenCodePrompt(ctx); err != nil {
+			return err
+		}
+	}
+	return a.page.Redraw(ctx)
 }
 
 func (a *App) openOpenCodePanel(ctx context.Context) error {

@@ -447,6 +447,12 @@ var sensitiveDiffExcludes = []string{
 }
 
 func (a *App) captureOpenCodeDiffChip(root string) (openCodeChip, error) {
+	return captureOpenCodeDiffChipFor(root, a.ws.ignored)
+}
+
+// captureOpenCodeDiffChipFor touches no App state, so it may run off the UI
+// thread with a private copy of the ignored-path set.
+func captureOpenCodeDiffChipFor(root string, ignored map[string]bool) (openCodeChip, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	args := []string{"diff", "HEAD", "--no-ext-diff", "--no-color", "--no-textconv", "--", "."}
@@ -458,7 +464,7 @@ func (a *App) captureOpenCodeDiffChip(root string) (openCodeChip, error) {
 		return openCodeChip{}, errors.New("The working-tree diff is unavailable (is this a Git repository with a commit?).")
 	}
 	if !capped {
-		if extra := a.openCodeUntrackedDiff(ctx, root, maxOpenCodeDiffBytes-len(data)); extra != "" {
+		if extra := openCodeUntrackedDiffFor(ctx, root, maxOpenCodeDiffBytes-len(data), ignored); extra != "" {
 			if len(data) > 0 && data[len(data)-1] != '\n' {
 				data = append(data, '\n')
 			}
@@ -528,6 +534,10 @@ func (a *App) openCodeProblemsStale(root string, chip openCodeChip) string {
 // new-file diffs. Sensitive, binary, symlinked and oversized files are
 // skipped by collectSelectedAgentFiles; the output is bounded by budget.
 func (a *App) openCodeUntrackedDiff(ctx context.Context, root string, budget int) string {
+	return openCodeUntrackedDiffFor(ctx, root, budget, a.ws.ignored)
+}
+
+func openCodeUntrackedDiffFor(ctx context.Context, root string, budget int, ignored map[string]bool) string {
 	if budget <= 0 {
 		return ""
 	}
@@ -548,7 +558,7 @@ func (a *App) openCodeUntrackedDiff(ctx context.Context, root string, budget int
 	if len(paths) == 0 {
 		return ""
 	}
-	col, err := collectSelectedAgentFiles(root, paths, a.ws.ignored)
+	col, err := collectSelectedAgentFiles(root, paths, ignored)
 	if err != nil {
 		return ""
 	}
@@ -692,6 +702,47 @@ func (a *App) composeOpenCodeUserText(prompt string) (string, error) {
 		}
 	}
 	return prompt + renderOpenCodeContextBlock(chips), nil
+}
+
+// composeOpenCodeUserTextAsync is composeOpenCodeUserText minus the Git diff
+// recheck, which spawns git and so must not run on the UI thread. It returns
+// a function for the turn goroutine that performs the deferred recheck against
+// a private copy of the ignored-path set and reports why a chip is stale.
+func (a *App) composeOpenCodeUserTextAsync(prompt string) (string, func() string, error) {
+	chips := a.openCode.composer.chips
+	if len(chips) == 0 || strings.Contains(prompt, openCodeContextMarker) {
+		return prompt, nil, nil
+	}
+	var diffs []openCodeChip
+	for _, c := range chips {
+		if c.Kind == openCodeChipDiff {
+			if root, err := a.openCodeChipRoot(); err != nil || root != c.Root {
+				return "", nil, fmt.Errorf("Context %s is stale: the workspace changed. Remove it and attach it again.", c.Label)
+			}
+			diffs = append(diffs, c)
+			continue
+		}
+		if why := a.openCodeChipStale(c); why != "" {
+			return "", nil, fmt.Errorf("Context %s is stale: %s. Remove it and attach it again.", c.Label, why)
+		}
+	}
+	var recheck func() string
+	if len(diffs) > 0 {
+		ignored := make(map[string]bool, len(a.ws.ignored))
+		for k, v := range a.ws.ignored {
+			ignored[k] = v
+		}
+		recheck = func() string {
+			for _, c := range diffs {
+				cur, err := captureOpenCodeDiffChipFor(c.Root, ignored)
+				if err != nil || cur.Version != c.Version {
+					return "Context " + c.Label + " is stale: the working tree changed since the diff was attached. Attach it again."
+				}
+			}
+			return ""
+		}
+	}
+	return prompt + renderOpenCodeContextBlock(chips), recheck, nil
 }
 
 // openCodeComposerView fills the composer fields of the panel view.

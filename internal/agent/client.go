@@ -438,3 +438,13 @@ func (s *sseReader) next() ([]byte, error) {
 		}
 	}
 }
+
+// Forget drops the client's reference to the API key. Go strings are
+// immutable, so the backing bytes cannot be zeroed and remain until garbage
+// collected; this only ensures a finished client no longer holds or can send
+// the key (it reports "not configured"). Call it after the last request.
+func (c *Client) Forget() {
+	if c != nil {
+		c.apiKey = ""
+	}
+}

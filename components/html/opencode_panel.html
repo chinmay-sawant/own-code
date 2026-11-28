@@ -21,7 +21,7 @@
         <div class="opencode-session-tools"><button class="settings-btn" id="opencode-rename-cancel" data-action="opencode-session-rename-cancel" type="button">Cancel</button><button class="settings-btn primary" id="opencode-rename-save" data-action="opencode-session-rename-save:{{.ID}}" type="button">Save</button></div>
         {{else}}
         <button class="opencode-session{{if .Active}} active{{end}}" id="opencode-session-{{.ID}}" data-action="opencode-session-pick:{{.ID}}" type="button" title="{{.Title}}" aria-current="{{if .Active}}true{{else}}false{{end}}"{{if $.OpenCodePanel.Busy}} disabled{{end}}>
-          <b>{{.Title}}</b><span class="opencode-state state-{{.State}}">{{.Status}}</span>
+          <b>{{.Title}}</b><span class="opencode-state state-{{.State}}">{{.Status}}</span><span class="opencode-continue{{if .CanContinue}} ok{{end}}" id="opencode-continue-{{.ID}}">{{.Continue}}</span>
         </button>
         <div class="opencode-session-tools"><button class="opencode-mini" id="opencode-rename-{{.ID}}" data-action="opencode-session-rename:{{.ID}}" type="button" title="Rename session" aria-label="Rename session"{{if $.OpenCodePanel.Busy}} disabled{{end}}>Rename</button><button class="opencode-mini" id="opencode-archive-{{.ID}}" data-action="opencode-session-archive:{{.ID}}" type="button" title="Archive session" aria-label="Archive session"{{if $.OpenCodePanel.Busy}} disabled{{end}}>Archive</button></div>
         {{end}}

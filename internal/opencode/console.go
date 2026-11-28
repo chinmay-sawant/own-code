@@ -106,6 +106,15 @@ func ValidateConsoleAPIKeyShape(apiKey string) error {
 	return nil
 }
 
+// Forget drops this client's reference to the API key. Go strings are
+// immutable, so the backing bytes cannot be zeroed and stay until garbage
+// collected; this only ensures the client no longer holds or can send the key.
+func (c *ConsoleClient) Forget() {
+	if c != nil {
+		c.apiKey = ""
+	}
+}
+
 // String returns a representation that never includes the Console API key.
 func (c *ConsoleClient) String() string { return "OpenCodeConsoleClient{key:[redacted]}" }
 

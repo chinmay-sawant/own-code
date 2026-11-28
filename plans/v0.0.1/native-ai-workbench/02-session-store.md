@@ -98,7 +98,7 @@ CREATE TABLE tool_activity (
 - [x] Save user and assistant messages in display order. Save tool calls/results only after own-code validates the call and applies the permission decision. Evidence: `TestApprovedExecutionPersistsApprovalBeforeDispatch`, `TestDenialPersistedAndNotRun`.
 - [x] Persist enough run state to distinguish queued, active, completed, failed, and interrupted turns after restart. Do not treat a process-local stream position as a durable remote checkpoint. Evidence: `RecoverInterrupted`; `TestTurnRoundTripWithToolCallsAndRecovery`.
 - [x] Make session creation and initial user-message insertion idempotent so retries do not duplicate a prompt. Evidence: `TestIdempotentRetriesDoNotDuplicate`.
-- [ ] Keep the existing editor `sessionState` focused on editor layout and navigation. Do not embed transcripts or credentials into `session-*.json`.
+- [x] (Evidence: `TestSessionStateHasNoTranscriptOrCredentialFields` reflects over every `sessionState` field and JSON tag and rejects transcript, message, prompt, agent, key, token, secret, and credential names; the struct holds only layout, tabs, navigation, and toggles.) Keep the existing editor `sessionState` focused on editor layout and navigation. Do not embed transcripts or credentials into `session-*.json`.
 - [x] Migrate or retire any prior server-specific IDs, event checkpoints, and connection identities without losing locally stored transcript history. Evidence: `agentstore/migrate.go`; `TestMigrationFromV3PreservesLegacyTranscript`.
 
 **Gate:** SQLite round-trip covers multiple workspaces and sessions, interrupted writes, schema migration, duplicate create retries, archive state, bounded transcript/tool data, and secret exclusion.
@@ -106,7 +106,7 @@ CREATE TABLE tool_activity (
 ## Phase 3: Restore after restart
 
 - [x] Reopen the local session list and transcript at startup without requiring a network request. Evidence: `loadOpenCodeCachedSessions` reads SQLite only.
-- [ ] Show whether a session can continue with the currently configured key and model; retain readable local history if the key or model is unavailable.
+- [x] (Evidence: `openCodeSessionContinue` labels each history row "Can continue with the current key and model." or "Cannot continue: no API key connected / choose a model / model X is unavailable"; history stays readable regardless. `TestSessionContinueState`.) Show whether a session can continue with the currently configured key and model; retain readable local history if the key or model is unavailable.
 - [x] Continue a selected session by rebuilding the inference conversation from its local transcript and tool results. Do not request remote session history. Evidence: `Store.LoadHistory` feeds the runner.
 - [x] Reconcile any interrupted local tool/run state explicitly before allowing continuation; do not silently re-run a command or file mutation after restart. Evidence: `TestRecoveryNeverRedispatches`.
 - [x] Isolate concurrent updates by local session ID and workspace root. Evidence: `TestConcurrentSessionsDoNotMix`.

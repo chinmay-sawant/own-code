@@ -36,6 +36,23 @@ func (a *App) openCodeRequestNotice() string {
 	return ""
 }
 
+// openCodeSessionContinue says whether a session can send a new turn with the
+// current key and catalog. History stays readable either way; only new
+// requests are gated. The session's own model wins over the default.
+func (a *App) openCodeSessionContinue(sessionID string) string {
+	if !a.openCode.connected {
+		return "Cannot continue: no API key connected. History stays readable."
+	}
+	providerID, modelID := a.openCodeSessionModel(sessionID)
+	if providerID == "" || modelID == "" {
+		return "Cannot continue yet: choose a model."
+	}
+	if _, _, ok := a.findOpenCodeModel(openCodeModelSelection(providerID, modelID)); !ok {
+		return "Cannot continue: model " + providerID + "/" + modelID + " is unavailable. Pick another."
+	}
+	return "Can continue with the current key and model."
+}
+
 // openCodeSessionState is the lifecycle label from the local run lifecycle.
 func (a *App) openCodeSessionState(sessionID string, connected bool) string {
 	if run := a.openCodeRunFor(sessionID); run != nil {

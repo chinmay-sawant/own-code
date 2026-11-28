@@ -79,6 +79,8 @@
 .opencode-session.other span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .opencode-state.state-Running, .opencode-state.state-Stopping { color: var(--accent); }
 .opencode-state.state-Failed { color: var(--amber); }
+.opencode-continue { display: block; font-size: 9px; color: var(--amber); }
+.opencode-continue.ok { color: var(--muted); }
 .opencode-banner { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid var(--line-soft); background-color: var(--panel-2); color: var(--muted); font-size: 10px; line-height: 1.4; }
 .opencode-banner > span { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .opencode-banner.offline { color: var(--amber); }

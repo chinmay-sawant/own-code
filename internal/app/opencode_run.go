@@ -226,6 +226,11 @@ type openCodeTurnParams struct {
 	configDir string
 	// dirty lists unsaved editor buffers (workspace-relative) at turn start.
 	dirty []string
+	// recheck is the Git diff staleness check deferred from send so git never
+	// runs on the UI thread; it returns a reason, or "" when still current.
+	recheck func() string
+	// typedPrompt is restored for retry when recheck fails before persisting.
+	typedPrompt string
 }
 
 func (a *App) submitOpenCodePrompt(prompt string) error {
@@ -249,7 +254,8 @@ func (a *App) submitOpenCodePrompt(prompt string) error {
 	case a.openCodeRunFor(a.openCode.selectedSessionID) != nil:
 		return fail("This session already has a running turn.")
 	}
-	prompt, err := a.composeOpenCodeUserText(prompt)
+	typed := openCodeTypedPart(prompt)
+	prompt, recheck, err := a.composeOpenCodeUserTextAsync(prompt)
 	if err != nil {
 		return fail(err.Error())
 	}
@@ -288,7 +294,8 @@ func (a *App) submitOpenCodePrompt(prompt string) error {
 		results: a.openCode.results, lifeCtx: a.openCode.lifeCtx,
 		sessionID: sessionID, turnID: turnID, directory: directory, prompt: prompt,
 		client: a.openCode.testProvider, configDir: filepath.Dir(a.settingsPath),
-		dirty: a.dirtyRelPaths(directory),
+		dirty:   a.dirtyRelPaths(directory),
+		recheck: recheck, typedPrompt: typed,
 	}
 	go executeOpenCodeTurn(runCtx, params)
 	return nil
@@ -311,6 +318,13 @@ func executeOpenCodeTurn(ctx context.Context, p openCodeTurnParams) {
 		defer cancel()
 		rows, retry, _ := loadOpenCodeTranscript(wctx, p.store, p.sessionID)
 		send(p.lifeCtx, openCodeRunEvent{kind: openCodeRunDone, messages: rows, retryText: retry, status: status})
+	}
+
+	if p.recheck != nil {
+		if why := p.recheck(); why != "" {
+			send(p.lifeCtx, openCodeRunEvent{kind: openCodeRunDone, retryText: p.typedPrompt, status: why})
+			return
+		}
 	}
 
 	// Record what the user had before the agent runs so review can tell user
@@ -378,6 +392,10 @@ func executeOpenCodeTurn(ctx context.Context, p openCodeTurnParams) {
 			return
 		}
 		provider = client
+		// The key is loaded only for this request; drop it when the turn ends.
+		if f, ok := client.(interface{ Forget() }); ok {
+			defer f.Forget()
+		}
 	}
 	ask := func(actx context.Context, req agent.ApprovalRequest) (bool, error) {
 		ap := &openCodeApproval{req: req, decide: make(chan bool, 1)}

@@ -16,7 +16,8 @@ import (
 const (
 	openCodeDockDefault   = 400 // base px, scaled by UI zoom
 	openCodeDockMin       = 280
-	openCodeDockFloor     = 240 // never narrower, even in a tiny window
+	openCodeDockSavedMax  = 4000 // sanity bound for a persisted width
+	openCodeDockFloor     = 240  // never narrower, even in a tiny window
 	openCodeMenuWheelStep = 40
 
 	openCodeModelMenuID        = "opencode-model-menu"
@@ -140,6 +141,33 @@ func sameOpenCodeModelGroups(a, b []openCodeModelGroupRow) bool {
 	return true
 }
 
+// dismissOpenCodeDropdowns closes the history and model dropdowns when a click
+// lands outside them. Their own toggles, rows, and anything geometrically
+// inside an open menu are left to the normal action handlers.
+func (a *App) dismissOpenCodeDropdowns(box ownframe.Box) {
+	if a == nil || a.page == nil || !(a.openCode.historyOpen || a.openCode.modelMenuOpen) {
+		return
+	}
+	if strings.HasPrefix(box.Action, "opencode-panel-model-") || strings.HasPrefix(box.Action, "opencode-panel-history-") ||
+		strings.HasPrefix(box.Action, "opencode-session-pick:") {
+		return
+	}
+	cx, cy := box.X+box.W/2, box.Y+box.H/2
+	for _, m := range []struct {
+		open bool
+		id   string
+	}{{a.openCode.modelMenuOpen, openCodeModelMenuID}, {a.openCode.historyOpen, openCodeHistoryMenuID}} {
+		if !m.open {
+			continue
+		}
+		if vp, ok := findBoxID(a.page.Boxes(), m.id); ok && cx >= vp.X && cx <= vp.X+vp.W && cy >= vp.Y && cy <= vp.Y+vp.H {
+			return
+		}
+	}
+	a.openCode.historyOpen, a.openCode.modelMenuOpen = false, false
+	a.refresh()
+}
+
 // openCodeChromeAction handles the model and history dropdown actions.
 func (a *App) openCodeChromeAction(action string) error {
 	switch {
@@ -233,6 +261,9 @@ func (a *App) agentDockWidth() int {
 	}
 	maxW := a.agentDockMax()
 	base := a.openCode.dockWidth
+	if base <= 0 && a.settings.OpenCode != nil {
+		base = a.settings.OpenCode.DockWidth
+	}
 	if base <= 0 {
 		base = openCodeDockDefault
 	}
@@ -316,4 +347,15 @@ func (a *App) openCodeMenuWheel(x, y, dy float64) bool {
 		return true
 	}
 	return false
+}
+
+// persistOpenCodeDockWidth stores the dragged width in the existing settings.
+func (a *App) persistOpenCodeDockWidth() {
+	if a.openCode.dockWidth <= 0 {
+		return
+	}
+	st := openCodeSettingsValue(a.settings.OpenCode)
+	st.DockWidth = a.openCode.dockWidth
+	a.settings.OpenCode = st.sanitize()
+	a.persistSettings()
 }

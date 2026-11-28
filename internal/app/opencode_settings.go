@@ -16,6 +16,8 @@ import (
 type opencodeSettings struct {
 	ProviderID string `json:"providerId,omitempty"`
 	ModelID    string `json:"modelId,omitempty"`
+	// DockWidth is the agent dock's base width in px (0 = default).
+	DockWidth int `json:"dockWidth,omitempty"`
 }
 
 func defaultOpenCodeSettings() opencodeSettings { return opencodeSettings{} }
@@ -32,6 +34,9 @@ func (s *opencodeSettings) sanitize() *opencodeSettings {
 	}
 	if len(out.ModelID) > maxFieldLen {
 		out.ModelID = ""
+	}
+	if out.DockWidth < openCodeDockMin || out.DockWidth > openCodeDockSavedMax {
+		out.DockWidth = 0
 	}
 	return &out
 }
@@ -144,6 +149,7 @@ func (a *App) opencodeAction(ctx context.Context, action string) error {
 			defer cancel()
 			reply := openCodeReply{token: token, operation: openCodeOperationCheck, consoleClient: client}
 			reply.consoleModels, reply.err = client.Models(ctx)
+			client.Forget() // the app keeps the client only as a connected marker
 			if reply.err == nil && provided {
 				reply.apiKeySaveErr = saveOpenCodeConsoleAPIKey(key)
 			}

@@ -58,6 +58,7 @@ func (a *App) clearDoubleClick() {
 // redraws after the handler returns.
 func (a *App) onClick(ctx context.Context, box ownframe.Box) error {
 	a.dismissOpenCodeMentions(box.ID)
+	a.dismissOpenCodeDropdowns(box)
 
 	if a.dismissOpenMenu(box.ID, box.Action) {
 		return nil
@@ -2068,6 +2069,7 @@ func (a *App) onDragEnd(ctx context.Context) error {
 
 	if a.openCode.dockDrag {
 		a.openCode.dockDrag = false
+		a.persistOpenCodeDockWidth()
 		a.refresh()
 
 		return a.page.Redraw(ctx)
@@ -2436,6 +2438,13 @@ func (a *App) onKeyDown(ctx context.Context, key string) error {
 		a.showInlineCardAtCurrent()
 
 		return a.page.Redraw(ctx)
+	}
+
+	// Ctrl+Shift+L opens or closes the agent chat. It sits after the terminal
+	// branch (a focused shell swallows every key first) and before editing,
+	// so it works from the editor. Rebinding kills the old chord.
+	if a.ctrl && a.shift && key == "l" && a.keymapAllows(actionAgentChat, key) {
+		return a.toggleAgentChat(ctx)
 	}
 
 	// The goto and symbol overlays open while editing, so their navigation
