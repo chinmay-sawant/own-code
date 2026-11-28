@@ -1,6 +1,9 @@
 package opencode
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestConsoleModelSupportsAgentRuntime(t *testing.T) {
 	tests := []struct {
@@ -79,5 +82,21 @@ func TestConsoleModelSupportsAgentRuntime(t *testing.T) {
 				t.Fatalf("SupportsAgentRuntime() = %t, want %t", got, test.want)
 			}
 		})
+	}
+}
+
+func TestValidateConsoleAPIKeyShape(t *testing.T) {
+	for _, bad := range []string{"", "   ", "short", "oc_sk_abc def123", "oc_sk_\nabcdef", "oc_sk_é12345", strings.Repeat("a", 600)} {
+		err := ValidateConsoleAPIKeyShape(bad)
+		if err == nil {
+			t.Errorf("expected error for %q", bad)
+			continue
+		}
+		if bad != "" && strings.TrimSpace(bad) != "" && strings.Contains(err.Error(), bad) {
+			t.Errorf("error leaks key")
+		}
+	}
+	if err := ValidateConsoleAPIKeyShape("  oc_sk_abcdef123456 "); err != nil {
+		t.Fatal(err)
 	}
 }

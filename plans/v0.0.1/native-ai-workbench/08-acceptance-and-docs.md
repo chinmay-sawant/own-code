@@ -21,8 +21,8 @@
 
 - [ ] Add focused fake-HTTP, storage, editor, agent-loop, tool-permission, and UI checks with each implementation slice. Keep platform PTY checks separate from API protocol checks.
 - [ ] Run the repository's current serial validation gate, vet, formatting, and build checks after implementation is complete.
-- [ ] Update `README.md` with Console key setup, where the key is stored, local session-history location, direct model inference, local tool permissions, privacy/context controls, and known limits.
-- [ ] Update `docs/architecture.md` with the Console catalog/inference client, local SQLite store, own-code agent/tool loop, and edit-review boundaries.
+- [x] Update `README.md` with Console key setup, where the key is stored, local session-history location, direct model inference, local tool permissions, privacy/context controls, and known limits.
+- [x] Update `docs/architecture.md` with the Console catalog/inference client, local SQLite store, own-code agent/tool loop, and edit-review boundaries.
 - [ ] Reconcile issue #9's acceptance list against the shipped UI. Leave unimplemented prompt, local agent loop, tool permission, review, and end-to-end requirements open.
 
 **Gate:** The documented setup works from a clean profile. The checklist status matches implemented behavior and recorded verification.

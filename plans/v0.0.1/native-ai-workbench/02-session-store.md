@@ -6,11 +6,11 @@
 
 - [x] Use a per-user database under the own-code config directory, separate from project files and `settings.json`.
 - [ ] Keep session identity local to own-code. A local session ID is the primary identifier; do not require or persist an OpenCode Server session ID or server identity.
-- [ ] Select and pin a Go SQLite driver after checking supported desktop platforms, CGO requirements, and release packaging.
-- [ ] Store workspace root, optional private worktree and baseline commit, selected provider/model IDs, title, lifecycle state, and timestamps for each local session.
-- [ ] Store user/assistant transcript entries in display order with local turn/message IDs. Store own-code tool calls and bounded results with their local execution status.
-- [ ] Never store the Console API key, bearer token, authorization header, or any secret in SQLite. Keep the credential in the separate credential store defined in [01-opencode-connection.md](01-opencode-connection.md).
-- [ ] Set owner-only permissions on the database directory and file. Use transactions for session creation, transcript updates, and tool-state updates.
+- [x] Select and pin a Go SQLite driver after checking supported desktop platforms, CGO requirements, and release packaging. Evidence: `modernc.org/sqlite` (pure Go, no CGO) pinned in go.mod.
+- [x] Store workspace root, optional private worktree and baseline commit, selected provider/model IDs, title, lifecycle state, and timestamps for each local session. Evidence: `agentstore.Session` fields; `TestOpenMigratesV1DatabaseAndPreservesOptionalWorktreeRoot`.
+- [x] Store user/assistant transcript entries in display order with local turn/message IDs. Store own-code tool calls and bounded results with their local execution status. Evidence: `agentstore/turns.go`; `TestTurnRoundTripWithToolCallsAndRecovery`.
+- [x] Never store the Console API key, bearer token, authorization header, or any secret in SQLite. Keep the credential in the separate credential store defined in [01-opencode-connection.md](01-opencode-connection.md). Evidence: no credential fields in schema; `redactSecrets`; `TestBoundsAndRedaction`.
+- [x] Set owner-only permissions on the database directory and file. Use transactions for session creation, transcript updates, and tool-state updates. Evidence: `TestDatabasePermissions`; store writes use transactions.
 - [ ] Define limits for retained message bodies, tool summaries, context snapshots, and database size. Do not retain unbounded raw provider payloads.
 - [ ] Define how deleted projects, archived sessions, and unavailable historical models appear in the local session list.
 
@@ -95,20 +95,20 @@ CREATE TABLE tool_activity (
 ## Phase 2: Persist local session state
 
 - [x] Create an own-code session ID and insert the session before sending its first inference request. The panel can create a local session before the not-yet-implemented inference step.
-- [ ] Save user and assistant messages in display order. Save tool calls/results only after own-code validates the call and applies the permission decision.
-- [ ] Persist enough run state to distinguish queued, active, completed, failed, and interrupted turns after restart. Do not treat a process-local stream position as a durable remote checkpoint.
-- [ ] Make session creation and initial user-message insertion idempotent so retries do not duplicate a prompt.
+- [x] Save user and assistant messages in display order. Save tool calls/results only after own-code validates the call and applies the permission decision. Evidence: `TestApprovedExecutionPersistsApprovalBeforeDispatch`, `TestDenialPersistedAndNotRun`.
+- [x] Persist enough run state to distinguish queued, active, completed, failed, and interrupted turns after restart. Do not treat a process-local stream position as a durable remote checkpoint. Evidence: `RecoverInterrupted`; `TestTurnRoundTripWithToolCallsAndRecovery`.
+- [x] Make session creation and initial user-message insertion idempotent so retries do not duplicate a prompt. Evidence: `TestIdempotentRetriesDoNotDuplicate`.
 - [ ] Keep the existing editor `sessionState` focused on editor layout and navigation. Do not embed transcripts or credentials into `session-*.json`.
-- [ ] Migrate or retire any prior server-specific IDs, event checkpoints, and connection identities without losing locally stored transcript history.
+- [x] Migrate or retire any prior server-specific IDs, event checkpoints, and connection identities without losing locally stored transcript history. Evidence: `agentstore/migrate.go`; `TestMigrationFromV3PreservesLegacyTranscript`.
 
 **Gate:** SQLite round-trip covers multiple workspaces and sessions, interrupted writes, schema migration, duplicate create retries, archive state, bounded transcript/tool data, and secret exclusion.
 
 ## Phase 3: Restore after restart
 
-- [ ] Reopen the local session list and transcript at startup without requiring a network request.
+- [x] Reopen the local session list and transcript at startup without requiring a network request. Evidence: `loadOpenCodeCachedSessions` reads SQLite only.
 - [ ] Show whether a session can continue with the currently configured key and model; retain readable local history if the key or model is unavailable.
-- [ ] Continue a selected session by rebuilding the inference conversation from its local transcript and tool results. Do not request remote session history.
-- [ ] Reconcile any interrupted local tool/run state explicitly before allowing continuation; do not silently re-run a command or file mutation after restart.
-- [ ] Isolate concurrent updates by local session ID and workspace root.
+- [x] Continue a selected session by rebuilding the inference conversation from its local transcript and tool results. Do not request remote session history. Evidence: `Store.LoadHistory` feeds the runner.
+- [x] Reconcile any interrupted local tool/run state explicitly before allowing continuation; do not silently re-run a command or file mutation after restart. Evidence: `TestRecoveryNeverRedispatches`.
+- [x] Isolate concurrent updates by local session ID and workspace root. Evidence: `TestConcurrentSessionsDoNotMix`.
 
 **Gate:** Close and reopen own-code, restore the visible session list and selected transcript offline, and continue a selected session only after verifying the workspace, credential, model, and pending tool state.

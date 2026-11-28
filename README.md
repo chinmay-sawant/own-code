@@ -138,6 +138,18 @@ your `PATH`, and run `own-code`.
 - Embedded terminal with session tabs, a resizable bottom panel, and an installed-shell picker. See [docs/terminal.md](docs/terminal.md).
 - Git merge conflict resolver with conflict badges, Current/Incoming/Both/Compare actions, conflict navigation, and explicit staging. See [docs/merge-conflicts.md](docs/merge-conflicts.md).
 
+## OpenCode Console agent
+
+The OpenCode panel talks to the OpenCode Console directly. It does not start `opencode serve` or use OpenCode Server session routes.
+
+- **Key setup.** In Settings, open the OpenCode section, enter a workspace-bound Console API key (or set `OPENCODE_API_KEY`), and connect. own-code loads the model catalog from `GET https://opencode.ai/console/api/v1/models`; choose a chat model there. Only chat models that advertise tool support and a `chat-completions` or `responses` endpoint with a `base_url` are offered. Catalog membership does not guarantee inference access, so an HTTP 403 is reported as an access error.
+- **Where the key lives.** In a single `0600` file named `opencode-console-api-key` under `ownframe/code-view` in the user config directory. It is not written to `settings.json`, the SQLite history, session files, or the workspace, and stored tool input, output, and error text has bearer and API-key patterns redacted. "Clear" in Settings deletes the file.
+- **Local session history.** Sessions, messages, tool calls, approval outcomes, and turn status are stored in `agent-workbench/sessions.sqlite` beside `settings.json` (a private `0700` directory, guarded by a profile lock so one app process owns it). Saved sessions stay readable offline. Unfinished turns are marked interrupted on the next start, and calls whose outcome is uncertain are marked unknown and are never replayed automatically.
+- **Direct inference.** Each turn rebuilds the request from local history and posts to the endpoint the model advertises. A stable local session ID is sent in `x-opencode-session` for routing and cache consistency only. Stop cancels the request and the stream.
+- **Tool permissions.** Read, list, and search tools are limited to the session worktree and run without a prompt. `run_shell`, `write_file`, and `edit_file` always ask. Shell approval shows the exact command, working directory, and time limit, and states that the command runs with your user's filesystem and network access: the working directory does not sandbox it. Dismissal, timeout, and cancellation count as denial, and each approval is bound to one session, turn, tool call, worktree, and argument set. Output is bounded and truncation is marked.
+- **Proposals review.** `write_file` and `edit_file` never touch your checkout. They stage a proposal in a private proposal directory, and the panel lists each one for an explicit Accept or Reject. Accepting rechecks the baseline, target paths, symlinks, and dirty editor buffers before applying.
+- **Known limits.** Only chat-completions and responses models are supported. Proposals live in memory, so a restart drops pending ones. Exactly-once side effects across crashes are not claimed.
+
 ## Versus VS Code
 
 VS Code is a general IDE and plugin host on Electron. own-code is a single-purpose reader and review tool.

@@ -74,8 +74,8 @@ func (e *ConsoleHTTPError) Error() string {
 // NewConsoleClient creates a Console API client from a workspace-bound API key.
 func NewConsoleClient(apiKey string) (*ConsoleClient, error) {
 	apiKey = strings.TrimSpace(apiKey)
-	if apiKey == "" {
-		return nil, errors.New("OpenCode Console API key is required")
+	if err := ValidateConsoleAPIKeyShape(apiKey); err != nil {
+		return nil, err
 	}
 	client := &http.Client{
 		Timeout: consoleRequestTimeout,
@@ -84,6 +84,26 @@ func NewConsoleClient(apiKey string) (*ConsoleClient, error) {
 		},
 	}
 	return &ConsoleClient{apiKey: apiKey, http: client}, nil
+}
+
+// ValidateConsoleAPIKeyShape rejects empty or obviously malformed keys (embedded
+// whitespace, control or non-ASCII characters, absurd length). The returned
+// error never contains the supplied value. Passing this check does not make a
+// key valid; only the catalog request confirms that.
+func ValidateConsoleAPIKeyShape(apiKey string) error {
+	apiKey = strings.TrimSpace(apiKey)
+	if apiKey == "" {
+		return errors.New("OpenCode Console API key is required")
+	}
+	if len(apiKey) < 8 || len(apiKey) > 512 {
+		return errors.New("OpenCode Console API key has an invalid length")
+	}
+	for i := 0; i < len(apiKey); i++ {
+		if c := apiKey[i]; c <= ' ' || c >= 0x7f {
+			return errors.New("OpenCode Console API key contains invalid characters")
+		}
+	}
+	return nil
 }
 
 // String returns a representation that never includes the Console API key.

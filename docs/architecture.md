@@ -120,6 +120,25 @@ All under `os.UserConfigDir()` (an `ownframe/code-view` folder):
   globs, frame rate). Precedence is session, then settings, then built-in.
 - `project_recent.go`: the recent-projects list used by `ResolveStartupRoot`.
 
+## OpenCode Console agent
+
+The agent runtime is local and talks to the Console directly. Nothing starts `opencode serve`.
+
+| Package | Role |
+|---------|------|
+| `internal/opencode` (`console.go`, `models.go`) | Console client for the model catalog (`GET /console/api/v1/models`) and its `ConsoleModel` metadata. |
+| `internal/secretstore` | The Console API key file (`opencode-console-api-key`, `0600`) under the user config directory. Kept out of settings and SQLite. |
+| `internal/agent` | Provider-neutral types, `ResolveModel` (chat + tool support + chat-completions/responses + `base_url`, validated again per request), the inference client (bounded bodies, SSE frames, timeouts, key redaction, `x-opencode-session` header), and the bounded step loop (`loop.go`, default 12 steps). |
+| `internal/agenttools` | Tool registry, static allow/ask/deny `Policy`, approvals bound to session/turn/call/worktree/args hash, worktree-scoped file tools, `run_shell` (process-tree kill, timeout, bounded output), and proposal-only `write_file`/`edit_file`. No dependency on `internal/app`, `internal/agent`, or storage. |
+| `internal/agentbridge` | Adapts `agenttools` to the interfaces `agent` defines, adding no policy. |
+| `internal/agentstore` | The only runtime database: SQLite at `<config>/agent-workbench/sessions.sqlite`, versioned migrations, a profile lock, and startup recovery. |
+
+Loop: each step rebuilds history from SQLite, requests a model response, and surfaces only complete tool calls. The loop validates each call, applies policy, asks the approver when needed, persists the approval, writes a dispatch claim (`BeginToolDispatch`), runs the executor, and stores a redacted, bounded result. A model can request a tool but cannot approve it. Cancellation is scoped to session and turn IDs, so sessions run concurrently without sharing state. On startup, `RecoverInterrupted` marks unfinished turns interrupted and uncertain calls unknown; they are never re-run without a fresh approval.
+
+Store: sessions, messages, message parts, turns, and tool calls are keyed by local IDs and written idempotently, with separate provider and model IDs. Text, tool input, and tool output are size-bounded and redacted for bearer tokens and API keys. Older server-backed transcripts migrate in place and stay readable.
+
+Proposal review: write tools stage files in a private proposal directory (`agent-workbench/proposals`), never the worktree or checkout. The app (`internal/app/opencode_proposals.go`) holds pending proposals in memory and shows them in the panel for Accept or Reject. Applying rechecks the baseline, paths, symlinks, and dirty editor buffers. Inference, SQLite writes, and tool execution run off the render loop and report back through the tick-drained result channels.
+
 ## Themes
 
 `themes.go` holds `themeCatalog()` (ten themes today); each is a row of
