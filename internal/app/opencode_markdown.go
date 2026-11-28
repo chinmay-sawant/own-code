@@ -12,7 +12,7 @@ import (
 // input is escaped; no input HTML or URL is ever emitted raw. An unterminated
 // fence (a stream still in progress) renders as an open code block.
 func renderOpenCodeMarkdown(text string) template.HTML {
-	text = strings.ToValidUTF8(text, "�")
+	text = strings.ToValidUTF8(text, "\ufffd")
 	var b strings.Builder
 	var para []string
 	inCode := false
@@ -68,9 +68,26 @@ func renderOpenCodeMarkdown(text string) template.HTML {
 	return template.HTML(b.String())
 }
 
-// openCodePlainBody renders non-assistant text verbatim and escaped.
+// openCodePlainBody renders non-assistant text escaped as wrapped paragraphs
+// rather than <pre> so long text stays contained and avoids blinkless's
+// expensive pre-wrap layout path.
 func openCodePlainBody(text string) template.HTML {
-	return template.HTML(`<pre>` + html.EscapeString(strings.ToValidUTF8(text, "�")) + `</pre>`)
+	text = strings.ToValidUTF8(strings.ReplaceAll(text, "\r\n", "\n"), "\ufffd")
+	lines := strings.Split(text, "\n")
+	var b strings.Builder
+	b.Grow(len(text) + len(lines)*24)
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		b.WriteString(`<p class="md-p">`)
+		b.WriteString(html.EscapeString(line))
+		b.WriteString(`</p>`)
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	return template.HTML(b.String())
 }
 
 // splitIncompleteUTF8 returns the longest valid prefix of b and the trailing
@@ -88,5 +105,5 @@ func splitIncompleteUTF8(b []byte) (string, []byte) {
 		}
 		break
 	}
-	return strings.ToValidUTF8(string(b[:cut]), "�"), append([]byte(nil), b[cut:]...)
+	return strings.ToValidUTF8(string(b[:cut]), "\ufffd"), append([]byte(nil), b[cut:]...)
 }

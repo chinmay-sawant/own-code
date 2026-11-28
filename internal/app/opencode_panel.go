@@ -180,15 +180,27 @@ func (a *App) openCodePanelView() openCodePanelView {
 		if strings.TrimSpace(message.Text) == "" || (message.Role == "turn" && message.Text == "") {
 			continue
 		}
-		body := openCodePlainBody(message.Text)
+		displayText := message.Text
+		note := message.Note
+		if message.Role == "user" {
+			if summary := openCodeAttachmentSummary(displayText); summary != "" {
+				displayText = strings.TrimSpace(openCodeTypedPart(displayText))
+				if note != "" {
+					note = summary + " · " + note
+				} else {
+					note = summary
+				}
+			}
+		}
+		body := openCodePlainBody(displayText)
 		if message.Role == "assistant" {
-			body = renderOpenCodeMarkdown(message.Text)
+			body = renderOpenCodeMarkdown(displayText)
 		}
 		v.Messages = append(v.Messages, openCodePanelMessageRow{
 			ID:   message.ID,
 			Role: message.Role,
-			Text: message.Text,
-			Note: message.Note,
+			Text: displayText,
+			Note: note,
 			Body: body,
 		})
 	}

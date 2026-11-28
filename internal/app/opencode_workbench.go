@@ -77,8 +77,10 @@ type openCodeRuntime struct {
 	agentHunkNotes map[string]string
 	// runs holds one run context per local session, keyed by session ID.
 	// Cancellation and event routing never cross sessions.
-	runs         map[string]*openCodeRun
-	retryText    string
+	runs            map[string]*openCodeRun
+	lastStreamPaint time.Time
+	streamDirty     bool
+	retryText       string
 	recoveryNote string
 	testProvider agent.Provider
 	inline       *openCodeInline
@@ -194,8 +196,11 @@ func (a *App) retireOpenCodeConnection() {
 	a.openCode.connected = false
 }
 
+const openCodeStreamPaintInterval = 50 * time.Millisecond
+
 func (a *App) receiveOpenCode(ctx context.Context) bool {
 	changed := false
+	deltaOnly := true
 	panelOnly := true
 	prevPanel := a.view.OpenCodePanel
 	for {
@@ -204,18 +209,23 @@ func (a *App) receiveOpenCode(ctx context.Context) bool {
 			if reply.inline != nil {
 				if a.handleOpenCodeInlineEvent(reply.inline) {
 					changed = true
+					deltaOnly = false
 				}
 				continue
 			}
 			if reply.run != nil {
 				if a.handleOpenCodeRunEvent(reply.run) {
 					changed = true
+					if reply.run.kind != openCodeRunDelta {
+						deltaOnly = false
+					}
 				}
 				continue
 			}
 			if reply.token != a.openCode.token {
 				continue
 			}
+			deltaOnly = false
 			if reply.operation >= openCodeOperationSessions {
 				a.receiveOpenCodePanelReply(reply)
 				changed = true
@@ -254,7 +264,21 @@ func (a *App) receiveOpenCode(ctx context.Context) bool {
 			}
 			changed = true
 		default:
+			if changed && deltaOnly && panelOnly && len(a.openCode.runs) > 0 {
+				if since := time.Since(a.openCode.lastStreamPaint); since < openCodeStreamPaintInterval {
+					a.openCode.streamDirty = true
+					if a.page != nil {
+						a.page.WantFrameIn(openCodeStreamPaintInterval - since)
+					}
+					return false
+				}
+			}
+			if !changed && a.openCode.streamDirty && time.Since(a.openCode.lastStreamPaint) >= openCodeStreamPaintInterval {
+				changed = true
+			}
 			if changed {
+				a.openCode.streamDirty = false
+				a.openCode.lastStreamPaint = time.Now()
 				if panelOnly {
 					nextPanel := a.openCodePanelView()
 					a.view.OpenCodePanel = nextPanel

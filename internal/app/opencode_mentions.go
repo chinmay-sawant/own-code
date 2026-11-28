@@ -688,6 +688,51 @@ func openCodeTypedPart(text string) string {
 	return text
 }
 
+// openCodeAttachmentSummary extracts a compact, human-readable summary of
+// attached sources from a composed user message without including raw file text.
+func openCodeAttachmentSummary(text string) string {
+	i := strings.Index(text, openCodeContextMarker)
+	if i < 0 {
+		return ""
+	}
+	block := text[i:]
+	var items []string
+	for _, line := range strings.Split(block, "\n") {
+		if !strings.HasPrefix(line, "--- ") || !strings.HasSuffix(line, " ---") || strings.HasPrefix(line, "--- end of ") {
+			continue
+		}
+		header := strings.TrimSuffix(strings.TrimPrefix(line, "--- "), " ---")
+		// Trim the internal version hash from the display label.
+		if vIdx := strings.Index(header, ", version "); vIdx >= 0 {
+			if closeIdx := strings.Index(header[vIdx:], ")"); closeIdx >= 0 {
+				header = header[:vIdx] + header[vIdx+closeIdx:]
+			}
+		}
+		items = append(items, header)
+	}
+	if len(items) == 0 {
+		return "Attached context"
+	}
+	return "Attached: " + strings.Join(items, ", ")
+}
+
+// renderOpenCodeContextSummary builds a compact summary of attached chips for
+// view equality checks without copying raw file contents into the UI view.
+func renderOpenCodeContextSummary(chips []openCodeChip) string {
+	if len(chips) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(chips))
+	for _, c := range chips {
+		label := c.Label
+		if c.Path != "" {
+			label = c.Path
+		}
+		parts = append(parts, label+" ("+c.Detail+")")
+	}
+	return "Attached: " + strings.Join(parts, ", ")
+}
+
 // composeOpenCodeUserText appends the attached context to the typed prompt.
 // A stale source blocks the send so the model never sees outdated text. A
 // prompt that already carries a block (a retry) is left unchanged.
@@ -765,7 +810,7 @@ func (a *App) openCodeComposerView(v *openCodePanelView) {
 		}
 		v.Chips = append(v.Chips, openCodeChipRow{ID: ch.ID, Label: ch.Label, Detail: ch.Detail, Title: title, Truncated: ch.Truncated})
 	}
-	v.ComposerPreview = renderOpenCodeContextBlock(c.chips)
+	v.ComposerPreview = renderOpenCodeContextSummary(c.chips)
 }
 
 func sameOpenCodeComposer(p, n openCodePanelView) bool {
