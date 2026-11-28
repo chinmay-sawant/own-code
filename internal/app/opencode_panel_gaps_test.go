@@ -148,6 +148,9 @@ func TestPanelGapsRenameArchiveAndPanelRenders(t *testing.T) {
 		t.Fatalf("timed out waiting for panel: status=%q", a.openCode.panelStatus)
 	}
 	waitPanel(func() bool { return len(a.openCodePanelView().Sessions) == 1 })
+	if err := a.opencodePanelAction(ctx, "opencode-panel-history-toggle"); err != nil {
+		t.Fatal(err)
+	}
 	a.startOpenCodeRename("s-gap")
 	if err := a.page.Redraw(ctx); err != nil { // template renders the inline editor
 		t.Fatal(err)

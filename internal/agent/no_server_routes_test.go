@@ -10,7 +10,7 @@ import (
 // TestConsolePathHasNoOpenCodeServerRoutes greps the non-test source of the
 // Console agent packages for OpenCode Server process and route references.
 func TestConsolePathHasNoOpenCodeServerRoutes(t *testing.T) {
-	forbidden := []string{"opencode serve", `"/session`, "/prompt_async", `"/event`, `"/global/event`, `"/message`}
+	forbidden := []string{"opencode serve", `"/session`, "/prompt_async", `"/event`, `"/global/event`, `"/message"`}
 	for _, dir := range []string{".", "../agentstore", "../agenttools", "../agentbridge"} {
 		files, err := filepath.Glob(filepath.Join(dir, "*.go"))
 		if err != nil || len(files) == 0 {
