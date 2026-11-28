@@ -49,6 +49,15 @@ func (a *App) onPress(ctx context.Context, box ownframe.Box, x, y float64) (bool
 		}
 	}
 
+	if box.ID == "code-body" && a.mode == "changes" && a.diffSource == "working" && a.view.Diff.CanEdit {
+		if row, codeBody, ok := a.diffRowAtY(y); ok && row.EditLine > 0 {
+			displayCol := a.diffDisplayColForRow(row, codeBody, x)
+			a.editDiffFileAt(row.EditLine-1, displayCol)
+
+			return true, a.page.Redraw(ctx)
+		}
+	}
+
 	if !a.editing && (box.ID == "edit-surface" || strings.HasPrefix(box.ID, "edit-line-")) {
 		oldScroll := a.scrollY
 		a.toggleEdit()
@@ -123,7 +132,7 @@ func (a *App) editPointAt(x, y float64) (int, int, bool) {
 		return 0, 0, false
 	}
 
-	box, ok := findBoxID(a.page.Boxes(), "code-body")
+	box, ok := a.page.BoxByID("code-body")
 	if !ok {
 		return 0, 0, false
 	}

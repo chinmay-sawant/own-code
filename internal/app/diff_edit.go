@@ -131,6 +131,34 @@ func (a *App) centerCaretInView() {
 	a.scrollTo(row*a.zx(rowH) - (capacity-1)*a.zx(rowH)/halfDivisor)
 }
 
+// diffRowAtY maps a page-coordinate press inside #code-body to the visible
+// diffRow under the pointer. Handling presses directly on #code-body avoids
+// rendering 50-100 per-row <button class="diff-edit-hit"> elements, which
+// otherwise cause a hover-patch storm on every 20 px mouse move.
+func (a *App) diffRowAtY(y float64) (*diffRow, ownframe.Box, bool) {
+	if a.page == nil || len(a.view.Diff.Rows) == 0 {
+		return nil, ownframe.Box{}, false
+	}
+	codeBody, ok := a.page.BoxByID("code-body")
+	if !ok {
+		return nil, ownframe.Box{}, false
+	}
+	_, pageY := a.page.Scroll().ScrollOffset()
+	rowHeight := a.zx(rowH)
+	if rowHeight <= 0 {
+		return nil, ownframe.Box{}, false
+	}
+	localY := int(y-float64(pageY)) - int(codeBody.Y) + a.scrollY - a.view.Diff.TrackTop
+	if localY < 0 {
+		return nil, ownframe.Box{}, false
+	}
+	idx := localY / rowHeight
+	if idx < 0 || idx >= len(a.view.Diff.Rows) {
+		return nil, ownframe.Box{}, false
+	}
+	return &a.view.Diff.Rows[idx], codeBody, true
+}
+
 // diffDisplayColForBox maps a press x position over one diff edit button to
 // a display column in the new file. Wrapped continuation chunks record the
 // display offset their text starts at, so a click on a wrapped tail lands on
@@ -149,8 +177,16 @@ func (a *App) diffDisplayColForBox(box ownframe.Box, x float64) int {
 		return 0
 	}
 
-	codeBody, ok := findBoxID(a.page.Boxes(), "code-body")
+	codeBody, ok := a.page.BoxByID("code-body")
 	if !ok {
+		return 0
+	}
+
+	return a.diffDisplayColForRow(row, codeBody, x)
+}
+
+func (a *App) diffDisplayColForRow(row *diffRow, codeBody ownframe.Box, x float64) int {
+	if a.page == nil {
 		return 0
 	}
 

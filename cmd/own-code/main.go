@@ -111,7 +111,15 @@ func main() {
 			log.Printf("own-code: watcher unavailable: %v", err)
 		}
 	}
-	options := ownframe.WindowOptions{CustomHeader: a.WindowControl(), PlacementID: "own-code", MaxFPS: a.WindowMaxFPSValue()}
+	options := ownframe.WindowOptions{
+		CustomHeader: a.WindowControl(),
+		PlacementID:  "own-code",
+		MaxFPS:       a.WindowMaxFPSValue(),
+		Perf:         *perf,
+	}
+	if *dev && *perf {
+		options.DebugAddr = *addr
+	}
 	if a.WindowControl() {
 		options.Draggable = a.WindowControlDrag
 	}

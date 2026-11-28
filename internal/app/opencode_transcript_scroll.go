@@ -60,12 +60,11 @@ func (a *App) updateOpenCodeTranscriptMetrics() bool {
 		return false
 	}
 	menus := a.openCodeMenuMetrics()
-	boxes := a.page.Boxes()
-	vp, ok := findBoxID(boxes, openCodeTranscriptViewportID)
+	vp, ok := a.page.BoxByID(openCodeTranscriptViewportID)
 	if !ok {
 		return menus
 	}
-	inner, ok := findBoxID(boxes, openCodeTranscriptInnerID)
+	inner, ok := a.page.BoxByID(openCodeTranscriptInnerID)
 	if !ok {
 		return false
 	}
@@ -80,7 +79,7 @@ func (a *App) openCodeWheelAt(x, y, dy float64) bool {
 	if a.openCodeMenuWheel(x, y, dy) {
 		return true
 	}
-	vp, ok := findBoxID(a.page.Boxes(), openCodeTranscriptViewportID)
+	vp, ok := a.page.BoxByID(openCodeTranscriptViewportID)
 	if !ok || x < vp.X || x > vp.X+vp.W || y < vp.Y || y > vp.Y+vp.H {
 		return false
 	}

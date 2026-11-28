@@ -236,7 +236,7 @@ func (m *lspManager) hoverTargetAt(x, y float64) (hoverTarget, bool) {
 			id = "code-body-2"
 		}
 
-		box, ok := findBoxID(a.page.Boxes(), id)
+		box, ok := a.page.BoxByID(id)
 		if !ok || x < box.X || x > box.X+box.W || y < box.Y || y > box.Y+box.H {
 			continue
 		}

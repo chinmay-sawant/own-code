@@ -379,11 +379,15 @@ func (a *App) moveOpenCodeModelThumbDrag(dy float64) bool {
 }
 
 func (a *App) openCodeMenuMetrics() bool {
-	boxes := a.page.Boxes()
+	if !a.openCode.modelMenuOpen && !a.openCode.historyOpen {
+		return false
+	}
 	changed := false
 	if a.openCode.modelMenuOpen {
-		changed = measureOpenCodeMenu(boxes, openCodeModelMenuID, openCodeModelMenuInnerID, &a.openCode.modelScroll) || changed
-		if vp, ok := findBoxID(boxes, openCodeModelMenuID); ok {
+		if vp, ok := a.page.BoxByID(openCodeModelMenuID); ok {
+			if inner, ok := a.page.BoxByID(openCodeModelMenuInnerID); ok {
+				changed = a.openCode.modelScroll.measure(int(vp.H), int(inner.H)) || changed
+			}
 			x, y, w, h := int(vp.X), int(vp.Y), int(vp.W), int(vp.H)
 			if x != a.openCode.modelMenuX || y != a.openCode.modelMenuY || w != a.openCode.modelMenuW || h != a.openCode.modelMenuH {
 				a.openCode.modelMenuX, a.openCode.modelMenuY, a.openCode.modelMenuW, a.openCode.modelMenuH = x, y, w, h
@@ -392,7 +396,11 @@ func (a *App) openCodeMenuMetrics() bool {
 		}
 	}
 	if a.openCode.historyOpen {
-		changed = measureOpenCodeMenu(boxes, openCodeHistoryMenuID, openCodeHistoryMenuInnerID, &a.openCode.historyScroll) || changed
+		if vp, ok := a.page.BoxByID(openCodeHistoryMenuID); ok {
+			if inner, ok := a.page.BoxByID(openCodeHistoryMenuInnerID); ok {
+				changed = a.openCode.historyScroll.measure(int(vp.H), int(inner.H)) || changed
+			}
+		}
 	}
 	return changed
 }

@@ -78,20 +78,9 @@ func MaybeReexecInWSL() bool {
 		distro, linuxRoot = parsedDistro, joinWSLRoot(parsedBase, rawRoot)
 	}
 
-	bin := wslBin
-	if bin == "" {
-		exe, err := os.Executable()
-		if err != nil {
-			return false
-		}
-		if strings.HasSuffix(strings.ToLower(exe), wslExeSuffix) {
-			exe = exe[:len(exe)-len(wslExeSuffix)]
-		}
-		translated, ok := WindowsToWSLPath(exe)
-		if !ok {
-			return false
-		}
-		bin = translated
+	bin, ok := CompanionBin()
+	if !ok {
+		return false
 	}
 
 	launcher, err := exec.LookPath("wsl.exe")

@@ -266,7 +266,7 @@ func (a *App) jumpToFirstChange(path string) bool {
 	if a.split && a.mode != "changes" {
 		a.scrollGroupTo(group, rows[0]*a.zx(rowH))
 	} else {
-		a.scrollTo(rows[0] * a.zx(rowH))
+		a.setScrollY(rows[0] * a.zx(rowH))
 	}
 	scroll := a.scrollY
 	if a.split && a.mode != "changes" {

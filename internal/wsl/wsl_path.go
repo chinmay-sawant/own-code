@@ -1,7 +1,17 @@
 package wsl
 
 import (
+	"errors"
 	"strings"
+)
+
+// ErrHandoffDisabled reports a runtime handoff blocked by -wsl=false or a
+// missing launcher. ErrHandoffNoBinary reports a missing or untranslatable
+// Linux companion binary (so the caller should fall back to opening the WSL
+// UNC path natively in the Windows binary).
+var (
+	ErrHandoffDisabled = errors.New("wsl handoff disabled")
+	ErrHandoffNoBinary = errors.New("wsl companion binary not found")
 )
 
 // IsDriveLetter reports an ASCII drive letter.
