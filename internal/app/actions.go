@@ -1225,6 +1225,10 @@ func (a *App) onWheel(ctx context.Context, x, y, dx, dy float64) (bool, error) {
 		}
 	}
 
+	if a.openCodeWheelAt(x, y, dy) {
+		return true, a.page.Redraw(ctx)
+	}
+
 	if a.termOpen && dy != 0 {
 		box, ok := findBoxID(a.page.Boxes(), "term-body")
 		if ok && x >= box.X && x <= box.X+box.W && y >= box.Y && y <= box.Y+box.H {

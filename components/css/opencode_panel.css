@@ -3,14 +3,14 @@
 .opencode-panel-heading b { flex: 0 0 auto; color: var(--text); font-size: 11px; }
 .opencode-panel-heading span { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .opencode-panel-main { flex: 1 1 auto; min-height: 0; display: flex; overflow: hidden; }
-.opencode-session-list { width: 210px; flex: 0 0 210px; overflow: auto; padding: 6px; border-right: 1px solid var(--line-soft); background-color: var(--panel-2); }
+.opencode-session-list { width: 210px; flex: 0 1 210px; min-width: 110px; max-width: 38%; overflow: auto; padding: 6px; border-right: 1px solid var(--line-soft); background-color: var(--panel-2); }
 .opencode-session { width: 100%; min-height: 43px; display: flex; flex-direction: column; justify-content: center; gap: 3px; margin-bottom: 3px; padding: 5px 8px; overflow: hidden; border-radius: 4px; text-align: left; }
 .opencode-session b { overflow: hidden; color: var(--text); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .opencode-session span { color: var(--muted); font-size: 9px; }
 .opencode-session:hover, .opencode-session.active { background-color: var(--panel-3); }
 .opencode-session.active { box-shadow: inset 2px 0 var(--accent); }
 .opencode-session-empty { padding: 8px; color: var(--muted); font-size: 10px; line-height: 1.45; }
-.opencode-transcript { flex: 1 1 auto; min-width: 0; overflow: auto; padding: 10px 14px; background-color: var(--term-bg); }
+.opencode-transcript { position: relative; flex: 1 1 auto; min-width: 0; overflow: hidden; padding: 0;  background-color: var(--term-bg); }
 .opencode-transcript-empty { color: var(--muted); font-size: 11px; }
 .opencode-proposals { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
 .opencode-proposals > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; color: var(--text); font-size: 10px; }
@@ -41,3 +41,27 @@
 .opencode-approval > b { display: block; margin-bottom: 4px; }
 .opencode-approval pre { margin: 0 0 4px; font-family: var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 120px; overflow: auto; }
 .opencode-approval-notice { margin: 4px 0; color: var(--muted); }
+
+.opencode-transcript-inner { position: relative; padding: 10px 14px; }
+.opencode-session-row { margin-bottom: 4px; }
+.opencode-session-row.archived { display: flex; align-items: center; gap: 6px; padding: 3px 8px; color: var(--muted); font-size: 10px; }
+.opencode-session-row.archived b { flex: 1 1 auto; min-width: 0; overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.opencode-session-tools { display: flex; justify-content: flex-end; gap: 4px; padding: 0 4px; }
+.opencode-mini { min-height: 18px; padding: 0 6px; color: var(--muted); font-size: 9px; border-radius: 3px; }
+.opencode-mini:hover { color: var(--text); background-color: var(--panel-3); }
+.opencode-mini:disabled { opacity: .5; }
+.opencode-rename { width: 100%; min-height: 24px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 4px; background-color: var(--panel); color: var(--text); font-size: 10px; }
+.opencode-session-section { padding: 8px 8px 3px; color: var(--muted); font-size: 9px; text-transform: uppercase; }
+.opencode-session.other { min-height: 36px; }
+.opencode-session.other span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.opencode-state.state-Running, .opencode-state.state-Stopping { color: var(--accent); }
+.opencode-state.state-Failed { color: var(--amber); }
+.opencode-banner { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid var(--line-soft); background-color: var(--panel-2); color: var(--muted); font-size: 10px; line-height: 1.4; }
+.opencode-banner > span { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.opencode-banner.offline { color: var(--amber); }
+.opencode-banner button { flex: 0 0 auto; min-height: 22px; padding: 0 8px; font-size: 10px; }
+.opencode-message.role-turn > b { color: var(--muted); font-weight: 500; }
+.opencode-message.role-turn pre { color: var(--muted); font-size: 9px; }
+.opencode-message .md-p, .opencode-message .md-li, .opencode-message .md-h { margin: 0 0 5px; color: var(--text); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.opencode-message .md-h { font-weight: 700; }
+.opencode-message .md-code { margin: 0 0 6px; padding: 6px 8px; border: 1px solid var(--line-soft); border-radius: 4px; background-color: var(--panel-2); font-size: 10px; }

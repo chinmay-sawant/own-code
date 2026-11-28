@@ -131,7 +131,7 @@ func TestOpenCodeAgentE2EProposalsAndRecovery(t *testing.T) {
 	if _, err := store.CreateSession(ctx, agentstore.Session{
 		ID: sid, WorkspaceRoot: canon, WorktreeRoot: wt.Path(), BaselineCommit: wt.baseCommit,
 		ProviderID: "p", ModelID: "m", Model: "p/m", Title: "e2e", Agent: "opencode",
-		ServerID: openCodeConsoleBackendID, OpenCodeSessionID: sid, Status: agentstore.SessionQueued,
+		Status: agentstore.SessionQueued,
 	}); err != nil {
 		t.Fatal(err)
 	}

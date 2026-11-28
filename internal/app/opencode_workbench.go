@@ -58,6 +58,20 @@ type openCodeRuntime struct {
 	retryText    string
 	recoveryNote string
 	testProvider agent.Provider
+	// scroll is the transcript scroll model (follow only while at the end).
+	scroll openCodeTranscriptScroll
+	// allSessions are the stored rows from every workspace, used for session
+	// state labels and the other-workspace list.
+	allSessions []agentstore.Session
+	// pendingSwitch is a selected session from another workspace awaiting
+	// the user's confirmation. renamingID is the session being renamed.
+	pendingSwitch *openCodePendingSwitch
+	renamingID    string
+	pendingSelect string
+}
+
+type openCodePendingSwitch struct {
+	SessionID, Title, Root string
 }
 
 type openCodeReply struct {
@@ -77,6 +91,8 @@ type openCodeReply struct {
 	reviewable        bool
 	proposals         []openCodeProposalFile
 	retryText         string
+	allSessions       []agentstore.Session
+	setAllSessions    bool
 }
 
 type openCodeModelRow struct {

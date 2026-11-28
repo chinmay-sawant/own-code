@@ -31,6 +31,8 @@ const (
 	openCodeRunApproval
 	openCodeRunDone
 	openCodeRunProposal
+	openCodeRunToolStart
+	openCodeRunToolDone
 )
 
 // openCodeRunEvent is routed by session and turn ID. The UI thread drops any
@@ -44,6 +46,7 @@ type openCodeRunEvent struct {
 	retryText         string
 	status            string
 	proposal          *agenttools.Proposal
+	toolID, toolName  string // tool events; text carries the status on done
 }
 
 // openCodeRun is the per-session, per-turn run context owned by the UI thread.
@@ -54,6 +57,58 @@ type openCodeRun struct {
 	text              string
 	approval          *openCodeApproval
 	stopping          bool
+	startedAt         time.Time
+	provider, model   string
+	// segs is the ordered live transcript of this turn: streamed text and
+	// tool rows appear in the order they happen.
+	segs []openCodeLiveSeg
+	// pending holds a trailing incomplete UTF-8 sequence between deltas.
+	pending []byte
+}
+
+// openCodeLiveSeg is one streamed text run or one tool call row.
+type openCodeLiveSeg struct {
+	toolID, toolName, status string // tool rows only (toolID != "")
+	text                     string
+}
+
+// appendDelta applies one streamed delta: empty deltas are ignored and a
+// trailing partial UTF-8 sequence waits for the next delta.
+func (r *openCodeRun) appendDelta(delta string) bool {
+	if delta == "" && len(r.pending) == 0 {
+		return false
+	}
+	chunk, rest := splitIncompleteUTF8(append(r.pending, delta...))
+	r.pending = rest
+	if chunk == "" {
+		return false
+	}
+	r.text += chunk
+	if n := len(r.segs); n > 0 && r.segs[n-1].toolID == "" {
+		r.segs[n-1].text += chunk
+	} else {
+		r.segs = append(r.segs, openCodeLiveSeg{text: chunk})
+	}
+	return true
+}
+
+func (r *openCodeRun) toolStart(id, name string) {
+	for _, s := range r.segs {
+		if s.toolID == id {
+			return
+		}
+	}
+	r.segs = append(r.segs, openCodeLiveSeg{toolID: id, toolName: name, status: "running"})
+}
+
+func (r *openCodeRun) toolDone(id, name, status string) {
+	for i := range r.segs {
+		if r.segs[i].toolID == id {
+			r.segs[i].status = status
+			return
+		}
+	}
+	r.segs = append(r.segs, openCodeLiveSeg{toolID: id, toolName: name, status: status})
 }
 
 // openCodeApproval is one pending decision. The runner goroutine blocks on
@@ -204,7 +259,9 @@ func (a *App) submitOpenCodePrompt(prompt string) error {
 	}
 	sessionID := a.openCode.selectedSessionID
 	runCtx, cancel := context.WithCancel(a.openCode.lifeCtx)
-	run := &openCodeRun{sessionID: sessionID, turnID: turnID, prompt: prompt, cancel: cancel}
+	run := &openCodeRun{sessionID: sessionID, turnID: turnID, prompt: prompt, cancel: cancel, startedAt: time.Now()}
+	run.provider, run.model = a.openCodeSessionModel(sessionID)
+	a.openCode.scroll.follow() // sending a message returns to the end
 	if a.openCode.runs == nil {
 		a.openCode.runs = map[string]*openCodeRun{}
 	}
@@ -343,10 +400,21 @@ func executeOpenCodeTurn(ctx context.Context, p openCodeTurnParams) {
 		SessionID: p.sessionID, TurnID: p.turnID, UserText: p.prompt,
 		Model: target, WorktreeRoot: root,
 		Events: func(e agent.Event) {
-			if e.Kind != agent.EventTextDelta || e.Text == "" {
-				return
+			switch e.Kind {
+			case agent.EventTextDelta:
+				if e.Text != "" {
+					send(ctx, openCodeRunEvent{kind: openCodeRunDelta, text: e.Text})
+				}
+			case agent.EventToolStart, agent.EventToolDone:
+				if e.ToolCall == nil {
+					return
+				}
+				kind := openCodeRunToolStart
+				if e.Kind == agent.EventToolDone {
+					kind = openCodeRunToolDone
+				}
+				send(ctx, openCodeRunEvent{kind: kind, toolID: e.ToolCall.ID, toolName: e.ToolCall.Name, text: e.Text})
 			}
-			send(ctx, openCodeRunEvent{kind: openCodeRunDelta, text: e.Text})
 		},
 	})
 	status, session := "Turn completed.", agentstore.SessionCompleted
@@ -415,10 +483,16 @@ func (a *App) handleOpenCodeRunEvent(ev *openCodeRunEvent) bool {
 	selected := ev.sessionID == a.openCode.selectedSessionID
 	switch ev.kind {
 	case openCodeRunDelta:
-		run.text += ev.text
-		if selected {
+		if run.appendDelta(ev.text) && selected {
 			a.openCode.panelStatus = "Streaming response…"
 		}
+	case openCodeRunToolStart:
+		run.toolStart(ev.toolID, ev.toolName)
+		if selected {
+			a.openCode.panelStatus = "Running tool: " + ev.toolName
+		}
+	case openCodeRunToolDone:
+		run.toolDone(ev.toolID, ev.toolName, ev.text)
 	case openCodeRunProposal:
 		if ev.proposal == nil {
 			return false
@@ -515,22 +589,79 @@ func loadOpenCodeTranscript(ctx context.Context, store *agentstore.Store, sessio
 				}
 			}
 		}
+		rows = insertAfterTurn(rows, turn.ID, openCodeTranscriptMessage{ID: "turnmeta-" + turn.ID, Role: "turn", Text: openCodeTurnSummary(turn), TurnID: turn.ID, Kind: "turn"})
 		if notice == "" {
 			continue
 		}
-		insert := len(rows)
-		for j := len(rows) - 1; j >= 0; j-- {
-			if rows[j].TurnID == turn.ID {
-				insert = j + 1
-				break
-			}
-		}
-		row := openCodeTranscriptMessage{ID: "notice-" + turn.ID, Role: "system", Text: notice, TurnID: turn.ID, Kind: "notice"}
-		rows = append(rows, openCodeTranscriptMessage{})
-		copy(rows[insert+1:], rows[insert:])
-		rows[insert] = row
+		rows = insertAfterTurn(rows, turn.ID, openCodeTranscriptMessage{ID: "notice-" + turn.ID, Role: "system", Text: notice, TurnID: turn.ID, Kind: "notice"})
 	}
 	return rows, retry, nil
+}
+
+// insertAfterTurn places row after the last row of the turn (or at the end).
+func insertAfterTurn(rows []openCodeTranscriptMessage, turnID string, row openCodeTranscriptMessage) []openCodeTranscriptMessage {
+	insert := len(rows)
+	for j := len(rows) - 1; j >= 0; j-- {
+		if rows[j].TurnID == turnID {
+			insert = j + 1
+			break
+		}
+	}
+	rows = append(rows, openCodeTranscriptMessage{})
+	copy(rows[insert+1:], rows[insert:])
+	rows[insert] = row
+	return rows
+}
+
+// openCodeTurnSummary is the per-turn provider/model, state, and elapsed line.
+func openCodeTurnSummary(t agentstore.Turn) string {
+	state := "Running"
+	switch t.Status {
+	case agentstore.TurnCompleted:
+		state = "Completed"
+	case agentstore.TurnFailed:
+		state = "Failed"
+	case agentstore.TurnInterrupted:
+		state = "Interrupted"
+	}
+	return openCodeTurnLine(t.ProviderID, t.ModelID, state, t.StartedAt, t.EndedAt)
+}
+
+func openCodeTurnLine(provider, model, state string, started, ended time.Time) string {
+	name := strings.Trim(provider+"/"+model, "/")
+	if name == "" {
+		name = "unknown model"
+	}
+	line := name + " · " + state
+	if !started.IsZero() && !ended.IsZero() && !ended.Before(started) {
+		line += " · " + openCodeElapsed(ended.Sub(started))
+	}
+	return line
+}
+
+func openCodeElapsed(d time.Duration) string {
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	if d < time.Minute {
+		return fmt.Sprintf("%.1fs", d.Seconds())
+	}
+	return fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
+}
+
+// openCodeSessionModel returns the provider and model a session will use.
+func (a *App) openCodeSessionModel(sessionID string) (string, string) {
+	for _, s := range a.openCode.allSessions {
+		if s.ID == sessionID {
+			if s.ProviderID != "" && s.ModelID != "" {
+				return s.ProviderID, s.ModelID
+			}
+			p, m, _ := strings.Cut(s.Model, "/")
+			return p, m
+		}
+	}
+	st := openCodeSettingsValue(a.settings.OpenCode)
+	return st.ProviderID, st.ModelID
 }
 
 func openCodeHistoryText(m agentstore.HistoryMessage) string {

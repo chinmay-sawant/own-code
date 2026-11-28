@@ -230,6 +230,20 @@ func (s *Store) BeginTurn(ctx context.Context, turn Turn) (Turn, error) {
 		return Turn{}, fmt.Errorf("agent store: begin turn: %w", err)
 	}
 	defer tx.Rollback()
+	var archivedAt sql.NullInt64
+	var legacy int
+	if err := tx.QueryRowContext(ctx, `SELECT archived_at, legacy FROM agent_sessions WHERE id = ?`, turn.SessionID).Scan(&archivedAt, &legacy); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Turn{}, ErrNotFound
+		}
+		return Turn{}, fmt.Errorf("agent store: read session for turn: %w", err)
+	}
+	if archivedAt.Valid {
+		return Turn{}, ErrArchived
+	}
+	if legacy == 1 {
+		return Turn{}, ErrLegacySession
+	}
 	ordinal, err := nextOrdinal(ctx, tx, `SELECT COALESCE(MAX(ordinal) + 1, 0) FROM agent_turns WHERE session_id = ?`, turn.SessionID)
 	if err != nil {
 		return Turn{}, fmt.Errorf("agent store: allocate turn ordinal: %w", err)

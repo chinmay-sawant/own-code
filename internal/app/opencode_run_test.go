@@ -153,7 +153,7 @@ func TestTranscriptProjectionInterruptedAndInspection(t *testing.T) {
 	}
 	defer store.Close()
 	now := time.Now().UTC()
-	if _, err := store.CreateSession(ctx, agentstore.Session{ID: "s1", WorkspaceRoot: t.TempDir(), ServerID: openCodeConsoleBackendID, OpenCodeSessionID: "s1"}); err != nil {
+	if _, err := store.CreateSession(ctx, agentstore.Session{ID: "s1", WorkspaceRoot: t.TempDir()}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.BeginTurn(ctx, agentstore.Turn{SessionID: "s1", ID: "t1", UserMessageID: "t1-user", ProviderID: "p", ModelID: "m", StartedAt: now}); err != nil {

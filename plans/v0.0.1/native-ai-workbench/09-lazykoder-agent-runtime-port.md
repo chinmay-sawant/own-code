@@ -48,7 +48,7 @@ LazyCoder is MIT licensed. Preserve its copyright and license notice in files th
 
 ## Phase 2: Store complete turns and reconstruct history
 
-- [ ] Add versioned `internal/agentstore` migrations for missing message parts and durable tool-call request/result data. Preserve local session IDs and transcript text. Retire `server_id`, `opencode_session_id`, `last_event_sequence`, and `event_checkpoints` from the active Console runtime after removing their consumers. Keep old server-backed transcripts readable as non-resumable history; never treat old server IDs or cursors as Console session state.
+- [x] Add versioned `internal/agentstore` migrations for missing message parts and durable tool-call request/result data. Preserve local session IDs and transcript text. Retire `server_id`, `opencode_session_id`, `last_event_sequence`, and `event_checkpoints` from the active Console runtime after removing their consumers. Keep old server-backed transcripts readable as non-resumable history; never treat old server IDs or cursors as Console session state. Evidence: v4 adds parts/tool calls/turns; v5 (`applySchemaV5`) makes the local ID the only required identity, flags old server rows `Legacy` (read-only, `ErrLegacySession` on `BeginTurn`), and no app code reads `ServerID`/`OpenCodeSessionID`/`LastEventSequence`/checkpoints/`tool_activity` any more (server-history code removed from `internal/app`). The legacy columns and tables remain in the file for readable history only; `TestLegacyServerSessionsStayReadableButCannotRunTurns`.
 - [x] Store separate provider and model IDs, each turn's user message, assistant response parts, tool calls, tool results, approval outcome, timestamps, and terminal status in display and execution order.
 - [x] Persist only content that the UI may show or the protocol needs to rebuild a request. Do not request or store private model reasoning. Bound message, tool input, and tool output sizes; never store API keys, authorization headers, or raw credentials.
 - [x] Make writes idempotent by local session, message, part, and tool-call ID so reconnects or retries do not duplicate history.
@@ -93,11 +93,11 @@ LazyCoder is MIT licensed. Preserve its copyright and license notice in files th
 
 ## Phase 6: Connect runtime events to session history
 
-- [ ] Extend the existing OpenCode panel to show messages, streamed output, tool activity, approval requests, errors, and interrupted/completed status from own-code events.
+- [x] Extend the existing OpenCode panel to show messages, streamed output, tool activity, approval requests, errors, and interrupted/completed status from own-code events. Evidence: `agent.EventToolStart/EventToolDone` emitted by the loop, live ordered segments in `openCodeRun.segs`; `TestPanelGapsLiveToolRowsAndTurnSummary`. Native-window check still pending.
 - [x] Keep HTTP requests, SQLite writes, and tool execution outside the OwnFrame render loop. Ignore stale events whose session or turn ID no longer matches the active view.
 - [ ] Restore the local session list and transcript offline. Resume by rebuilding the request from persisted history after checking the workspace and selected model.
 - [x] Add Stop and retry controls. Retry must not repeat a previously completed side effect without a new model request and approval.
-- [ ] Keep local session IDs as the primary identifiers. Never use provider-issued IDs to retrieve or reconstruct remote session history.
+- [x] Keep local session IDs as the primary identifiers. Never use provider-issued IDs to retrieve or reconstruct remote session history. Evidence: `internal/app` no longer references the OpenCode Server client or remote session IDs (grep of `opencode.NewClient`, `OpenCodeSessionID`); `TestSessionsDoNotRequireServerIdentity`.
 - [x] Connect worktree snapshots to a native accept/reject flow. Recheck the proposal baseline, target paths, symlinks, and dirty editor state when applying a decision. Preserve staged and unstaged user changes.
 
 **Gate:** Native UI checks cover streaming, approval, stop, session switching, offline history, and restart after an interrupted turn. A slow session cannot overwrite the active session's view.

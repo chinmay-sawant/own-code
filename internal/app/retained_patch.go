@@ -187,7 +187,7 @@ func (a *App) patchOpenCodePanel(ctx context.Context, prev, next openCodePanelVi
 	if !sameOpenCodeMessages(prev.Messages, next.Messages) {
 		transcriptHTML := renderOpenCodeTranscriptHTML(next)
 		patches = append(patches, ownframe.ElementPatch{
-			ID: "opencode-transcript",
+			ID: openCodeTranscriptInnerID,
 			Edits: []ownframe.ElementEdit{{
 				InnerHTML: &transcriptHTML,
 			}},
@@ -216,6 +216,11 @@ func canPatchOpenCodePanel(prev, next openCodePanelView) bool {
 		prev.CanReview != next.CanReview ||
 		prev.Running != next.Running ||
 		prev.CanRetry != next.CanRetry ||
+		prev.Notice != next.Notice ||
+		prev.TranscriptTop != next.TranscriptTop ||
+		(prev.PendingSwitch == nil) != (next.PendingSwitch == nil) ||
+		len(prev.OtherSessions) != len(next.OtherSessions) ||
+		len(prev.Archived) != len(next.Archived) ||
 		!sameOpenCodeApproval(prev.Approval, next.Approval) {
 		return false
 	}
@@ -305,12 +310,13 @@ func renderOpenCodeTranscriptHTML(v openCodePanelView) string {
 				b.WriteString(`Tool`)
 			case "system":
 				b.WriteString(`Notice`)
+			case "turn":
+				b.WriteString(`Turn`)
 			default:
 				b.WriteString(`You`)
 			}
-			b.WriteString(`</b><pre>`)
-			b.WriteString(html.EscapeString(m.Text))
-			b.WriteString(`</pre>`)
+			b.WriteString(`</b>`)
+			b.WriteString(string(m.Body))
 			if m.Note != "" {
 				b.WriteString(`<span class="opencode-message-note">`)
 				b.WriteString(html.EscapeString(m.Note))

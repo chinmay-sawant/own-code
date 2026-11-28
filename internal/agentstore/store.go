@@ -29,6 +29,13 @@ const (
 )
 
 var ErrNotFound = errors.New("agent store: record not found")
+// ErrArchived is returned when a turn is started in an archived session.
+var ErrArchived = errors.New("agent store: session is archived")
+
+// ErrLegacySession is returned when a turn is started in a session imported
+// from an old OpenCode Server backend; such sessions are read-only history.
+var ErrLegacySession = errors.New("agent store: legacy server-backed session is read-only history")
+
 var ErrProfileOwned = errors.New("agent store: profile is already open in another process")
 
 type SessionStatus string
@@ -42,7 +49,10 @@ const (
 )
 
 // Session contains display and reconciliation metadata. Credential fields are
-// intentionally absent; server IDs must be opaque local identifiers, not URLs.
+// intentionally absent. ID is the local, primary identity. ServerID,
+// OpenCodeSessionID and LastEventSequence are retired: they are only populated
+// for rows imported before schema v5 and are never required or interpreted
+// for Console sessions.
 type Session struct {
 	ID                string
 	WorkspaceRoot     string
@@ -59,7 +69,24 @@ type Session struct {
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 	LastEventSequence *int64
+	// Archived sessions stay readable but cannot run turns. ArchivedAt is the
+	// zero time when Archived is false.
+	Archived   bool
+	ArchivedAt time.Time
+	// Legacy marks rows imported from an OpenCode Server backend before schema
+	// v5. They are readable history only and cannot run turns. Set by the
+	// migration; callers cannot create legacy rows.
+	Legacy bool
 }
+
+// ListOption adjusts ListSessions.
+type ListOption func(*listOptions)
+
+type listOptions struct{ includeArchived bool }
+
+// IncludeArchived makes ListSessions return archived sessions too. By default
+// they are excluded.
+func IncludeArchived() ListOption { return func(o *listOptions) { o.includeArchived = true } }
 
 type Message struct {
 	ID                string
@@ -186,7 +213,8 @@ func (s *Store) Close() error {
 }
 
 // CreateSession inserts a local session and its workspace in one transaction.
-// Repeating a create for the same server/session pair returns the existing row.
+// Repeating a create for the same local ID (or, for legacy rows, the same
+// server/session pair) returns the existing row.
 func (s *Store) CreateSession(ctx context.Context, session Session) (Session, error) {
 	if err := validateSession(session); err != nil {
 		return Session{}, err
@@ -214,8 +242,11 @@ func (s *Store) CreateSession(ctx context.Context, session Session) (Session, er
 	}
 	defer tx.Rollback()
 
-	existing, err := scanSession(tx.QueryRowContext(ctx, sessionSelect+`
-		WHERE server_id = ? AND opencode_session_id = ?`, session.ServerID, session.OpenCodeSessionID))
+	existing, err := scanSession(tx.QueryRowContext(ctx, sessionSelect+` WHERE id = ?`, session.ID))
+	if errors.Is(err, ErrNotFound) && session.ServerID != "" && session.OpenCodeSessionID != "" {
+		existing, err = scanSession(tx.QueryRowContext(ctx, sessionSelect+`
+			WHERE server_id = ? AND opencode_session_id = ?`, session.ServerID, session.OpenCodeSessionID))
+	}
 	if err == nil {
 		if err := tx.Commit(); err != nil {
 			return Session{}, fmt.Errorf("agent store: finish idempotent session lookup: %w", err)
@@ -243,15 +274,14 @@ func (s *Store) CreateSession(ctx context.Context, session Session) (Session, er
 			id, workspace_root, worktree_root, baseline_commit, server_id, opencode_session_id, title, agent, model,
 			status, created_at, updated_at, last_event_sequence, provider_id, model_id
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(server_id, opencode_session_id) DO NOTHING`,
+		ON CONFLICT DO NOTHING`,
 		session.ID, session.WorkspaceRoot, session.WorktreeRoot, session.BaselineCommit, session.ServerID, session.OpenCodeSessionID,
 		session.Title, session.Agent, session.Model, string(session.Status),
 		created.UnixMilli(), updated.UnixMilli(), sequence, session.ProviderID, session.ModelID); err != nil {
 		return Session{}, fmt.Errorf("agent store: create session: %w", err)
 	}
 
-	stored, err := scanSession(tx.QueryRowContext(ctx, sessionSelect+`
-		WHERE server_id = ? AND opencode_session_id = ?`, session.ServerID, session.OpenCodeSessionID))
+	stored, err := scanSession(tx.QueryRowContext(ctx, sessionSelect+` WHERE id = ?`, session.ID))
 	if err != nil {
 		return Session{}, fmt.Errorf("agent store: read created session: %w", err)
 	}
@@ -285,14 +315,14 @@ func (s *Store) UpdateSessionMetadata(ctx context.Context, session Session) (Ses
 			model_id = CASE WHEN ? = '' THEN model_id ELSE ? END,
 			status = CASE WHEN ? = '' THEN status ELSE ? END,
 			updated_at = CASE WHEN updated_at < ? THEN ? ELSE updated_at END
-		WHERE id = ? AND workspace_root = ? AND server_id = ? AND opencode_session_id = ?`,
+		WHERE id = ? AND workspace_root = ?`,
 		bounded(session.Title, maxTitleBytes), bounded(session.Title, maxTitleBytes),
 		bounded(session.Agent, maxAgentBytes), bounded(session.Agent, maxAgentBytes),
 		bounded(session.Model, maxModelBytes), bounded(session.Model, maxModelBytes),
 		bounded(session.ProviderID, maxModelBytes), bounded(session.ProviderID, maxModelBytes),
 		bounded(session.ModelID, maxModelBytes), bounded(session.ModelID, maxModelBytes),
 		string(session.Status), string(session.Status), updated.UnixMilli(), updated.UnixMilli(),
-		session.ID, session.WorkspaceRoot, session.ServerID, session.OpenCodeSessionID)
+		session.ID, session.WorkspaceRoot)
 	if err != nil {
 		return Session{}, fmt.Errorf("agent store: update session metadata: %w", err)
 	}
@@ -313,13 +343,25 @@ func (s *Store) UpdateSessionMetadata(ctx context.Context, session Session) (Ses
 	return stored, nil
 }
 
-// ListSessions returns sessions for one workspace. An empty root lists all rows.
-func (s *Store) ListSessions(ctx context.Context, workspaceRoot string) ([]Session, error) {
+// ListSessions returns sessions for one workspace. An empty root lists all
+// rows. Archived sessions are excluded unless IncludeArchived is passed.
+func (s *Store) ListSessions(ctx context.Context, workspaceRoot string, opts ...ListOption) ([]Session, error) {
+	var o listOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
 	query := sessionSelect
 	args := []any{}
+	var where []string
 	if workspaceRoot != "" {
-		query += ` WHERE workspace_root = ?`
+		where = append(where, `workspace_root = ?`)
 		args = append(args, workspaceRoot)
+	}
+	if !o.includeArchived {
+		where = append(where, `archived_at IS NULL`)
+	}
+	if len(where) > 0 {
+		query += ` WHERE ` + strings.Join(where, ` AND `)
 	}
 	query += ` ORDER BY updated_at DESC, id`
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -500,7 +542,7 @@ func (s *Store) GetCheckpoint(ctx context.Context, sessionID string) (Checkpoint
 
 const sessionSelect = `
 	SELECT id, workspace_root, worktree_root, baseline_commit, server_id, opencode_session_id, title, agent, model,
-		status, created_at, updated_at, last_event_sequence, provider_id, model_id
+		status, created_at, updated_at, last_event_sequence, provider_id, model_id, archived_at, legacy
 	FROM agent_sessions`
 
 type rowScanner interface {
@@ -510,11 +552,12 @@ type rowScanner interface {
 func scanSession(row rowScanner) (Session, error) {
 	var session Session
 	var created, updated int64
-	var sequence sql.NullInt64
+	var sequence, archived sql.NullInt64
+	var legacy int
 	err := row.Scan(
 		&session.ID, &session.WorkspaceRoot, &session.WorktreeRoot, &session.BaselineCommit, &session.ServerID, &session.OpenCodeSessionID,
 		&session.Title, &session.Agent, &session.Model, &session.Status,
-		&created, &updated, &sequence, &session.ProviderID, &session.ModelID)
+		&created, &updated, &sequence, &session.ProviderID, &session.ModelID, &archived, &legacy)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Session{}, ErrNotFound
@@ -526,6 +569,11 @@ func scanSession(row rowScanner) (Session, error) {
 	if sequence.Valid {
 		session.LastEventSequence = &sequence.Int64
 	}
+	session.Legacy = legacy == 1
+	if archived.Valid {
+		session.Archived = true
+		session.ArchivedAt = time.UnixMilli(archived.Int64).UTC()
+	}
 	return session, nil
 }
 
@@ -533,11 +581,9 @@ func validateSession(session Session) error {
 	if err := requiredID("session ID", session.ID); err != nil {
 		return err
 	}
-	if err := requiredID("OpenCode session ID", session.OpenCodeSessionID); err != nil {
-		return err
-	}
-	if err := requiredID("server ID", session.ServerID); err != nil {
-		return err
+	// Server identity is optional: only the local session ID is required.
+	if len(session.OpenCodeSessionID) > maxIDBytes || len(session.ServerID) > maxIDBytes {
+		return errors.New("agent store: legacy server fields must be at most 256 bytes")
 	}
 	if strings.Contains(session.ServerID, "://") || strings.Contains(session.ServerID, "@") {
 		return errors.New("agent store: server ID must be an opaque local identifier, not a URL")
@@ -619,4 +665,75 @@ func bounded(value string, maxBytes int) string {
 		value = value[:len(value)-1]
 	}
 	return value
+}
+
+// RenameSession sets a user-chosen title. The title is trimmed, must be
+// non-empty, and is bounded to 512 bytes.
+func (s *Store) RenameSession(ctx context.Context, sessionID, title string, at time.Time) error {
+	if err := requiredID("session ID", sessionID); err != nil {
+		return err
+	}
+	title = bounded(strings.TrimSpace(title), maxTitleBytes)
+	if title == "" {
+		return errors.New("agent store: session title is required")
+	}
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE agent_sessions SET title = ?, updated_at = MAX(updated_at, ?) WHERE id = ?`,
+		title, at.UnixMilli(), sessionID)
+	if err != nil {
+		return fmt.Errorf("agent store: rename session: %w", err)
+	}
+	if n, err := result.RowsAffected(); err != nil {
+		return fmt.Errorf("agent store: confirm session rename: %w", err)
+	} else if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ArchiveSession archives or restores a session. Archived sessions are hidden
+// from the default ListSessions result and cannot begin turns. A running
+// session cannot be archived (ErrConflict); the call is idempotent otherwise
+// and does not move the original archive time.
+func (s *Store) ArchiveSession(ctx context.Context, sessionID string, archived bool, at time.Time) error {
+	if err := requiredID("session ID", sessionID); err != nil {
+		return err
+	}
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("agent store: begin archive: %w", err)
+	}
+	defer tx.Rollback()
+	var status string
+	var current sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT status, archived_at FROM agent_sessions WHERE id = ?`, sessionID).Scan(&status, &current); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("agent store: read session for archive: %w", err)
+	}
+	if archived == current.Valid {
+		return nil
+	}
+	if archived && status == string(SessionRunning) {
+		return ErrConflict
+	}
+	var value any
+	if archived {
+		value = at.UnixMilli()
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE agent_sessions SET archived_at = ?, updated_at = MAX(updated_at, ?) WHERE id = ?`,
+		value, at.UnixMilli(), sessionID); err != nil {
+		return fmt.Errorf("agent store: archive session: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("agent store: commit archive: %w", err)
+	}
+	return nil
 }

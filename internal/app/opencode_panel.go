@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html/template"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -33,6 +34,24 @@ type openCodePanelView struct {
 	Running            bool
 	CanRetry           bool
 	Approval           *openCodePanelApproval
+	// Notice is the offline / missing credential or model indicator for new
+	// requests; cached history stays visible regardless.
+	Notice        string
+	Offline       bool
+	OtherSessions []openCodePanelOtherRow
+	Archived      []openCodePanelSessionRow
+	PendingSwitch *openCodePanelSwitch
+	TranscriptTop int
+}
+
+// openCodePanelOtherRow is a saved session from a different workspace.
+type openCodePanelOtherRow struct {
+	ID, Title, Root string
+}
+
+// openCodePanelSwitch is the visible workspace-switch confirmation.
+type openCodePanelSwitch struct {
+	SessionID, Title, Root string
 }
 
 // openCodePanelApproval is the native approval view for one pending call.
@@ -49,6 +68,10 @@ type openCodePanelSessionRow struct {
 	Title  string
 	Active bool
 	Status string
+	// State is the lifecycle label (Ready, Running, Completed, Failed,
+	// Interrupted, Disconnected). Renaming shows the inline title editor.
+	State    string
+	Renaming bool
 }
 
 type openCodePanelMessageRow struct {
@@ -56,6 +79,9 @@ type openCodePanelMessageRow struct {
 	Role string
 	Text string
 	Note string
+	// Body is the escaped HTML for the message (Markdown subset for the
+	// assistant, preformatted text otherwise). Produced by this package only.
+	Body template.HTML
 }
 
 type openCodePanelProposalRow struct {
@@ -81,6 +107,12 @@ func (a *App) openCodePanelView() openCodePanelView {
 	v.CanPrompt = v.WorkspaceAvailable && v.Connected && v.SelectedID != "" && !v.Running
 	v.CanRetry = !v.Running && v.SelectedID != "" && v.Connected && a.openCode.retryText != "" && !v.Busy
 	v.Approval = openCodePanelApprovalFor(run)
+	v.Offline = !v.Connected
+	v.Notice = a.openCodeRequestNotice()
+	if sw := a.openCode.pendingSwitch; sw != nil {
+		v.PendingSwitch = &openCodePanelSwitch{SessionID: sw.SessionID, Title: sw.Title, Root: sw.Root}
+	}
+	v.TranscriptTop = -a.openCode.scroll.offset()
 	if !v.WorkspaceAvailable {
 		v.Status = "Open a project folder to use OpenCode sessions."
 	} else if v.Status == "" {
@@ -103,26 +135,36 @@ func (a *App) openCodePanelView() openCodePanelView {
 		if title == "" {
 			title = "Untitled session"
 		}
-		status := "Local SQLite session"
+		state := a.openCodeSessionState(session.ID, v.Connected)
+		status := state
 		if !v.Connected {
-			status = "Saved local history"
+			status = "Disconnected · saved history"
 		}
 		v.Sessions = append(v.Sessions, openCodePanelSessionRow{
-			ID:     session.ID,
-			Title:  title,
-			Active: session.ID == v.SelectedID,
-			Status: status,
+			ID:       session.ID,
+			Title:    title,
+			Active:   session.ID == v.SelectedID,
+			Status:   status,
+			State:    state,
+			Renaming: session.ID == a.openCode.renamingID,
 		})
 	}
+	v.OtherSessions = a.openCodeOtherWorkspaceSessions()
+	v.Archived = a.openCodeArchivedSessions()
 	for _, message := range openCodeVisibleMessages(a.openCode.messages, run) {
-		if strings.TrimSpace(message.Text) == "" {
+		if strings.TrimSpace(message.Text) == "" || (message.Role == "turn" && message.Text == "") {
 			continue
+		}
+		body := openCodePlainBody(message.Text)
+		if message.Role == "assistant" {
+			body = renderOpenCodeMarkdown(message.Text)
 		}
 		v.Messages = append(v.Messages, openCodePanelMessageRow{
 			ID:   message.ID,
 			Role: message.Role,
 			Text: message.Text,
 			Note: message.Note,
+			Body: body,
 		})
 	}
 	for _, proposal := range a.openCode.proposals {
@@ -143,20 +185,20 @@ func (a *App) openCodePanelView() openCodePanelView {
 }
 
 // openCodeVisibleMessages overlays the live turn on the persisted transcript:
-// the turn's persisted assistant text is replaced by the streamed text, and the
+// the turn's persisted assistant text, tool rows, and summary are replaced by
+// the live segments (text and tool rows in the order they happened), and the
 // user message is shown immediately.
 func openCodeVisibleMessages(persisted []openCodeTranscriptMessage, run *openCodeRun) []openCodeTranscriptMessage {
 	if run == nil {
 		return persisted
 	}
-	out := make([]openCodeTranscriptMessage, 0, len(persisted)+2)
+	out := make([]openCodeTranscriptMessage, 0, len(persisted)+len(run.segs)+2)
 	hasUser := false
 	for _, m := range persisted {
 		if m.TurnID == run.turnID {
 			if m.Role == "user" {
 				hasUser = true
-			}
-			if m.Role == "assistant" && m.Kind == "text" {
+			} else {
 				continue
 			}
 		}
@@ -165,8 +207,22 @@ func openCodeVisibleMessages(persisted []openCodeTranscriptMessage, run *openCod
 	if !hasUser {
 		out = append(out, openCodeTranscriptMessage{ID: "live-user-" + run.turnID, Role: "user", Text: run.prompt, TurnID: run.turnID, Kind: "text"})
 	}
-	if run.text != "" {
-		out = append(out, openCodeTranscriptMessage{ID: "live-" + run.turnID, Role: "assistant", Text: run.text, TurnID: run.turnID, Kind: "text"})
+	for i, seg := range run.segs {
+		if seg.toolID != "" {
+			out = append(out, openCodeTranscriptMessage{ID: "live-tool-" + seg.toolID, Role: "tool", Text: seg.toolName + " [" + seg.status + "]", TurnID: run.turnID, Kind: "tool"})
+			continue
+		}
+		out = append(out, openCodeTranscriptMessage{ID: fmt.Sprintf("live-%s-%d", run.turnID, i), Role: "assistant", Text: seg.text, TurnID: run.turnID, Kind: "text"})
+	}
+	if !run.startedAt.IsZero() {
+		state := "Running"
+		if run.approval != nil {
+			state = "Waiting for approval"
+		} else if run.stopping {
+			state = "Stopping"
+		}
+		out = append(out, openCodeTranscriptMessage{ID: "live-meta-" + run.turnID, Role: "turn", Kind: "turn", TurnID: run.turnID,
+			Text: openCodeTurnLine(run.provider, run.model, state, run.startedAt, time.Now())})
 	}
 	return out
 }
@@ -251,6 +307,26 @@ func (a *App) opencodePanelAction(ctx context.Context, action string) error {
 		return a.reviewOpenCodeProposal()
 	case strings.HasPrefix(action, "opencode-session-pick:"):
 		return a.selectOpenCodeSession(strings.TrimPrefix(action, "opencode-session-pick:"))
+	case strings.HasPrefix(action, "opencode-session-other:"):
+		return a.requestOpenCodeWorkspaceSwitch(strings.TrimPrefix(action, "opencode-session-other:"))
+	case action == "opencode-switch-confirm":
+		return a.confirmOpenCodeWorkspaceSwitch(ctx)
+	case action == "opencode-switch-cancel":
+		a.cancelOpenCodeWorkspaceSwitch()
+		return nil
+	case strings.HasPrefix(action, "opencode-session-rename:"):
+		a.startOpenCodeRename(strings.TrimPrefix(action, "opencode-session-rename:"))
+		return nil
+	case strings.HasPrefix(action, "opencode-session-rename-save:"):
+		return a.saveOpenCodeRename(strings.TrimPrefix(action, "opencode-session-rename-save:"))
+	case action == "opencode-session-rename-cancel":
+		a.openCode.renamingID = ""
+		a.refresh()
+		return nil
+	case strings.HasPrefix(action, "opencode-session-restore:"):
+		return a.unarchiveOpenCodeSession(strings.TrimPrefix(action, "opencode-session-restore:"))
+	case strings.HasPrefix(action, "opencode-session-archive:"):
+		return a.archiveOpenCodeSession(strings.TrimPrefix(action, "opencode-session-archive:"))
 	case action == "opencode-session-prompt":
 		prompt := strings.TrimSpace(a.opencodeCredentialInput("opencode-prompt"))
 		a.page.Form().SetFormValue("opencode-prompt", "")
@@ -360,7 +436,7 @@ func (a *App) loadOpenCodeSessions() error {
 	go func() {
 		ctx, cancel := context.WithTimeout(baseCtx, 3*time.Second)
 		defer cancel()
-		sessions, err := listLocalOpenCodeSessions(ctx, store, directory)
+		sessions, all, err := fetchOpenCodePanelSessions(ctx, store, directory)
 		status := "Showing sessions saved in this workspace."
 		if !connected {
 			status = "OpenCode Console is disconnected. Showing saved local sessions."
@@ -375,7 +451,8 @@ func (a *App) loadOpenCodeSessions() error {
 		}
 		a.sendOpenCodeReply(baseCtx, result, openCodeReply{
 			token: token, operation: openCodeOperationSessions,
-			sessions: sessions, panelStatus: status, err: err,
+			sessions: sessions, allSessions: all, setAllSessions: err == nil,
+			panelStatus: status, err: err,
 		})
 	}()
 	return nil
@@ -441,18 +518,16 @@ func (a *App) createOpenCodeSession() error {
 		ctx, cancel := context.WithTimeout(baseCtx, 3*time.Second)
 		defer cancel()
 		local, err := store.CreateSession(ctx, agentstore.Session{
-			ID:                sessionID,
-			WorkspaceRoot:     directory,
-			WorktreeRoot:      worktreePath,
-			BaselineCommit:    baseline,
-			ProviderID:        settings.ProviderID,
-			ModelID:           settings.ModelID,
-			ServerID:          openCodeConsoleBackendID,
-			OpenCodeSessionID: sessionID,
-			Title:             "New OpenCode session",
-			Agent:             "opencode",
-			Model:             settings.ProviderID + "/" + settings.ModelID,
-			Status:            agentstore.SessionQueued,
+			ID:             sessionID,
+			WorkspaceRoot:  directory,
+			WorktreeRoot:   worktreePath,
+			BaselineCommit: baseline,
+			ProviderID:     settings.ProviderID,
+			ModelID:        settings.ModelID,
+			Title:          "New OpenCode session",
+			Agent:          "opencode",
+			Model:          settings.ProviderID + "/" + settings.ModelID,
+			Status:         agentstore.SessionQueued,
 		})
 		var sessions []opencode.Session
 		status := "Local session saved. Send a message to start." + worktreeNote
@@ -512,6 +587,8 @@ func (a *App) selectOpenCodeSession(sessionID string) error {
 	var worktreeManagerErr error
 	worktreeManager, worktreeManagerErr = a.openCodeWorktreeManager()
 	a.openCode.selectedSessionID = sessionID
+	a.openCode.scroll.follow()
+	a.openCode.pendingSwitch = nil
 	a.openCode.messages = nil
 	a.openCode.reviewable = false
 	a.openCode.proposals = nil
@@ -677,6 +754,9 @@ func (a *App) receiveOpenCodePanelReply(reply openCodeReply) {
 		}
 		return
 	}
+	if reply.setAllSessions {
+		a.openCode.allSessions = reply.allSessions
+	}
 	if reply.sessions != nil {
 		a.openCode.sessions = openCodeWorkspaceSessions(reply.sessions, a.ws.Root)
 		selected := false
@@ -695,6 +775,15 @@ func (a *App) receiveOpenCodePanelReply(reply openCodeReply) {
 	}
 	if reply.selectedSessionID != "" {
 		a.openCode.selectedSessionID = reply.selectedSessionID
+		a.openCode.scroll.follow()
+	}
+	if want := a.openCode.pendingSelect; want != "" && reply.sessions != nil {
+		a.openCode.pendingSelect = ""
+		for _, s := range a.openCode.sessions {
+			if s.ID == want {
+				defer func() { _ = a.selectOpenCodeSession(want) }()
+			}
+		}
 	}
 	if reply.messages != nil {
 		a.openCode.messages = reply.messages

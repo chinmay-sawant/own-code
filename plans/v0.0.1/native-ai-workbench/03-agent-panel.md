@@ -6,22 +6,22 @@
 
 ## Phase 1: Manage local sessions
 
-- [ ] Add a session list for the selected workspace with create, select, rename, archive, and resume actions backed by the local SQLite store.
-- [ ] Show active, queued, completed, failed, interrupted, and disconnected states from own-code's local run lifecycle.
+- [x] Add a session list for the selected workspace with create, select, rename, archive, and resume actions backed by the local SQLite store. Evidence: `opencode_session_actions.go` (`saveOpenCodeRename`, `archiveOpenCodeSession`, `unarchiveOpenCodeSession`) over `Store.RenameSession/ArchiveSession`; `TestPanelGapsRenameArchiveAndPanelRenders` (rename, archive, restore round trip and template redraw). Not visually exercised in a live window.
+- [ ] (State labels implemented in `openCodeSessionState`: Running/Waiting for approval/Stopping/Completed/Failed/Interrupted/Ready/Disconnected; no dedicated assertion yet.) Show active, queued, completed, failed, interrupted, and disconnected states from own-code's local run lifecycle.
 - [x] Let the user start more than one local session and switch between them without mixing messages, tool calls, or workspace state. Evidence: `TestRunEventsDoNotCrossSessions`, `TestConcurrentSessionsDoNotMix`.
-- [ ] Show cached SQLite history while offline, with a clear indication that a new inference request needs a working Console credential and model.
-- [ ] Do not automatically change the current workspace when a user selects a saved session. Ask for or visibly confirm a workspace switch.
+- [x] Show cached SQLite history while offline, with a clear indication that a new inference request needs a working Console credential and model. Evidence: `openCodeRequestNotice` banner (`#opencode-notice`); `TestPanelGapsOfflineNoticeAndWorkspaceSwitchConfirmation`.
+- [x] Do not automatically change the current workspace when a user selects a saved session. Ask for or visibly confirm a workspace switch. Evidence: "Other workspaces" list, `requestOpenCodeWorkspaceSwitch` shows `#opencode-switch` confirm/cancel banner; workspace changes only in `confirmOpenCodeWorkspaceSwitch`; `TestPanelGapsOfflineNoticeAndWorkspaceSwitchConfirmation`.
 
 **Gate:** Session action checks cover create, list, switch, resume from local transcript, archive, workspace mismatch, and disconnected/invalid-credential states.
 
 ## Phase 2: Run and render a turn
 
-- [ ] Add a native agent panel that fits the existing OwnFrame layout and remains usable at the minimum supported window size.
+- [ ] (Session list now shrinks, flex 110px-38%; not verified at the minimum window size.) Add a native agent panel that fits the existing OwnFrame layout and remains usable at the minimum supported window size.
 - [x] Add a prompt composer and send action for the selected local session and catalog model. Evidence: `submitOpenCodePrompt` in `internal/app/opencode_run.go`.
 - [x] Build each inference request from the selected model's documented protocol and the session's local conversation history. Evidence: `agent.ResolveModel` + `Store.LoadHistory`.
-- [ ] Render streamed Markdown output incrementally. Handle split UTF-8 chunks, empty deltas, malformed frames, provider errors, cancellation, and failed turns for each supported protocol.
-- [ ] Preserve transcript scroll position while the user reads earlier messages. Follow new output only when the user is already at the end.
-- [ ] Show provider/model, elapsed state, and execution result for each turn.
+- [ ] (Done: incremental Markdown subset with HTML escaping, split UTF-8 and empty deltas: `renderOpenCodeMarkdown`, `openCodeRun.appendDelta`; `TestPanelGapsStreamedUTF8AndEmptyDeltas`, `TestPanelGapsMarkdownEscapes`. Per-protocol malformed-frame coverage lives in the agent package, not re-verified here.) Render streamed Markdown output incrementally. Handle split UTF-8 chunks, empty deltas, malformed frames, provider errors, cancellation, and failed turns for each supported protocol.
+- [x] Preserve transcript scroll position while the user reads earlier messages. Follow new output only when the user is already at the end. Evidence: `openCodeTranscriptScroll` (app-owned offset, wheel handled in `openCodeWheelAt`); `TestPanelGapsTranscriptScrollFollowsOnlyAtEnd`. The model is tested; wheel and live layout measurement are not exercised in a real window.
+- [x] Show provider/model, elapsed state, and execution result for each turn. Evidence: persisted `turnmeta-*` rows (`openCodeTurnSummary`) and live turn line; `TestPanelGapsLiveToolRowsAndTurnSummary`. Live elapsed refreshes only when events arrive.
 - [x] Add stop/cancel and retry actions. A partial or interrupted response must not be treated as a completed turn. Evidence: `interruptOpenCodeSession`, `retryOpenCodeTurn`; `TestApprovalAndStop`, `TestRetryNeedsRetryText`, `TestCancelDuringStreamInterruptsTurn`.
 - [x] Keep HTTP, stream parsing, persistence, and agent coordination off the UI loop. Drop stale results from sessions the user has switched away from. Evidence: `executeOpenCodeTurn` runs in a goroutine; `TestRunEventStreamingAndStale`.
 

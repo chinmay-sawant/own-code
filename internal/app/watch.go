@@ -644,6 +644,10 @@ func (a *App) tickWatch(ctx context.Context) error {
 		}
 	}
 
+	if a.openCode.panelOpen && a.updateOpenCodeTranscriptMetrics() {
+		a.refresh()
+	}
+
 	return nil
 }
 

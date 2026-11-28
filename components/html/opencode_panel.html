@@ -11,19 +11,48 @@
       <button class="term-tool" id="opencode-panel-hide" data-action="opencode-panel-hide" type="button" title="Hide panel" aria-label="Hide OpenCode panel">×</button>
     </div>
   </header>
+  {{if .OpenCodePanel.PendingSwitch}}
+  <section class="opencode-banner opencode-switch" id="opencode-switch" role="alertdialog" aria-label="Switch workspace">
+    <span>Session "{{.OpenCodePanel.PendingSwitch.Title}}" belongs to another workspace: <code>{{.OpenCodePanel.PendingSwitch.Root}}</code>. Opening it switches the project folder.</span>
+    <button class="settings-btn" id="opencode-switch-cancel" data-action="opencode-switch-cancel" type="button">Cancel</button>
+    <button class="settings-btn primary" id="opencode-switch-confirm" data-action="opencode-switch-confirm" type="button">Switch workspace</button>
+  </section>
+  {{end}}
+  {{if .OpenCodePanel.Notice}}<div class="opencode-banner opencode-notice{{if .OpenCodePanel.Offline}} offline{{end}}" id="opencode-notice" role="status">{{.OpenCodePanel.Notice}}</div>{{end}}
   <div class="opencode-panel-main">
     <aside class="opencode-session-list" aria-label="OpenCode sessions">
       {{range .OpenCodePanel.Sessions}}
-      <button class="opencode-session{{if .Active}} active{{end}}" id="opencode-session-{{.ID}}" data-action="opencode-session-pick:{{.ID}}" type="button" title="{{.Title}}" aria-current="{{if .Active}}true{{else}}false{{end}}"{{if $.OpenCodePanel.Busy}} disabled{{end}}>
-        <b>{{.Title}}</b><span>{{.Status}}</span>
-      </button>
+      <div class="opencode-session-row">
+        {{if .Renaming}}
+        <input class="opencode-rename" id="opencode-rename" type="text" maxlength="120" aria-label="Session title" value="{{.Title}}">
+        <div class="opencode-session-tools"><button class="settings-btn" id="opencode-rename-cancel" data-action="opencode-session-rename-cancel" type="button">Cancel</button><button class="settings-btn primary" id="opencode-rename-save" data-action="opencode-session-rename-save:{{.ID}}" type="button">Save</button></div>
+        {{else}}
+        <button class="opencode-session{{if .Active}} active{{end}}" id="opencode-session-{{.ID}}" data-action="opencode-session-pick:{{.ID}}" type="button" title="{{.Title}}" aria-current="{{if .Active}}true{{else}}false{{end}}"{{if $.OpenCodePanel.Busy}} disabled{{end}}>
+          <b>{{.Title}}</b><span class="opencode-state state-{{.State}}">{{.Status}}</span>
+        </button>
+        <div class="opencode-session-tools"><button class="opencode-mini" id="opencode-rename-{{.ID}}" data-action="opencode-session-rename:{{.ID}}" type="button" title="Rename session" aria-label="Rename session"{{if $.OpenCodePanel.Busy}} disabled{{end}}>Rename</button><button class="opencode-mini" id="opencode-archive-{{.ID}}" data-action="opencode-session-archive:{{.ID}}" type="button" title="Archive session" aria-label="Archive session"{{if $.OpenCodePanel.Busy}} disabled{{end}}>Archive</button></div>
+        {{end}}
+      </div>
       {{else}}
-      <div class="opencode-session-empty">{{if not .OpenCodePanel.WorkspaceAvailable}}Open a project folder to use OpenCode sessions.{{else if .OpenCodeConnected}}No local sessions for this workspace. Create one with +.{{else}}Connect to OpenCode Console in Settings to create a session.{{end}}</div>
+      <div class="opencode-session-empty">{{if not .OpenCodePanel.WorkspaceAvailable}}Open a project folder to use OpenCode sessions.{{else if .OpenCodeConnected}}No local sessions for this workspace. Create one with +.{{else}}No saved sessions. Connect to OpenCode Console in Settings to create one.{{end}}</div>
+      {{end}}
+      {{if .OpenCodePanel.Archived}}
+      <div class="opencode-session-section">Archived</div>
+      {{range .OpenCodePanel.Archived}}
+      <div class="opencode-session-row archived"><b title="{{.Title}}">{{.Title}}</b><button class="opencode-mini" id="opencode-restore-{{.ID}}" data-action="opencode-session-restore:{{.ID}}" type="button"{{if $.OpenCodePanel.Busy}} disabled{{end}}>Restore</button></div>
+      {{end}}
+      {{end}}
+      {{if .OpenCodePanel.OtherSessions}}
+      <div class="opencode-session-section">Other workspaces</div>
+      {{range .OpenCodePanel.OtherSessions}}
+      <button class="opencode-session other" id="opencode-other-{{.ID}}" data-action="opencode-session-other:{{.ID}}" type="button" title="{{.Root}}"{{if $.OpenCodePanel.Busy}} disabled{{end}}><b>{{.Title}}</b><span>{{.Root}}</span></button>
+      {{end}}
       {{end}}
     </aside>
     <div class="opencode-transcript" id="opencode-transcript" role="log" aria-label="OpenCode transcript" aria-live="polite">
+     <div class="opencode-transcript-inner" id="opencode-transcript-inner" style="top:{{.OpenCodePanel.TranscriptTop}}px">
       {{range .OpenCodePanel.Messages}}
-      <article class="opencode-message role-{{.Role}}" id="opencode-message-{{.ID}}"><b>{{if eq .Role "assistant"}}OpenCode{{else if eq .Role "tool"}}Tool{{else if eq .Role "system"}}Notice{{else}}You{{end}}</b><pre>{{.Text}}</pre>{{if .Note}}<span class="opencode-message-note">{{.Note}}</span>{{end}}</article>
+      <article class="opencode-message role-{{.Role}}" id="opencode-message-{{.ID}}"><b>{{if eq .Role "assistant"}}OpenCode{{else if eq .Role "tool"}}Tool{{else if eq .Role "system"}}Notice{{else if eq .Role "turn"}}Turn{{else}}You{{end}}</b>{{.Body}}{{if .Note}}<span class="opencode-message-note">{{.Note}}</span>{{end}}</article>
       {{else}}
       <div class="opencode-transcript-empty">{{if .OpenCodePanel.SelectedID}}No saved messages yet. Send a message to start.{{else}}Choose or create a local session.{{end}}</div>
       {{end}}
@@ -42,6 +71,7 @@
         {{end}}
       </section>
       {{end}}
+     </div>
     </div>
   </div>
   {{if .OpenCodePanel.Approval}}

@@ -76,6 +76,11 @@ const (
 	EventTextDelta EventKind = "text_delta"
 	EventToolCall  EventKind = "tool_call" // complete calls only
 	EventUsage     EventKind = "usage"
+	// EventToolStart and EventToolDone report local tool lifecycle. ToolCall.ID
+	// is the stored call ID; Text on Done is the terminal status
+	// (succeeded, failed, denied, rejected, skipped).
+	EventToolStart EventKind = "tool_start"
+	EventToolDone  EventKind = "tool_done"
 )
 
 // Event is delivered synchronously to the emit callback. SessionID and TurnID

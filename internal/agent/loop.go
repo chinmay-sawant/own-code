@@ -341,6 +341,7 @@ func (t *turnRun) handleCalls(ctx context.Context, step int, messageID string, c
 		if err != nil {
 			return err
 		}
+		t.emitTool(EventToolStart, id, call.Name, "")
 		deny := func(decision agentstore.ApprovalDecision) error {
 			sw, cancel := wctx()
 			defer cancel()
@@ -350,6 +351,7 @@ func (t *turnRun) handleCalls(ctx context.Context, step int, messageID string, c
 			if err := deny(agentstore.ApprovalCanceled); err != nil {
 				return err
 			}
+			t.emitTool(EventToolDone, id, call.Name, "skipped")
 			continue
 		}
 		var reason string
@@ -377,6 +379,7 @@ func (t *turnRun) handleCalls(ctx context.Context, step int, messageID string, c
 			if err != nil {
 				return err
 			}
+			t.emitTool(EventToolDone, id, call.Name, "rejected")
 			continue
 		}
 
@@ -389,6 +392,7 @@ func (t *turnRun) handleCalls(ctx context.Context, step int, messageID string, c
 			if err := deny(decision); err != nil {
 				return err
 			}
+			t.emitTool(EventToolDone, id, call.Name, "denied")
 			continue
 		}
 		// Approval is persisted before dispatch.
@@ -402,6 +406,7 @@ func (t *turnRun) handleCalls(ctx context.Context, step int, messageID string, c
 			// Approved but canceled before the claim: it never started.
 			// The stored status stays approved; recovery marks it interrupted.
 			t.overrides[id] = "Not run: the turn was canceled before dispatch."
+			t.emitTool(EventToolDone, id, call.Name, "skipped")
 			continue
 		}
 		sw, cancel = wctx()
@@ -409,6 +414,7 @@ func (t *turnRun) handleCalls(ctx context.Context, step int, messageID string, c
 		cancel()
 		if errors.Is(err, agentstore.ErrAlreadyDispatched) {
 			t.overrides[id] = "Not run: this call was already dispatched; it is never retried automatically."
+			t.emitTool(EventToolDone, id, call.Name, "skipped")
 			continue
 		}
 		if err != nil {
@@ -434,8 +440,17 @@ func (t *turnRun) handleCalls(ctx context.Context, step int, messageID string, c
 		if err != nil {
 			return err
 		}
+		t.emitTool(EventToolDone, id, call.Name, string(status))
 	}
 	return nil
+}
+
+// emitTool reports tool lifecycle to the optional Events consumer.
+func (t *turnRun) emitTool(kind EventKind, id, name, status string) {
+	if t.in.Events == nil {
+		return
+	}
+	t.in.Events(Event{Kind: kind, SessionID: t.in.SessionID, TurnID: t.in.TurnID, Text: status, ToolCall: &ToolCall{ID: id, Name: name}})
 }
 
 // ask obtains a decision. Anything but an exact, granted match is a denial.

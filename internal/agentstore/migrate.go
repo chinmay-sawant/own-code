@@ -3,18 +3,36 @@ package agentstore
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 )
 
-const schemaVersion = 4
+const schemaVersion = 5
+
+// The database file is capped at maxDatabasePages pages. With SQLite's default
+// 4 KiB page that is MaxDatabaseBytes (256 MiB); writes past the cap fail with
+// SQLITE_FULL instead of growing the profile without bound. There is no
+// automatic pruning: sessions stay until a user deletes them.
+const (
+	maxDatabasePages = 65536
+	MaxDatabaseBytes = maxDatabasePages * 4096
+)
 
 func migrate(ctx context.Context, db *sql.DB) error {
-	if _, err := db.ExecContext(ctx, `PRAGMA max_page_count = 65536`); err != nil {
+	if _, err := db.ExecContext(ctx, fmt.Sprintf(`PRAGMA max_page_count = %d`, maxDatabasePages)); err != nil {
 		return fmt.Errorf("agent store: set database size limit: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, `PRAGMA journal_mode = DELETE`); err != nil {
 		return fmt.Errorf("agent store: set journal mode: %w", err)
 	}
+
+	// v5 rebuilds agent_sessions, which child tables reference. Foreign keys
+	// must be off for the rebuild (the pragma is a no-op inside a transaction);
+	// they are re-enabled and verified before returning.
+	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+		return fmt.Errorf("agent store: disable foreign keys for migration: %w", err)
+	}
+	defer db.ExecContext(context.WithoutCancel(ctx), `PRAGMA foreign_keys = ON`)
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -63,6 +81,14 @@ func migrate(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 		if err := recordMigration(ctx, tx, 4); err != nil {
+			return err
+		}
+	}
+	if current < 5 {
+		if err := applySchemaV5(ctx, tx); err != nil {
+			return err
+		}
+		if err := recordMigration(ctx, tx, 5); err != nil {
 			return err
 		}
 	}
@@ -218,4 +244,61 @@ func applySchemaV4(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+// applySchemaV5 makes the local session ID the only identity of a session.
+// agent_sessions is rebuilt so server_id/opencode_session_id default to '' and
+// their uniqueness applies only to legacy rows that still carry a server pair;
+// archived_at adds soft archiving. Legacy rows, their messages, tool_activity
+// and event_checkpoints are copied unchanged and stay readable as
+// non-resumable history: the migration sets legacy = 1 on rows that carry a
+// server identity other than the old Console marker.
+func applySchemaV5(ctx context.Context, tx *sql.Tx) error {
+	statements := []string{
+		`CREATE TABLE agent_sessions_v5 (
+			id TEXT PRIMARY KEY CHECK(length(id) <= 256),
+			workspace_root TEXT NOT NULL REFERENCES workspaces(root) ON DELETE CASCADE,
+			server_id TEXT NOT NULL DEFAULT '' CHECK(length(server_id) <= 256),
+			opencode_session_id TEXT NOT NULL DEFAULT '' CHECK(length(opencode_session_id) <= 256),
+			title TEXT NOT NULL DEFAULT '' CHECK(length(title) <= 512),
+			agent TEXT NOT NULL DEFAULT '' CHECK(length(agent) <= 128),
+			model TEXT NOT NULL DEFAULT '' CHECK(length(model) <= 256),
+			status TEXT NOT NULL CHECK(status IN ('queued', 'running', 'completed', 'failed', 'interrupted')),
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL,
+			last_event_sequence INTEGER CHECK(last_event_sequence IS NULL OR last_event_sequence >= 0),
+			worktree_root TEXT NOT NULL DEFAULT '' CHECK(length(worktree_root) <= 4096),
+			baseline_commit TEXT NOT NULL DEFAULT '' CHECK(length(baseline_commit) <= 128),
+			provider_id TEXT NOT NULL DEFAULT '' CHECK(length(provider_id) <= 256),
+			model_id TEXT NOT NULL DEFAULT '' CHECK(length(model_id) <= 256),
+			archived_at INTEGER,
+			legacy INTEGER NOT NULL DEFAULT 0 CHECK(legacy IN (0, 1))
+		)`,
+		`INSERT INTO agent_sessions_v5 (
+			id, workspace_root, server_id, opencode_session_id, title, agent, model, status,
+			created_at, updated_at, last_event_sequence, worktree_root, baseline_commit, provider_id, model_id, legacy
+		) SELECT
+			id, workspace_root, server_id, opencode_session_id, title, agent, model, status,
+			created_at, updated_at, last_event_sequence, worktree_root, baseline_commit, provider_id, model_id,
+			CASE WHEN server_id <> '' AND server_id <> 'opencode-console' THEN 1 ELSE 0 END
+		FROM agent_sessions`,
+		`DROP TABLE agent_sessions`,
+		`ALTER TABLE agent_sessions_v5 RENAME TO agent_sessions`,
+		`CREATE INDEX agent_sessions_workspace_updated ON agent_sessions(workspace_root, updated_at DESC)`,
+		`CREATE UNIQUE INDEX agent_sessions_legacy_server_pair ON agent_sessions(server_id, opencode_session_id) WHERE server_id <> '' AND opencode_session_id <> ''`,
+	}
+	for _, statement := range statements {
+		if _, err := tx.ExecContext(ctx, statement); err != nil {
+			return fmt.Errorf("agent store: apply schema v5: %w", err)
+		}
+	}
+	rows, err := tx.QueryContext(ctx, `PRAGMA foreign_key_check`)
+	if err != nil {
+		return fmt.Errorf("agent store: verify schema v5 foreign keys: %w", err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return errors.New("agent store: schema v5 migration left dangling foreign keys")
+	}
+	return rows.Err()
 }
