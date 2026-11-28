@@ -289,11 +289,15 @@ func (r *Runner) run(ctx context.Context, in RunInput) (Outcome, error) {
 			}
 			return t.finish(agentstore.TurnFailed, "provider_error", msg)
 		}
-		sink.finish(ctx, text, agentstore.PartComplete)
+		if res.ContentParts == nil {
+			sink.finish(ctx, text, agentstore.PartComplete)
+		} else if err := sink.finishContentParts(ctx, res.ContentParts, agentstore.PartComplete); err != nil {
+			return t.fail(ctx, "persist_error", err)
+		}
 		if len(res.ToolCalls) == 0 {
 			return t.finish(agentstore.TurnCompleted, "final", "")
 		}
-		if err := t.handleCalls(ctx, step, assistantID, res.ToolCalls, known); err != nil {
+		if err := t.handleCalls(ctx, step, assistantID, res.ToolCalls, res.ContentParts, known); err != nil {
 			return t.fail(ctx, "persist_error", err)
 		}
 		if ctx.Err() != nil {
@@ -319,13 +323,31 @@ func (t *turnRun) fail(_ context.Context, reason string, cause error) (Outcome, 
 
 // handleCalls persists, authorizes, and runs each call sequentially. Every
 // requested call ends with a stored result so history stays protocol-complete.
-func (t *turnRun) handleCalls(ctx context.Context, step int, messageID string, calls []ToolCall, known map[string]ToolDefinition) error {
+func (t *turnRun) handleCalls(ctx context.Context, step int, messageID string, calls []ToolCall, contentParts []ContentPart, known map[string]ToolDefinition) error {
 	cfg := t.r.cfg
 	wctx := func() (context.Context, context.CancelFunc) {
 		return context.WithTimeout(context.WithoutCancel(ctx), finalizeTimeout)
 	}
 	for i, call := range calls {
 		t.out.ToolCalls++
+		var partOrdinal *int64
+		if contentParts != nil {
+			found := false
+			for index, part := range contentParts {
+				if !part.IsToolCall || part.ToolCallIndex != i {
+					continue
+				}
+				if found {
+					return errors.New("provider returned duplicate ordered parts for a tool call")
+				}
+				ordinal := int64(index)
+				partOrdinal = &ordinal
+				found = true
+			}
+			if !found {
+				return errors.New("provider omitted the ordered part for a tool call")
+			}
+		}
 		id := fmt.Sprintf("%s-s%d-c%d", t.in.TurnID, step, i)
 		input := string(call.Arguments)
 		oversize := len(call.Arguments) > cfg.MaxArgsBytes
@@ -335,7 +357,8 @@ func (t *turnRun) handleCalls(ctx context.Context, step int, messageID string, c
 		sw, cancel := wctx()
 		_, err := cfg.Store.SaveToolCall(sw, agentstore.ToolCall{
 			SessionID: t.in.SessionID, ID: id, MessageID: messageID, TurnID: t.in.TurnID,
-			Ordinal: -1, ToolName: call.Name, Input: input, CreatedAt: cfg.Now(),
+			Ordinal: -1, MessagePartOrdinal: partOrdinal, ToolName: call.Name, Input: input,
+			ThoughtSignature: call.ThoughtSignature, CreatedAt: cfg.Now(),
 		})
 		cancel()
 		if err != nil {
@@ -534,4 +557,21 @@ func (p *partSink) finish(ctx context.Context, text string, status agentstore.Pa
 	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), finalizeTimeout)
 	defer cancel()
 	p.write(wctx, text, status)
+}
+
+func (p *partSink) finishContentParts(ctx context.Context, parts []ContentPart, status agentstore.PartStatus) error {
+	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), finalizeTimeout)
+	defer cancel()
+	textParts := make([]agentstore.MessagePart, 0, len(parts))
+	for ordinal, part := range parts {
+		if part.IsToolCall || (part.Text == "" && part.ThoughtSignature == "") {
+			continue
+		}
+		textParts = append(textParts, agentstore.MessagePart{
+			SessionID: p.session, MessageID: p.message, ID: fmt.Sprintf("gemini-text-%d", ordinal),
+			Ordinal: int64(ordinal), Kind: agentstore.PartText, Text: part.Text,
+			ThoughtSignature: part.ThoughtSignature, Status: status, UpdatedAt: p.now(),
+		})
+	}
+	return p.store.ReplaceMessageTextParts(wctx, p.session, p.message, textParts)
 }

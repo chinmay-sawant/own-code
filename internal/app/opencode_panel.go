@@ -634,6 +634,10 @@ func (a *App) selectOpenCodeSession(sessionID string) error {
 	}
 	token, baseCtx := a.beginOpenCodeOperation(openCodeOperationLoadMessages)
 	store := a.openCode.store
+	configDir := ""
+	if a.settingsPath != "" {
+		configDir = filepath.Dir(a.settingsPath)
+	}
 	var worktreeManager *openCodeWorktreeManager
 	var worktreeManagerErr error
 	worktreeManager, worktreeManagerErr = a.openCodeWorktreeManager()
@@ -677,6 +681,10 @@ func (a *App) selectOpenCodeSession(sessionID string) error {
 		if err == nil {
 			messages, retry, err = loadOpenCodeTranscript(ctx, store, local.ID)
 		}
+		var proposalRestore *openCodeProposalRestore
+		if err == nil {
+			proposalRestore = loadOpenCodeProposalRestore(configDir, directory, sessionID)
+		}
 		if messages == nil {
 			messages = make([]openCodeTranscriptMessage, 0)
 		}
@@ -689,7 +697,8 @@ func (a *App) selectOpenCodeSession(sessionID string) error {
 		a.sendOpenCodeReply(baseCtx, result, openCodeReply{
 			token: token, operation: openCodeOperationLoadMessages,
 			selectedSessionID: sessionID, reviewable: reviewable,
-			messages: messages, retryText: retry, panelStatus: status, err: err,
+			messages: messages, proposalRestore: proposalRestore,
+			retryText: retry, panelStatus: status, err: err,
 		})
 	}()
 	return nil
@@ -782,6 +791,19 @@ func (a *App) sendOpenCodeReply(ctx context.Context, result chan<- openCodeReply
 }
 
 func (a *App) receiveOpenCodePanelReply(reply openCodeReply) {
+	restoreNote := ""
+	if reply.operation == openCodeOperationLoadMessages && reply.proposalRestore != nil {
+		a.applyOpenCodeProposalRestore(reply.proposalRestore)
+		loaded, skipped, err := reply.proposalRestore.loaded, reply.proposalRestore.skipped, reply.proposalRestore.err
+		switch {
+		case err != nil:
+			restoreNote = " Pending proposal review could not be restored safely."
+		case skipped > 0:
+			restoreNote = fmt.Sprintf(" Restored %d pending proposal(s); %d incomplete or invalid proposal record(s) were skipped.", loaded, skipped)
+		case loaded > 0:
+			restoreNote = fmt.Sprintf(" Restored %d pending proposal(s).", loaded)
+		}
+	}
 	if reply.operation == openCodeOperationReview {
 		a.openCode.reviewable = reply.reviewable
 	}
@@ -840,7 +862,9 @@ func (a *App) receiveOpenCodePanelReply(reply openCodeReply) {
 		a.openCode.messages = reply.messages
 	}
 	if reply.panelStatus != "" {
-		a.openCode.panelStatus = reply.panelStatus
+		a.openCode.panelStatus = reply.panelStatus + restoreNote
+	} else if restoreNote != "" {
+		a.openCode.panelStatus += restoreNote
 	}
 	if !reply.inProgress {
 		a.openCode.operation = openCodeOperationNone

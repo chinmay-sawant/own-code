@@ -59,7 +59,8 @@ type openCodeRuntime struct {
 	composer                   openCodeComposer
 	reviewable                 bool
 	proposals                  []openCodeProposalFile
-	// agentProposals holds pending write_file/edit_file proposals per session.
+	// agentProposals holds pending file proposals per session. Proposal metadata
+	// and hunk state are restored from the private config sidecar on session load.
 	agentProposals map[string][]*openCodeAgentProposal
 	// agentReview holds per-hunk accept/reject state per session and file.
 	agentReview *agentreview.Registry
@@ -104,6 +105,7 @@ type openCodeReply struct {
 	sessions          []opencode.Session
 	selectedSessionID string
 	messages          []openCodeTranscriptMessage
+	proposalRestore   *openCodeProposalRestore
 	panelStatus       string
 	inProgress        bool
 	reviewable        bool

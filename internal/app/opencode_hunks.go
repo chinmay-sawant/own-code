@@ -238,6 +238,9 @@ func (a *App) reviewOpenCodeHunk(op agentHunkOp, path, hunkID string) error {
 		if err := reg.Reject(sid, path, hunkID); err != nil {
 			return status("Could not reject: " + err.Error())
 		}
+		if err := a.persistAgentProposalState(sid); err != nil {
+			return status("Rejected a hunk in " + path + ", but its review state could not be saved for restart.")
+		}
 		return status("Rejected a hunk in " + path + ". Your files were not changed.")
 	}
 	if a.ws == nil || a.ws.Sample {
@@ -275,6 +278,12 @@ func (a *App) reviewOpenCodeHunk(op agentHunkOp, path, hunkID string) error {
 			_, _ = reg.Accept(sid, path, hunkID, next)
 		}
 		return status("Refused: " + strings.TrimSpace(err.Error()))
+	}
+	if err := a.persistAgentProposalState(sid); err != nil {
+		if op == agentHunkAccept {
+			return status("Applied a hunk to " + path + ", but its review state could not be saved for restart.")
+		}
+		return status("Reverted a hunk in " + path + ", but its review state could not be saved for restart.")
 	}
 	if op == agentHunkAccept {
 		return status("Applied a hunk to " + path + ".")

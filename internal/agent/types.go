@@ -37,17 +37,28 @@ const (
 // Message is one provider-neutral history entry. Assistant messages may carry
 // complete ToolCalls; tool messages carry the matching ToolCallID.
 type Message struct {
-	Role       Role
-	Content    string
-	ToolCalls  []ToolCall
-	ToolCallID string
+	Role         Role
+	Content      string
+	ToolCalls    []ToolCall
+	ContentParts []ContentPart
+	ToolCallID   string
+}
+
+// ContentPart keeps the order of assistant text and function-call parts when
+// a provider requires its original response structure in later requests.
+type ContentPart struct {
+	Text             string
+	IsToolCall       bool
+	ToolCallIndex    int
+	ThoughtSignature string
 }
 
 // ToolCall is a complete tool request. Arguments is always valid JSON.
 type ToolCall struct {
-	ID        string
-	Name      string
-	Arguments json.RawMessage
+	ID               string
+	Name             string
+	Arguments        json.RawMessage
+	ThoughtSignature string // opaque Gemini signature, returned unchanged with this call
 }
 
 // ToolSpec advertises one function tool to the model.
@@ -125,6 +136,7 @@ type Result struct {
 	Status       Status
 	Text         string
 	ToolCalls    []ToolCall
+	ContentParts []ContentPart
 	Usage        *Usage
 	FinishReason string
 }

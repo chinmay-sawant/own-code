@@ -2,7 +2,7 @@
 
 **Goal:** Show own-code-managed sessions, model responses, and local tool activity inside the existing workspace.
 
-**Implementation status:** Settings can load and select the Console catalog. The panel lists locally persisted SQLite sessions, creates a local session, and reads its local transcript without connecting to `opencode serve`. Prompt send, streaming, stop/retry, the agent loop, tool permissions, and tool execution are implemented (see ticked items). Rename/archive, per-turn provider/model display, and the offline/credential-state indicator remain open. Console inference does not create remote agent sessions or provide a server event stream; session and turn state belong to own-code.
+**Implementation status:** Settings load the Console catalog, and the panel lists, creates, renames, archives, resumes, and switches locally persisted SQLite sessions without connecting to `opencode serve`. Prompt send, streaming, stop/retry, per-turn model/status display, tool permissions, and tool execution are implemented (see ticked items). Offline history and the continue-state notice are implemented. The minimum-size dock presentation and streamed Markdown presentation still need live-window checks. Console inference does not create remote agent sessions or provide a server event stream; session and turn state belong to own-code.
 
 ## Phase 1: Manage local sessions
 

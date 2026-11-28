@@ -33,10 +33,16 @@ type openCodeProposalSnapshot struct {
 }
 
 type openCodeProposalFile struct {
-	Path      string
-	Change    string
-	SizeBytes int64
-	Diff      string
+	Path        string
+	Change      string
+	RenamedFrom string
+	SizeBytes   int64
+	Diff        string
+}
+
+type openCodeProposalChange struct {
+	Kind        string
+	RenamedFrom string
 }
 
 // snapshotProposal reads changes relative to the checkout's original commit.
@@ -98,7 +104,22 @@ func (m *openCodeWorktreeManager) snapshotProposal(ctx context.Context, worktree
 		if exists {
 			size = currentSize
 		}
-		if change == "deleted" {
+		if change.Kind == "renamed" {
+			if !exists || size > openCodeProposalMaxFileBytes {
+				return openCodeProposalSnapshot{}, fmt.Errorf("%w: rename destination is missing or too large: %s", errOpenCodeProposalUnsupported, relative)
+			}
+			_, sourceExists, err := inspectOpenCodeProposalPath(path, change.RenamedFrom)
+			if err != nil {
+				return openCodeProposalSnapshot{}, err
+			}
+			if sourceExists {
+				return openCodeProposalSnapshot{}, fmt.Errorf("%w: rename source still exists: %s", errOpenCodeProposalUnsupported, change.RenamedFrom)
+			}
+			mode, baseSize, err := m.proposalBaseFile(ctx, path, baseCommit, change.RenamedFrom)
+			if err != nil || !supportedProposalMode(mode) || baseSize > openCodeProposalMaxFileBytes {
+				return openCodeProposalSnapshot{}, fmt.Errorf("%w: rename source is not a bounded regular file: %s", errOpenCodeProposalUnsupported, change.RenamedFrom)
+			}
+		} else if change.Kind == "deleted" {
 			if exists {
 				return openCodeProposalSnapshot{}, fmt.Errorf("%w: deleted path still exists: %s", errOpenCodeProposalUnsupported, relative)
 			}
@@ -111,14 +132,19 @@ func (m *openCodeWorktreeManager) snapshotProposal(ctx context.Context, worktree
 			if !exists || size > openCodeProposalMaxFileBytes {
 				return openCodeProposalSnapshot{}, fmt.Errorf("%w: changed path is missing or too large: %s", errOpenCodeProposalUnsupported, relative)
 			}
-			if change == "modified" {
+			if change.Kind == "modified" {
 				mode, _, err := m.proposalBaseFile(ctx, path, baseCommit, relative)
 				if err != nil || !supportedProposalMode(mode) {
 					return openCodeProposalSnapshot{}, fmt.Errorf("%w: original path is not a regular file: %s", errOpenCodeProposalUnsupported, relative)
 				}
 			}
 		}
-		diff, err := m.proposalFileDiff(ctx, path, baseCommit, relative, change == "added")
+		var diff []byte
+		if change.Kind == "renamed" {
+			diff, err = m.proposalRenameDiff(ctx, path, baseCommit, change.RenamedFrom, relative)
+		} else {
+			diff, err = m.proposalFileDiff(ctx, path, baseCommit, relative, change.Kind == "added")
+		}
 		if err != nil {
 			return openCodeProposalSnapshot{}, err
 		}
@@ -130,7 +156,8 @@ func (m *openCodeWorktreeManager) snapshotProposal(ctx context.Context, worktree
 		}
 		snapshot.TotalBytes += len(diff)
 		snapshot.Files = append(snapshot.Files, openCodeProposalFile{
-			Path: relative, Change: change, SizeBytes: size, Diff: string(diff),
+			Path: relative, Change: change.Kind, RenamedFrom: change.RenamedFrom,
+			SizeBytes: size, Diff: string(diff),
 		})
 	}
 	return snapshot, nil
@@ -148,7 +175,7 @@ func validOpenCodeCommitID(value string) bool {
 	return true
 }
 
-func (m *openCodeWorktreeManager) proposalChangedPaths(ctx context.Context, directory, baseCommit string) (map[string]string, error) {
+func (m *openCodeWorktreeManager) proposalChangedPaths(ctx context.Context, directory, baseCommit string) (map[string]openCodeProposalChange, error) {
 	tracked, err := m.proposalGitOutput(ctx, directory, openCodeProposalMaxGitOutput, "diff", "--name-status", "-z", "--find-renames", baseCommit, "--")
 	if err != nil {
 		return nil, errors.New("could not inspect OpenCode proposal changes")
@@ -179,13 +206,13 @@ func (m *openCodeWorktreeManager) proposalChangedPaths(ctx context.Context, dire
 		if _, exists := changed[relative]; exists {
 			return nil, fmt.Errorf("%w: path is both tracked and untracked: %s", errOpenCodeProposalUnsupported, relative)
 		}
-		changed[relative] = "added"
+		changed[relative] = openCodeProposalChange{Kind: "added"}
 	}
 	return changed, nil
 }
 
-func parseOpenCodeProposalNameStatus(data []byte) (map[string]string, error) {
-	changed := make(map[string]string)
+func parseOpenCodeProposalNameStatus(data []byte) (map[string]openCodeProposalChange, error) {
+	changed := make(map[string]openCodeProposalChange)
 	if len(data) == 0 {
 		return changed, nil
 	}
@@ -193,24 +220,69 @@ func parseOpenCodeProposalNameStatus(data []byte) (map[string]string, error) {
 		return nil, errors.New("Git returned malformed OpenCode proposal status")
 	}
 	parts := bytes.Split(data[:len(data)-1], []byte{0})
-	if len(parts)%2 != 0 {
-		return nil, errors.New("Git returned malformed OpenCode proposal status")
-	}
-	for index := 0; index < len(parts); index += 2 {
-		status, relative := string(parts[index]), string(parts[index+1])
-		if status != "A" && status != "M" && status != "D" {
-			return nil, fmt.Errorf("%w: Git status %q", errOpenCodeProposalUnsupported, status)
+	seen := make(map[string]struct{}, len(parts))
+	for index := 0; index < len(parts); {
+		status := string(parts[index])
+		index++
+		pathsNeeded := 1
+		kind := ""
+		switch status {
+		case "A":
+			kind = "added"
+		case "M":
+			kind = "modified"
+		case "D":
+			kind = "deleted"
+		default:
+			if !validProposalRenameStatus(status) {
+				return nil, fmt.Errorf("%w: Git status %q", errOpenCodeProposalUnsupported, status)
+			}
+			pathsNeeded = 2
+			kind = "renamed"
+		}
+		if index+pathsNeeded > len(parts) {
+			return nil, errors.New("Git returned malformed OpenCode proposal status")
+		}
+		oldOrOnlyPath := string(parts[index])
+		index++
+		relative := oldOrOnlyPath
+		renamedFrom := ""
+		if pathsNeeded == 2 {
+			renamedFrom = oldOrOnlyPath
+			relative = string(parts[index])
+			index++
 		}
 		if err := validateOpenCodeProposalPath(relative); err != nil {
 			return nil, err
 		}
-		change := map[string]string{"A": "added", "M": "modified", "D": "deleted"}[status]
-		if _, exists := changed[relative]; exists {
-			return nil, fmt.Errorf("%w: duplicate path: %s", errOpenCodeProposalUnsupported, relative)
+		if renamedFrom != "" {
+			if err := validateOpenCodeProposalPath(renamedFrom); err != nil {
+				return nil, err
+			}
+			if renamedFrom == relative {
+				return nil, fmt.Errorf("%w: rename source and destination are the same", errOpenCodeProposalUnsupported)
+			}
 		}
-		changed[relative] = change
+		for _, path := range []string{relative, renamedFrom} {
+			if path == "" {
+				continue
+			}
+			if _, exists := seen[path]; exists {
+				return nil, fmt.Errorf("%w: duplicate path: %s", errOpenCodeProposalUnsupported, path)
+			}
+			seen[path] = struct{}{}
+		}
+		changed[relative] = openCodeProposalChange{Kind: kind, RenamedFrom: renamedFrom}
 	}
 	return changed, nil
+}
+
+func validProposalRenameStatus(status string) bool {
+	if len(status) < 2 || status[0] != 'R' {
+		return false
+	}
+	score, err := strconv.Atoi(status[1:])
+	return err == nil && score >= 0 && score <= 100
 }
 
 func parseOpenCodeUntrackedPaths(data []byte) ([]string, error) {
@@ -349,6 +421,16 @@ func (m *openCodeWorktreeManager) proposalFileDiff(ctx context.Context, director
 	}
 	if err != nil {
 		return nil, errors.New("could not create OpenCode proposal diff")
+	}
+	return data, nil
+}
+
+func (m *openCodeWorktreeManager) proposalRenameDiff(ctx context.Context, directory, baseCommit, from, to string) ([]byte, error) {
+	args := []string{"diff", "--no-ext-diff", "--no-textconv", "--no-color", "--find-renames", "--unified=3",
+		baseCommit, "--", ":(literal)" + from, ":(literal)" + to}
+	data, err := m.proposalGitOutput(ctx, directory, openCodeProposalMaxDiffBytes, args...)
+	if err != nil {
+		return nil, errors.New("could not create OpenCode proposal rename diff")
 	}
 	return data, nil
 }

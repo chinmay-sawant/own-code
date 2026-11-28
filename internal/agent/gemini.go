@@ -70,16 +70,43 @@ func (geminiAdapter) encode(req Request, _ bool) ([]byte, error) {
 			push("user", gemPart{"functionResponse": map[string]any{"name": name, "response": map[string]any{"result": m.Content}}})
 		case RoleAssistant:
 			var parts []gemPart
-			if m.Content != "" {
-				parts = append(parts, gemPart{"text": m.Content})
-			}
-			for _, tc := range m.ToolCalls {
+			appendCall := func(tc ToolCall, signature string) {
 				args := tc.Arguments
 				if len(args) == 0 {
 					args = json.RawMessage(`{}`)
 				}
 				names[tc.ID] = tc.Name
-				parts = append(parts, gemPart{"functionCall": map[string]any{"name": tc.Name, "args": args}})
+				part := gemPart{"functionCall": map[string]any{"name": tc.Name, "args": args}}
+				if signature == "" {
+					signature = tc.ThoughtSignature
+				}
+				if signature != "" {
+					part["thoughtSignature"] = signature
+				}
+				parts = append(parts, part)
+			}
+			if m.ContentParts != nil {
+				for _, contentPart := range m.ContentParts {
+					if contentPart.IsToolCall {
+						if contentPart.ToolCallIndex < 0 || contentPart.ToolCallIndex >= len(m.ToolCalls) {
+							return nil, errors.New("assistant content part refers to a missing Gemini function call")
+						}
+						appendCall(m.ToolCalls[contentPart.ToolCallIndex], contentPart.ThoughtSignature)
+						continue
+					}
+					part := gemPart{"text": contentPart.Text}
+					if contentPart.ThoughtSignature != "" {
+						part["thoughtSignature"] = contentPart.ThoughtSignature
+					}
+					parts = append(parts, part)
+				}
+			} else {
+				if m.Content != "" {
+					parts = append(parts, gemPart{"text": m.Content})
+				}
+				for _, tc := range m.ToolCalls {
+					appendCall(tc, tc.ThoughtSignature)
+				}
 			}
 			if len(parts) > 0 {
 				push("model", parts...)
@@ -120,6 +147,7 @@ type gemChunk struct {
 					Name string          `json:"name"`
 					Args json.RawMessage `json:"args"`
 				} `json:"functionCall"`
+				ThoughtSignature string `json:"thoughtSignature"`
 			} `json:"parts"`
 		} `json:"content"`
 		FinishReason string `json:"finishReason"`
@@ -143,6 +171,7 @@ type gemAcc struct {
 	emit   func(Event)
 	text   strings.Builder
 	calls  []ToolCall
+	parts  []ContentPart
 	reason string
 	usage  *Usage
 }
@@ -185,10 +214,19 @@ func (a *gemAcc) add(raw []byte) error {
 				if id == "" {
 					id = localCallID(len(a.calls), fc.Name, args)
 				}
-				a.calls = append(a.calls, ToolCall{ID: id, Name: fc.Name, Arguments: args})
-			case p.Text != "" && !p.Thought:
+				callIndex := len(a.calls)
+				a.calls = append(a.calls, ToolCall{
+					ID: id, Name: fc.Name, Arguments: args, ThoughtSignature: p.ThoughtSignature,
+				})
+				a.parts = append(a.parts, ContentPart{
+					IsToolCall: true, ToolCallIndex: callIndex, ThoughtSignature: p.ThoughtSignature,
+				})
+			case !p.Thought && (p.Text != "" || p.ThoughtSignature != ""):
+				a.parts = appendGeminiTextPart(a.parts, ContentPart{
+					Text: p.Text, ThoughtSignature: p.ThoughtSignature,
+				})
 				a.text.WriteString(p.Text)
-				if a.emit != nil {
+				if a.emit != nil && p.Text != "" {
 					a.emit(Event{Kind: EventTextDelta, Text: p.Text})
 				}
 			}
@@ -200,12 +238,20 @@ func (a *gemAcc) add(raw []byte) error {
 	return nil
 }
 
+func appendGeminiTextPart(parts []ContentPart, next ContentPart) []ContentPart {
+	if len(parts) > 0 && !parts[len(parts)-1].IsToolCall && parts[len(parts)-1].ThoughtSignature == "" && next.ThoughtSignature == "" {
+		parts[len(parts)-1].Text += next.Text
+		return parts
+	}
+	return append(parts, next)
+}
+
 func (geminiAdapter) decode(raw []byte) (Result, error) {
 	a := &gemAcc{}
 	if err := a.add(raw); err != nil {
 		return Result{}, err
 	}
-	return Result{Text: a.text.String(), ToolCalls: a.calls, Usage: a.usage, FinishReason: a.reason}, nil
+	return Result{Text: a.text.String(), ToolCalls: a.calls, ContentParts: a.parts, Usage: a.usage, FinishReason: a.reason}, nil
 }
 
 type gemStream struct{ gemAcc }
@@ -237,5 +283,5 @@ func (s *gemStream) finish() (Result, error) {
 	if s.usage != nil {
 		s.emit(Event{Kind: EventUsage, Usage: s.usage})
 	}
-	return Result{Text: s.text.String(), ToolCalls: s.calls, Usage: s.usage, FinishReason: s.reason}, nil
+	return Result{Text: s.text.String(), ToolCalls: s.calls, ContentParts: s.parts, Usage: s.usage, FinishReason: s.reason}, nil
 }

@@ -15,11 +15,13 @@ import (
 // truncated argument set must not be validated or executed; oversize input is
 // rejected instead. Display text and tool output are truncated with a marker.
 const (
-	maxPartText      = 256 * 1024
-	maxToolInput     = 64 * 1024
-	maxToolResult    = 64 * 1024
-	maxTurnError     = 4 * 1024
-	truncationMarker = "\n[truncated]"
+	maxPartText             = 256 * 1024
+	maxToolInput            = 64 * 1024
+	maxThoughtSignatureSize = 8 * 1024 * 1024
+	maxMessageParts         = 4096
+	maxToolResult           = 64 * 1024
+	maxTurnError            = 4 * 1024
+	truncationMarker        = "\n[truncated]"
 )
 
 var (
@@ -66,15 +68,16 @@ const (
 )
 
 type MessagePart struct {
-	SessionID  string
-	MessageID  string
-	ID         string
-	Ordinal    int64 // negative appends after the existing parts
-	Kind       PartKind
-	Text       string
-	ToolCallID string
-	Status     PartStatus
-	UpdatedAt  time.Time
+	SessionID        string
+	MessageID        string
+	ID               string
+	Ordinal          int64 // negative appends after the existing parts
+	Kind             PartKind
+	Text             string
+	ThoughtSignature string
+	ToolCallID       string
+	Status           PartStatus
+	UpdatedAt        time.Time
 }
 
 type ToolCallStatus string
@@ -103,23 +106,25 @@ const (
 )
 
 type ToolCall struct {
-	SessionID         string
-	ID                string
-	MessageID         string
-	TurnID            string
-	Ordinal           int64 // negative appends
-	PartID            string
-	ToolName          string
-	Input             string // complete JSON arguments
-	Status            ToolCallStatus
-	Approval          ApprovalDecision
-	ApprovalAt        time.Time
-	DispatchStartedAt time.Time
-	Result            string
-	ResultTruncated   bool
-	IsError           bool
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	SessionID          string
+	ID                 string
+	MessageID          string
+	TurnID             string
+	Ordinal            int64  // negative appends
+	MessagePartOrdinal *int64 // nil appends after existing message parts
+	PartID             string
+	ToolName           string
+	Input              string // complete JSON arguments
+	ThoughtSignature   string // opaque Gemini function-call metadata, stored verbatim
+	Status             ToolCallStatus
+	Approval           ApprovalDecision
+	ApprovalAt         time.Time
+	DispatchStartedAt  time.Time
+	Result             string
+	ResultTruncated    bool
+	IsError            bool
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 // Terminal reports whether no further transition is allowed.
@@ -141,10 +146,12 @@ type TurnMessage struct {
 }
 
 type HistoryPart struct {
-	Kind     PartKind
-	Text     string
-	Status   PartStatus
-	ToolCall *ToolCall
+	Ordinal          int64
+	Kind             PartKind
+	Text             string
+	ThoughtSignature string
+	Status           PartStatus
+	ToolCall         *ToolCall
 }
 
 // HistoryMessage is one message rebuilt from the database. Legacy messages
@@ -404,6 +411,9 @@ func (s *Store) SaveMessagePart(ctx context.Context, part MessagePart) error {
 	default:
 		return fmt.Errorf("agent store: invalid part status %q", part.Status)
 	}
+	if len(part.ThoughtSignature) > maxThoughtSignatureSize {
+		return fmt.Errorf("%w: thought signature exceeds %d bytes", ErrTooLarge, maxThoughtSignatureSize)
+	}
 	text, _ := boundedMarked(part.Text, maxPartText)
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -427,9 +437,9 @@ func (s *Store) SaveMessagePart(ctx context.Context, part MessagePart) error {
 			}
 		}
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO message_parts (session_id, message_id, id, ordinal, kind, text, tool_call_id, status, updated_at)
-			VALUES (?, ?, ?, ?, 'text', ?, '', ?, ?)`,
-			part.SessionID, part.MessageID, part.ID, ordinal, text, string(part.Status), millis(part.UpdatedAt)); err != nil {
+			INSERT INTO message_parts (session_id, message_id, id, ordinal, kind, text, thought_signature, tool_call_id, status, updated_at)
+			VALUES (?, ?, ?, ?, 'text', ?, ?, '', ?, ?)`,
+			part.SessionID, part.MessageID, part.ID, ordinal, text, part.ThoughtSignature, string(part.Status), millis(part.UpdatedAt)); err != nil {
 			return fmt.Errorf("agent store: save part: %w", err)
 		}
 	case err != nil:
@@ -437,13 +447,84 @@ func (s *Store) SaveMessagePart(ctx context.Context, part MessagePart) error {
 	case existing != PartStreaming:
 		return nil // finished parts are immutable; retries are no-ops
 	default:
-		if _, err := tx.ExecContext(ctx, `UPDATE message_parts SET text = ?, status = ?, updated_at = ?
+		if _, err := tx.ExecContext(ctx, `UPDATE message_parts SET text = ?, thought_signature = ?, status = ?, updated_at = ?
 			WHERE session_id = ? AND message_id = ? AND id = ?`,
-			text, string(part.Status), millis(part.UpdatedAt), part.SessionID, part.MessageID, part.ID); err != nil {
+			text, part.ThoughtSignature, string(part.Status), millis(part.UpdatedAt), part.SessionID, part.MessageID, part.ID); err != nil {
 			return fmt.Errorf("agent store: update part: %w", err)
 		}
 	}
 	if err := syncBody(ctx, tx, part.SessionID, part.MessageID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// ReplaceMessageTextParts stores the completed ordered text parts for an
+// assistant response. Tool-call parts remain intact at their provider
+// ordinals, allowing history to reproduce interleaved Gemini parts exactly.
+func (s *Store) ReplaceMessageTextParts(ctx context.Context, sessionID, messageID string, parts []MessagePart) error {
+	if err := requiredID("session ID", sessionID); err != nil {
+		return err
+	}
+	if err := requiredID("message ID", messageID); err != nil {
+		return err
+	}
+	if len(parts) > maxMessageParts {
+		return fmt.Errorf("agent store: message has more than %d parts", maxMessageParts)
+	}
+	seenIDs := make(map[string]struct{}, len(parts))
+	seenOrdinals := make(map[int64]struct{}, len(parts))
+	texts := make([]string, len(parts))
+	for i, part := range parts {
+		if part.SessionID != sessionID || part.MessageID != messageID {
+			return errors.New("agent store: text part belongs to another message")
+		}
+		if err := requiredID("part ID", part.ID); err != nil {
+			return err
+		}
+		if part.Kind != PartText {
+			return errors.New("agent store: replacement parts must be text")
+		}
+		if part.Ordinal < 0 {
+			return errors.New("agent store: replacement part ordinal must be nonnegative")
+		}
+		if part.Status != PartComplete && part.Status != PartInterrupted {
+			return errors.New("agent store: replacement text parts must be finished")
+		}
+		if len(part.ThoughtSignature) > maxThoughtSignatureSize {
+			return fmt.Errorf("%w: thought signature exceeds %d bytes", ErrTooLarge, maxThoughtSignatureSize)
+		}
+		if _, exists := seenIDs[part.ID]; exists {
+			return errors.New("agent store: duplicate replacement part ID")
+		}
+		if _, exists := seenOrdinals[part.Ordinal]; exists {
+			return errors.New("agent store: duplicate replacement part ordinal")
+		}
+		seenIDs[part.ID] = struct{}{}
+		seenOrdinals[part.Ordinal] = struct{}{}
+		texts[i], _ = boundedMarked(part.Text, maxPartText)
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("agent store: begin text-part replacement: %w", err)
+	}
+	defer tx.Rollback()
+	if err := requireMessage(ctx, tx, sessionID, messageID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM message_parts WHERE session_id = ? AND message_id = ? AND kind = 'text'`, sessionID, messageID); err != nil {
+		return fmt.Errorf("agent store: replace text parts: %w", err)
+	}
+	for i, part := range parts {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO message_parts (session_id, message_id, id, ordinal, kind, text, thought_signature, tool_call_id, status, updated_at)
+			VALUES (?, ?, ?, ?, 'text', ?, ?, '', ?, ?)`,
+			sessionID, messageID, part.ID, part.Ordinal, texts[i], part.ThoughtSignature, string(part.Status), millis(part.UpdatedAt)); err != nil {
+			return fmt.Errorf("agent store: insert replacement text part: %w", err)
+		}
+	}
+	if err := syncBody(ctx, tx, sessionID, messageID); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -506,6 +587,12 @@ func (s *Store) SaveToolCall(ctx context.Context, call ToolCall) (ToolCall, erro
 	if len(call.Input) > maxToolInput {
 		return ToolCall{}, fmt.Errorf("%w: tool input exceeds %d bytes", ErrTooLarge, maxToolInput)
 	}
+	if len(call.ThoughtSignature) > maxThoughtSignatureSize {
+		return ToolCall{}, fmt.Errorf("%w: thought signature exceeds %d bytes", ErrTooLarge, maxThoughtSignatureSize)
+	}
+	if call.MessagePartOrdinal != nil && *call.MessagePartOrdinal < 0 {
+		return ToolCall{}, errors.New("agent store: message part ordinal must be nonnegative")
+	}
 	if !json.Valid([]byte(call.Input)) {
 		return ToolCall{}, errors.New("agent store: tool input must be complete valid JSON")
 	}
@@ -537,21 +624,26 @@ func (s *Store) SaveToolCall(ctx context.Context, call ToolCall) (ToolCall, erro
 		}
 	}
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO agent_tool_calls (session_id, id, message_id, turn_id, ordinal, tool_name, input, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?)
+		INSERT INTO agent_tool_calls (session_id, id, message_id, turn_id, ordinal, tool_name, input, thought_signature, status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?)
 		ON CONFLICT(session_id, id) DO NOTHING`,
-		call.SessionID, call.ID, call.MessageID, call.TurnID, ordinal, call.ToolName, input, now, now)
+		call.SessionID, call.ID, call.MessageID, call.TurnID, ordinal, call.ToolName, input, call.ThoughtSignature, now, now)
 	if err != nil {
 		return ToolCall{}, fmt.Errorf("agent store: save tool call: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n > 0 {
-		partOrdinal, err := nextOrdinal(ctx, tx, `SELECT COALESCE(MAX(ordinal) + 1, 0) FROM message_parts WHERE session_id = ? AND message_id = ?`, call.SessionID, call.MessageID)
-		if err != nil {
-			return ToolCall{}, fmt.Errorf("agent store: allocate part ordinal: %w", err)
+		partOrdinal := int64(0)
+		if call.MessagePartOrdinal != nil {
+			partOrdinal = *call.MessagePartOrdinal
+		} else {
+			partOrdinal, err = nextOrdinal(ctx, tx, `SELECT COALESCE(MAX(ordinal) + 1, 0) FROM message_parts WHERE session_id = ? AND message_id = ?`, call.SessionID, call.MessageID)
+			if err != nil {
+				return ToolCall{}, fmt.Errorf("agent store: allocate part ordinal: %w", err)
+			}
 		}
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO message_parts (session_id, message_id, id, ordinal, kind, text, tool_call_id, status, updated_at)
-			VALUES (?, ?, ?, ?, 'tool_call', '', ?, 'complete', ?)
+			INSERT INTO message_parts (session_id, message_id, id, ordinal, kind, text, thought_signature, tool_call_id, status, updated_at)
+			VALUES (?, ?, ?, ?, 'tool_call', '', '', ?, 'complete', ?)
 			ON CONFLICT(session_id, message_id, id) DO NOTHING`,
 			call.SessionID, call.MessageID, partID, partOrdinal, call.ID, now); err != nil {
 			return ToolCall{}, fmt.Errorf("agent store: save tool call part: %w", err)
@@ -700,7 +792,7 @@ func (s *Store) GetToolCall(ctx context.Context, sessionID, callID string) (Tool
 }
 
 const toolCallSelect = `SELECT session_id, id, message_id, turn_id, ordinal, tool_name, input, status, approval, approval_at,
-	dispatch_started_at, result, result_truncated, is_error, created_at, updated_at FROM agent_tool_calls`
+	dispatch_started_at, result, result_truncated, is_error, created_at, updated_at, thought_signature FROM agent_tool_calls`
 
 func scanToolCall(row rowScanner) (ToolCall, error) {
 	var call ToolCall
@@ -708,7 +800,8 @@ func scanToolCall(row rowScanner) (ToolCall, error) {
 	var truncated, isError int
 	var created, updated int64
 	if err := row.Scan(&call.SessionID, &call.ID, &call.MessageID, &call.TurnID, &call.Ordinal, &call.ToolName, &call.Input,
-		&call.Status, &call.Approval, &approvalAt, &dispatchAt, &call.Result, &truncated, &isError, &created, &updated); err != nil {
+		&call.Status, &call.Approval, &approvalAt, &dispatchAt, &call.Result, &truncated, &isError, &created, &updated,
+		&call.ThoughtSignature); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ToolCall{}, ErrNotFound
 		}
@@ -785,14 +878,14 @@ func (s *Store) LoadHistory(ctx context.Context, sessionID string) ([]HistoryMes
 	}
 	messageRows.Close()
 
-	partRows, err := tx.QueryContext(ctx, `SELECT message_id, kind, text, tool_call_id, status FROM message_parts WHERE session_id = ? ORDER BY message_id, ordinal, id`, sessionID)
+	partRows, err := tx.QueryContext(ctx, `SELECT message_id, ordinal, kind, text, thought_signature, tool_call_id, status FROM message_parts WHERE session_id = ? ORDER BY message_id, ordinal, id`, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("agent store: read parts: %w", err)
 	}
 	for partRows.Next() {
 		var messageID, toolCallID string
 		var part HistoryPart
-		if err := partRows.Scan(&messageID, &part.Kind, &part.Text, &toolCallID, &part.Status); err != nil {
+		if err := partRows.Scan(&messageID, &part.Ordinal, &part.Kind, &part.Text, &part.ThoughtSignature, &toolCallID, &part.Status); err != nil {
 			partRows.Close()
 			return nil, fmt.Errorf("agent store: scan part: %w", err)
 		}
@@ -807,6 +900,7 @@ func (s *Store) LoadHistory(ctx context.Context, sessionID string) ([]HistoryMes
 			}
 			copied := *call
 			part.ToolCall = &copied
+			part.ThoughtSignature = copied.ThoughtSignature
 		}
 		history[index].Parts = append(history[index].Parts, part)
 	}

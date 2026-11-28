@@ -246,8 +246,16 @@ func TestFinalResponse(t *testing.T) {
 
 func TestMultipleToolStepsRebuildHistory(t *testing.T) {
 	e := newEnv(t, nil)
+	firstCall := tc("echo", `{"msg":"a"}`)
+	firstCall.ThoughtSignature = "opaque/gemini+signature=="
+	firstResponse := toolStep(firstCall)
+	firstResponse.Text = "after call"
+	firstResponse.ContentParts = []ContentPart{
+		{IsToolCall: true, ToolCallIndex: 0, ThoughtSignature: firstCall.ThoughtSignature},
+		{Text: "after call"},
+	}
 	e.prov.script["s1"] = []Result{
-		toolStep(tc("echo", `{"msg":"a"}`)),
+		firstResponse,
 		toolStep(tc("echo", `{"msg":"b"}`), tc("echo", `{"msg":"c"}`)),
 		{Status: StatusCompleted, Text: "all done"},
 	}
@@ -259,6 +267,13 @@ func TestMultipleToolStepsRebuildHistory(t *testing.T) {
 		t.Fatalf("execs=%d approvals=%d", e.reg.execs.Load(), e.appr.calls.Load())
 	}
 	reqs := e.prov.reqs()
+	if len(reqs[1].Messages) < 2 || len(reqs[1].Messages[1].ToolCalls) != 1 ||
+		reqs[1].Messages[1].ToolCalls[0].ThoughtSignature != firstCall.ThoughtSignature ||
+		len(reqs[1].Messages[1].ContentParts) != 2 || !reqs[1].Messages[1].ContentParts[0].IsToolCall ||
+		reqs[1].Messages[1].ContentParts[0].ThoughtSignature != firstCall.ThoughtSignature ||
+		reqs[1].Messages[1].ContentParts[1].Text != "after call" {
+		t.Fatalf("tool-call signature was lost from rebuilt history: %+v", reqs[1].Messages)
+	}
 	last := reqs[2].Messages
 	var roles []Role
 	for _, m := range last {

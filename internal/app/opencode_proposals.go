@@ -17,8 +17,9 @@ import (
 const openCodeProposalDirectory = "agent-workbench/proposals"
 
 // openCodeAgentProposal is one write_file/edit_file/delete_file/move_file proposal awaiting a native
-// Accept or Reject. It lives in memory only; the staged copy sits in a private
-// per-session proposal directory that is never the worktree or the checkout.
+// Accept or Reject. The app keeps its live view in memory, saves metadata and
+// hunk state in a private sidecar, and keeps proposed bytes in the private
+// per-session proposal directory outside the worktree and checkout.
 type openCodeAgentProposal struct {
 	ID       string
 	Proposal agenttools.Proposal
@@ -62,15 +63,31 @@ func (a *App) addAgentProposal(sessionID string, p agenttools.Proposal) {
 		a.openCode.agentProposals = map[string][]*openCodeAgentProposal{}
 	}
 	note := a.recordAgentReview(sessionID, p)
+	if err := a.verifyStagedOpenCodeProposal(sessionID, p); err != nil {
+		note = appendProposalPersistenceNote(note, "its staged copy could not be saved for restart")
+	}
 	list := a.openCode.agentProposals[sessionID]
 	entry := &openCodeAgentProposal{ID: openCodeAgentProposalID(p), Proposal: p, Note: note}
 	for i, e := range list {
 		if e.Proposal.Path == p.Path {
 			list[i] = entry
+			if err := a.persistAgentProposalState(sessionID); err != nil {
+				entry.Note = appendProposalPersistenceNote(entry.Note, "its review state could not be saved for restart")
+			}
 			return
 		}
 	}
 	a.openCode.agentProposals[sessionID] = append(list, entry)
+	if err := a.persistAgentProposalState(sessionID); err != nil {
+		entry.Note = appendProposalPersistenceNote(entry.Note, "its review state could not be saved for restart")
+	}
+}
+
+func appendProposalPersistenceNote(note, failure string) string {
+	if note == "" {
+		return "Proposal is available for this run, but " + failure + "."
+	}
+	return note + " " + strings.ToUpper(failure[:1]) + failure[1:] + "."
 }
 
 func (a *App) agentProposalRows(sessionID string) []openCodePanelAgentProposalRow {
@@ -100,12 +117,13 @@ func (a *App) findAgentProposal(id string) (string, int, *openCodeAgentProposal)
 	return sid, -1, nil
 }
 
-func (a *App) dropAgentProposal(sid string, i int) {
+func (a *App) dropAgentProposal(sid string, i int) error {
 	list := a.openCode.agentProposals[sid]
 	e := list[i]
 	a.openCode.agentProposals[sid] = append(list[:i:i], list[i+1:]...)
 	a.discardStagedProposal(sid, e.Proposal.Path)
 	a.forgetAgentReview(sid, e.Proposal.Path)
+	return a.persistAgentProposalState(sid)
 }
 
 // discardStagedProposal removes the staged copy so later edits start from the
@@ -134,8 +152,11 @@ func (a *App) rejectOpenCodeProposal(id string) error {
 		a.refresh()
 		return nil
 	}
-	a.dropAgentProposal(sid, i)
+	stateErr := a.dropAgentProposal(sid, i)
 	a.openCode.panelStatus = "Rejected " + e.Proposal.Path + ". Your checkout was not changed."
+	if stateErr != nil {
+		a.openCode.panelStatus += " The pending review record could not be cleared for restart."
+	}
 	a.refresh()
 	return nil
 }
@@ -236,16 +257,22 @@ func (a *App) acceptOpenCodeProposal(id string) error {
 		}
 		return fail("Refused: the proposal could not be applied safely.")
 	}
-	a.dropAgentProposal(sid, i)
+	stateErr := a.dropAgentProposal(sid, i)
 	switch {
 	case e.Proposal.Deleted:
 		a.forgetExplorerDocs([]string{e.Proposal.Path}, nil) // closes any open tab/buffer (never dirty here)
 		a.openCode.panelStatus = "Deleted " + e.Proposal.Path + " from your checkout."
+		if stateErr != nil {
+			a.openCode.panelStatus += " Its review record could not be cleared for restart."
+		}
 		a.refresh()
 		return nil
 	case e.Proposal.RenamedFrom != "":
 		a.forgetExplorerDocs(nil, map[string]string{e.Proposal.RenamedFrom: e.Proposal.Path})
 		a.openCode.panelStatus = "Moved " + e.Proposal.RenamedFrom + " to " + e.Proposal.Path + "."
+		if stateErr != nil {
+			a.openCode.panelStatus += " Its review record could not be cleared for restart."
+		}
 		a.refresh()
 		return nil
 	}
@@ -253,6 +280,9 @@ func (a *App) acceptOpenCodeProposal(id string) error {
 		a.docs[e.Proposal.Path] = a.ws.openDoc(e.Proposal.Path)
 	}
 	a.openCode.panelStatus = "Applied " + e.Proposal.Path + " to your checkout."
+	if stateErr != nil {
+		a.openCode.panelStatus += " Its review record could not be cleared for restart."
+	}
 	a.refresh()
 	return nil
 }

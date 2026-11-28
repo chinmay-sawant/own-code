@@ -50,6 +50,4 @@ Decisions are the effective own-code decisions (`agenttools.DefaultPolicy` plus 
   and its own tests; not done now.
 - Do not port `PrivateOrLoopback` now: no own-code tool performs network fetches. Revisit if a fetch/web tool
   is added; it would be a prerequisite for one. Note `ModelTarget.endpoint` already restricts http to loopback.
-- Gaps still open in own-code (tracked in 09, not solved by this audit): dirty editor buffer checks and staged
-  git state when applying a proposal belong to the app-side accept flow; `ApplyProposal` only rechecks the
-  baseline hash, containment and symlinks.
+- Resolved in the app-side accept flow: dirty editor buffer and staged Git-state checks run when accepting a proposal, alongside baseline hash, containment, and symlink revalidation. Delete/rename acceptance also checks the source and destination. Evidence: `TestOpenCodeAgentProposalAcceptRefusalsAndReject`, `TestOpenCodeAgentDeleteAndRenameProposals`.

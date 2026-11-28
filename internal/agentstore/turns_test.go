@@ -113,8 +113,12 @@ func TestTurnRoundTripWithToolCallsAndRecovery(t *testing.T) {
 	mustNil(t, store.SaveMessagePart(ctx, MessagePart{SessionID: "s1", MessageID: "a1", ID: "p0", Ordinal: -1, Kind: PartText, Text: "Let me look.", Status: PartStreaming}))
 	mustNil(t, store.SaveMessagePart(ctx, MessagePart{SessionID: "s1", MessageID: "a1", ID: "p0", Kind: PartText, Text: "Let me look. ", Status: PartComplete}))
 	mustNil(t, store.SaveMessagePart(ctx, MessagePart{SessionID: "s1", MessageID: "a1", ID: "p0", Kind: PartText, Text: "late stream", Status: PartStreaming})) // ignored
-	call, err := store.SaveToolCall(ctx, ToolCall{SessionID: "s1", ID: "c1", MessageID: "a1", TurnID: "turn1", Ordinal: -1, ToolName: "bash", Input: `{"cmd":"ls"}`})
-	if err != nil || call.Status != ToolRequested {
+	const signature = "opaque/gemini+signature=="
+	call, err := store.SaveToolCall(ctx, ToolCall{
+		SessionID: "s1", ID: "c1", MessageID: "a1", TurnID: "turn1", Ordinal: -1,
+		ToolName: "bash", Input: `{"cmd":"ls"}`, ThoughtSignature: signature,
+	})
+	if err != nil || call.Status != ToolRequested || call.ThoughtSignature != signature {
 		t.Fatalf("SaveToolCall() = %+v, %v", call, err)
 	}
 	mustNil(t, store.RecordToolApproval(ctx, "s1", "c1", ApprovalApproved, at))
@@ -197,7 +201,7 @@ func TestTurnRoundTripWithToolCallsAndRecovery(t *testing.T) {
 	}
 	a1 := history[1]
 	if len(a1.Parts) != 3 || a1.Parts[0].Text != "Let me look. " || a1.Parts[1].ToolCall == nil ||
-		a1.Parts[1].ToolCall.Result != "a.go\nb.go" || a1.Parts[2].Text != "Done." {
+		a1.Parts[1].ToolCall.Result != "a.go\nb.go" || a1.Parts[1].ToolCall.ThoughtSignature != signature || a1.Parts[2].Text != "Done." {
 		t.Fatalf("assistant history = %+v", a1)
 	}
 	a2 := history[2]
@@ -216,6 +220,55 @@ func TestTurnRoundTripWithToolCallsAndRecovery(t *testing.T) {
 	messages, _ := store.ListMessages(ctx, "s1")
 	if messages[1].Body != "Let me look. Done." {
 		t.Fatalf("legacy body = %q", messages[1].Body)
+	}
+}
+
+func TestThoughtSignaturesAndPartOrderSurviveStoreReopen(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "sessions.sqlite")
+	store, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+	consoleSession(t, store, "s1")
+	if _, err := store.BeginTurn(ctx, Turn{SessionID: "s1", ID: "turn1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveTurnMessage(ctx, TurnMessage{ID: "a1", SessionID: "s1", TurnID: "turn1", Role: "assistant"}); err != nil {
+		t.Fatal(err)
+	}
+	callOrdinal := int64(1)
+	const callSignature = "opaque-call-signature"
+	const textSignature = "opaque-text-signature"
+	if _, err := store.SaveToolCall(ctx, ToolCall{
+		SessionID: "s1", ID: "call1", MessageID: "a1", TurnID: "turn1", Ordinal: -1,
+		MessagePartOrdinal: &callOrdinal, ToolName: "read", Input: `{}`, ThoughtSignature: callSignature,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ReplaceMessageTextParts(ctx, "s1", "a1", []MessagePart{
+		{SessionID: "s1", MessageID: "a1", ID: "text0", Ordinal: 0, Kind: PartText, Text: "before", ThoughtSignature: textSignature, Status: PartComplete},
+		{SessionID: "s1", MessageID: "a1", ID: "text2", Ordinal: 2, Kind: PartText, Text: "after", Status: PartComplete},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err = Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	history, err := store.LoadHistory(ctx, "s1")
+	if err != nil || len(history) != 1 || len(history[0].Parts) != 3 {
+		t.Fatalf("LoadHistory() = %+v, %v", history, err)
+	}
+	parts := history[0].Parts
+	if parts[0].Ordinal != 0 || parts[0].Text != "before" || parts[0].ThoughtSignature != textSignature ||
+		parts[1].Ordinal != 1 || parts[1].ToolCall == nil || parts[1].ThoughtSignature != callSignature || parts[1].ToolCall.ThoughtSignature != callSignature ||
+		parts[2].Ordinal != 2 || parts[2].Text != "after" {
+		t.Fatalf("reopened parts = %+v", parts)
 	}
 }
 

@@ -4,7 +4,7 @@
 |---|---|
 | Repository | `github.com/chinmay-sawant/own-code` |
 | Issue | [#9 Native AI coding & agentic workbench](https://github.com/chinmay-sawant/own-code/issues/9) |
-| Status | In progress. Direct Console key settings, model catalog loading/selection, private key storage, and local SQLite session creation/transcript reads are implemented. Direct inference, streaming, local agent execution, session restoration, review, and end-to-end validation remain open. |
+| Status | Implementation and focused tests cover direct inference, streaming, local agent execution, SQLite session restoration, proposal review, and pending proposal persistence. Live Console/UI acceptance and the full repository build/test/race/vet/lint gate remain open. |
 | Scope | Direct OpenCode Console API integration, with own-code owning local sessions, tool execution, permissions, context, and review. |
 
 This plan lives under `plans/v0.0.1` and is separate from the historical v0.0.1 release checklist. The OpenCode integration uses the hosted Console API directly. It does not start or attach to `opencode serve`, and it does not depend on remote OpenCode Server sessions or events.
@@ -50,13 +50,13 @@ Use each linked file as the checklist for that slice. Keep checkboxes open until
 
 ## Remaining work (final audit)
 
-Genuine feature gaps:
-- Anthropic Messages and Gemini `generateContent` adapters are implemented in `internal/agent` (01 rows 10-11 ticked). Not live-verified: Gemini catalog `base_url` shape and `alt=sse`; thoughtSignature is not round-tripped.
-- 06: delete and rename are done as whole-file units (`delete_file`, `move_file`; no per-hunk review). Still open: persisting proposals across restarts and the read-only worktree snapshot still rejects renames.
-- 03: malformed-frame coverage exists for the chat-completions stream (`TestMalformedEvent`) but is not asserted per protocol for Responses.
+Live and repository validation still open:
+- Anthropic Messages and Gemini `generateContent` adapters are implemented in `internal/agent` (01 rows 10-11 ticked). The public model list confirms Gemini's `base_url` is the `.../google/v1beta` root, and the official inference docs show Bearer auth for Anthropic Messages. The authenticated workspace catalog and live inference remain unverified. `alt=sse` has fixture coverage but no live stream run.
+- 06: delete and rename are handled as whole-file units (`delete_file`, `move_file`; no per-hunk review), and proposal/hunk state restores from private per-session files with focused tests. A real model has not used either tool in a live run.
 
 Manual or live checks (no code gap expected):
 - 03: dock layout at minimum window size, visual check (pure geometry is covered by `TestDockMinimumWindowGeometry`).
-- 07: terminal focus/keyboard/resize/scroll with the dock open; clicking a real `file:line` link.
-- 08: the end-to-end acceptance rows (fresh setup with a real `oc_sk_` key, catalog fetch, a real streamed turn, cancel/disconnect, inline edit accept/reject/undo, multi-file hunk review, restart restore, pre-turn user changes survive).
-- 08 and 09: full serial test, vet and lint gate on a host that tolerates whole-package runs; 09 live Console turn with approve/deny/stop/restore/interrupted-tool cases; 09 final cross-checklist update once those pass.
+- 07: terminal focus/keyboard/resize/scroll with the dock open; clicking a real `file:line` link; verify the `Ctrl+Shift+L` chord, dropdowns, and diff-hunk styling in a live window.
+- 08: end-to-end acceptance with a real `oc_sk_` key, live streamed turn, approve/deny/stop, interrupted-tool restore, inline edit accept/reject/undo, multi-file hunk review, live delete/rename tool use, pending review restart restore, and pre-turn user changes surviving.
+- 01: confirm the Gemini `base_url` shape in the authenticated workspace catalog and verify a live request; confirm the Anthropic Messages route accepts the current Bearer auth path.
+- 08 and 09: full build, serial test, race, vet, and lint gate on a host that tolerates whole-package runs; 09 live Console turn with approve/deny/stop/restore/interrupted-tool cases; 09 final cross-checklist update once those pass.

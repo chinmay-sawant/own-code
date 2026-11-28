@@ -20,13 +20,19 @@ func BuildMessages(history []agentstore.HistoryMessage, overrides map[string]str
 	for _, h := range history {
 		var text strings.Builder
 		var calls []agentstore.ToolCall
+		var contentParts []ContentPart
 		for _, p := range h.Parts {
 			switch p.Kind {
 			case agentstore.PartText:
 				text.WriteString(p.Text)
+				contentParts = append(contentParts, ContentPart{Text: p.Text, ThoughtSignature: p.ThoughtSignature})
 			case agentstore.PartToolCall:
 				if p.ToolCall != nil {
 					calls = append(calls, *p.ToolCall)
+					contentParts = append(contentParts, ContentPart{
+						IsToolCall: true, ToolCallIndex: len(calls) - 1,
+						ThoughtSignature: p.ToolCall.ThoughtSignature,
+					})
 				}
 			}
 		}
@@ -39,13 +45,15 @@ func BuildMessages(history []agentstore.HistoryMessage, overrides map[string]str
 			if text.Len() == 0 && len(calls) == 0 {
 				continue
 			}
-			msg := Message{Role: RoleAssistant, Content: text.String()}
+			msg := Message{Role: RoleAssistant, Content: text.String(), ContentParts: contentParts}
 			for _, c := range calls {
 				args := json.RawMessage(c.Input)
 				if !json.Valid(args) {
 					args = json.RawMessage("{}")
 				}
-				msg.ToolCalls = append(msg.ToolCalls, ToolCall{ID: c.ID, Name: c.ToolName, Arguments: args})
+				msg.ToolCalls = append(msg.ToolCalls, ToolCall{
+					ID: c.ID, Name: c.ToolName, Arguments: args, ThoughtSignature: c.ThoughtSignature,
+				})
 			}
 			out = append(out, msg)
 			for _, c := range calls {

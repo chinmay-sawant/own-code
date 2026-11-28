@@ -17,7 +17,7 @@ func gemEv(data string) string { return "data: " + data + "\r\n\r\n" }
 
 func TestGeminiResolveAndEndpoint(t *testing.T) {
 	m := opencode.ConsoleModel{ProviderID: "google", ID: "gem-x", Type: "chat", ToolsKnown: true, ToolsSupported: true,
-		APIs: map[string]opencode.ConsoleModelAPI{"generate-content": {BaseURL: "https://opencode.ai/inference/google/v1beta/"}}}
+		APIs: map[string]opencode.ConsoleModelAPI{"generate-content": {BaseURL: "https://opencode.ai/inference/google/v1beta"}}}
 	tg, err := ResolveModel(m)
 	if err != nil || tg.Protocol != ProtocolGenerateContent {
 		t.Fatalf("%+v %v", tg, err)
@@ -30,6 +30,10 @@ func TestGeminiResolveAndEndpoint(t *testing.T) {
 	}
 	tg.BaseURL = "https://opencode.ai/inference/google/v1beta/models/gem-x:generateContent"
 	if u, _ := tg.endpointFor(true); strings.Count(u, "/models/") != 1 || !strings.Contains(u, "gem-x:streamGenerateContent") {
+		t.Fatal(u)
+	}
+	tg.BaseURL = "https://opencode.ai/inference/google/v1beta/models/gem-x"
+	if u, _ := tg.endpoint(); u != "https://opencode.ai/inference/google/v1beta/models/gem-x:generateContent" {
 		t.Fatal(u)
 	}
 	tg.ModelID, tg.BaseURL = "a/b", "https://x.example/v1beta"
@@ -91,6 +95,46 @@ func TestGeminiCompleteHeadersAndHistory(t *testing.T) {
 	req.Messages = []Message{{Role: RoleUser, Content: "x"}, {Role: RoleTool, ToolCallID: "zz", Content: "r"}}
 	if _, err := client(t, Options{}).Complete(context.Background(), req); err == nil {
 		t.Fatal("orphan tool result accepted")
+	}
+}
+
+func TestGeminiThoughtSignatureRoundTripsOnFunctionCallPart(t *testing.T) {
+	const signature = "opaque/gemini+signature=="
+	response := []byte(`{"candidates":[{"content":{"parts":[{"functionCall":{"id":"call-1","name":"read","args":{"path":"a"}},"thoughtSignature":"` + signature + `"},{"text":"after call"},{"functionCall":{"id":"call-2","name":"list","args":{}}}]},"finishReason":"STOP"}]}`)
+	decoded, err := (geminiAdapter{}).decode(response)
+	if err != nil || len(decoded.ToolCalls) != 2 || decoded.ToolCalls[0].ThoughtSignature != signature || decoded.ToolCalls[1].ThoughtSignature != "" ||
+		len(decoded.ContentParts) != 3 || !decoded.ContentParts[0].IsToolCall || decoded.ContentParts[1].Text != "after call" || !decoded.ContentParts[2].IsToolCall {
+		t.Fatalf("decode = %+v, %v", decoded, err)
+	}
+
+	encoded, err := (geminiAdapter{}).encode(Request{Messages: []Message{
+		{Role: RoleAssistant, ToolCalls: decoded.ToolCalls, ContentParts: decoded.ContentParts},
+		{Role: RoleTool, ToolCallID: "call-1", Content: "read result"},
+		{Role: RoleTool, ToolCallID: "call-2", Content: "list result"},
+	}}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body struct {
+		Contents []struct {
+			Role  string `json:"role"`
+			Parts []struct {
+				Text         string `json:"text"`
+				FunctionCall *struct {
+					Name string `json:"name"`
+				} `json:"functionCall"`
+				ThoughtSignature string `json:"thoughtSignature"`
+			} `json:"parts"`
+		} `json:"contents"`
+	}
+	if err := json.Unmarshal(encoded, &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Contents) != 2 || body.Contents[0].Role != "model" || len(body.Contents[0].Parts) != 3 ||
+		body.Contents[0].Parts[0].FunctionCall.Name != "read" || body.Contents[0].Parts[0].ThoughtSignature != signature ||
+		body.Contents[0].Parts[1].FunctionCall != nil || body.Contents[0].Parts[1].Text != "after call" || body.Contents[0].Parts[1].ThoughtSignature != "" ||
+		body.Contents[0].Parts[2].FunctionCall.Name != "list" || body.Contents[0].Parts[2].ThoughtSignature != "" {
+		t.Fatalf("encoded parts = %+v", body.Contents)
 	}
 }
 

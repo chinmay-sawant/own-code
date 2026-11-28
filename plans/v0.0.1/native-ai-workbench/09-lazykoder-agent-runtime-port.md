@@ -1,7 +1,7 @@
 # Native AI workbench: adapt LazyCoder's agent runtime
 
 > **Parent:** `plans/v0.0.1/native-ai-workbench/README.md`
-> **Status:** Implementation in progress. No runtime phase gate has passed yet.
+> **Status:** Runtime implementation and focused tests are in place. Live native-window acceptance and the full repository build/test/race/vet/lint gate remain open.
 > **Source baseline:** LazyCoder `master` at `816e2113a54f659f779f2c8592b266011829492c`, clean and equal to `origin/master` when reviewed.
 > **Estimated effort:** Re-estimate after Phase 1 fixes the package contracts and initial tool set.
 
@@ -15,10 +15,10 @@ LazyCoder's database is project-local at `.lazykoder/lazykoder.db` and stores no
 
 ## Current implementation
 
-- `internal/opencode/console.go` loads the Console model catalog and retains model protocol metadata. It does not send inference requests.
+- `internal/opencode/console.go` loads the Console model catalog; `internal/agent` sends direct Chat Completions, Responses, Anthropic Messages, and Gemini `generate-content` requests.
 - `internal/secretstore/opencode_api_key.go` stores the Console key outside settings and SQLite.
-- `internal/agentstore` owns the per-user SQLite file, migrations, local sessions, transcript messages, tool activity, and checkpoints.
-- `internal/app/opencode_panel.go` lists and creates local sessions and reads their local transcript. Prompt submission remains paused.
+- `internal/agentstore` owns the per-user SQLite file, migrations, local sessions, ordered transcript parts, tool calls, approvals, thought signatures, and recovery.
+- `internal/app/opencode_panel.go` connects the OwnFrame panel to local sessions, inference, tool approvals, proposal review, and restore. Proposal bytes and review state persist in private per-session directories.
 - The native panel uses OwnFrame. LazyCoder's Bubble Tea UI is not part of this port.
 
 ## LazyCoder source map
@@ -36,12 +36,12 @@ LazyCoder is MIT licensed. Preserve its copyright and license notice in files th
 
 ## Phase 1: Set the port boundaries
 
-- [x] Set the first model scope to chat models that advertise tool support and use `chat-completions` or `responses`. Hide models with other API families until own-code has a tested adapter. Use the catalog's `api` key and `base_url`; reject missing or unknown metadata at both selection and request time. Never route by model name. Evidence: `agent.ResolveModel`/`Eligible`/`FilterEligible` (chat + tool support + chat-completions/responses + base_url) and `ModelTarget.Validate` per request; `TestResolveModel`, `TestFilterEligible`.
+- [x] Start with chat models that advertise tool support, then expand eligibility as adapters pass protocol tests. Use the catalog's `api` key and `base_url`; reject missing or unknown metadata at selection and request time. Never route by model name. Current tested families are `chat-completions`, `responses`, `messages`, and `generate-content`. Evidence: `agent.ResolveModel`/`Eligible`/`FilterEligible`, `ModelTarget.Validate`, and protocol adapter tests.
 - [x] Define provider-neutral request, event, cancellation, and result types under `internal/agent`. Keep them independent of `internal/app` and OwnFrame. Put protocol-specific encoding and decoding behind provider adapters.
 - [x] Keep `internal/agentstore` as the only runtime database. Map LazyCoder's session/message/part/tool-call records to own-code's schema. Store provider and model IDs in separate fields; do not pack them into the current `Model` value. Evidence: `Session.ProviderID`/`ModelID` columns in `internal/agentstore`; `TestMigrationFromV3PreservesLegacyTranscript` creates a Console session with separate IDs.
 - [x] Establish one runtime owner for the user's agent store. Acquire an OS-backed profile lock before startup recovery. If another app process owns the profile, do not alter its active turns.
 - [x] Define one run context per local session. Scope cancellation and event routing by local session ID and turn ID. Replace the app's current process-wide OpenCode operation token before allowing runs in different sessions to overlap.
-- [x] Choose the first tool set. Start with workspace-scoped read and search. Write and edit tools may change only the session worktree and must produce proposals for a native accept/reject review path. The current proposal snapshot is read-only, so build that bridge before claiming edits can be accepted. Require approval for each shell command, show its full command and worktree directory, and state that the process has the app user's filesystem and network access. A worktree directory does not sandbox shell commands. Evidence: `agenttools.DefaultPolicy`, `run_shell` summary shows command, directory, and host-user authority, write/edit stage proposals only (`propose_test.go`), accept/reject bridge in `internal/agentbridge`.
+- [x] Choose workspace-scoped read and search, proposal-only write/edit/delete/move tools, and approval-gated shell execution. File mutations stage proposals for native review; only Accept can apply them to the checkout. Require approval for each shell command, show its full command and worktree directory, and state that the process has the app user's filesystem and network access. A worktree directory does not sandbox shell commands. Evidence: `agenttools.DefaultPolicy`, proposal tests in `internal/agenttools`, and the app accept/reject bridge.
 - [x] Record every copied source file and any substantive edits. Preserve the MIT notice where required. Evidence: `internal/agent/PORTING.md` (no files copied, pattern reference only, so no MIT notice needed).
 
 **Gate:** A package map names the source and destination for every adapted component. The plan names the supported API families, provider/runtime boundary, session concurrency contract, tool policy, and schema changes before implementation begins.
@@ -59,7 +59,7 @@ LazyCoder is MIT licensed. Preserve its copyright and license notice in files th
 
 ## Phase 3: Add direct inference, streaming, and cancellation
 
-- [x] Implement `chat-completions` and `responses` requests from the selected model's advertised protocol and `base_url`. Handle unsupported or missing protocols with a clear error and reject models that do not advertise tool support.
+- [x] Implement requests from the selected model's advertised protocol and `base_url` for all four supported families. Handle unsupported or missing protocols with a clear error and reject models that do not advertise tool support. Gemini function-call signatures and original part order survive SQLite history and restart (`TestThoughtSignaturesAndPartOrderSurviveStoreReopen`).
 - [x] Parse complete and streamed responses with bounded bodies, frame sizes, timeouts, and error messages. Keep the bearer key out of logs and user-visible errors. Apply documented Console eligibility rules and explain access failures such as HTTP 403; catalog membership alone does not guarantee inference access.
 - [x] Send a stable opaque local session ID in `x-opencode-session` on every inference request. Use it only for Console routing and prompt-cache consistency; it does not create or retrieve an OpenCode Server session or transcript.
 - [x] Pass a turn context through the Console request and stream reader. The Stop action cancels the request, closes the response stream, and prevents late deltas from updating another session. Evidence: `TestCancelStopsDeltas`, `TestCancelDuringStreamInterruptsTurn`.
@@ -83,7 +83,7 @@ LazyCoder is MIT licensed. Preserve its copyright and license notice in files th
 - [x] Port and adapt LazyCoder's bounded step loop into `internal/agent`. Each step rebuilds history from SQLite, requests a model response, validates complete tool calls, obtains the Phase 4 permission decision, persists results, then continues until the model returns a final answer or the step limit is reached.
 - [x] Define a narrow tool interface and registry under `internal/agenttools` or another package chosen in Phase 1. Reject unknown tools and invalid or oversized arguments before execution. Never execute truncated arguments.
 - [x] Keep file reads and searches inside the session worktree. Reject absolute paths and traversal. Resolve symlinks and recheck containment against the session's captured worktree root immediately before execution.
-- [x] Write and edit only in the session worktree. The current proposal snapshot is read-only; build an explicit accept/reject bridge into the native diff review. Revalidate the worktree, target paths, symlinks, baseline, and dirty editor buffers before applying an accepted change. Never write directly into the user's checked-out files or overwrite dirty buffers before review.
+- [x] Keep write, edit, delete, and move calls proposal-only until explicit review. Revalidate the worktree, target paths, symlinks, baseline, dirty buffers, and staged Git state before applying an accepted change. Never write directly into the user's checked-out files or overwrite dirty buffers before review.
 - [x] Run shell commands in the session worktree with `exec.CommandContext` or the platform equivalent. Require approval for every command and show the exact command, working directory, and host-user authority before it runs. A worktree working directory does not restrict filesystem or network access. Apply a time limit, bound stdout and stderr, capture exit status and duration, and stop the process tree when the turn is canceled. Persist a truncation marker when displayed or stored output exceeds its limit. Evidence: `TestShellOutputExitAndTruncation`, `TestShellCancelKillsProcessTree`, `TestShellTimeout`.
 - [x] Persist a durable dispatch claim before a tool starts. Record approved, denied, running, succeeded, failed, interrupted, or unknown status. If the app stops after dispatch may have begun, require inspection and fresh approval; never automatically retry that call. Do not claim exact-once side effects across crashes. Evidence: `BeginToolDispatch`/`ErrAlreadyDispatched`, `RecoverInterrupted`; `TestRecoveryNeverRedispatches`, `TestTurnRoundTripWithToolCallsAndRecovery`.
 - [x] Keep model-side capabilities separate from local authorization. A model response can request a tool but cannot approve its own request.

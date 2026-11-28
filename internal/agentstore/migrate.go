@@ -7,7 +7,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 5
+const schemaVersion = 6
 
 // The database file is capped at maxDatabasePages pages. With SQLite's default
 // 4 KiB page that is MaxDatabaseBytes (256 MiB); writes past the cap fail with
@@ -89,6 +89,14 @@ func migrate(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 		if err := recordMigration(ctx, tx, 5); err != nil {
+			return err
+		}
+	}
+	if current < 6 {
+		if err := applySchemaV6(ctx, tx); err != nil {
+			return err
+		}
+		if err := recordMigration(ctx, tx, 6); err != nil {
 			return err
 		}
 	}
@@ -301,4 +309,16 @@ func applySchemaV5(ctx context.Context, tx *sql.Tx) error {
 		return errors.New("agent store: schema v5 migration left dangling foreign keys")
 	}
 	return rows.Err()
+}
+
+// applySchemaV6 stores opaque Gemini thought signatures and ordered text-part
+// metadata so restored conversations can reproduce signed parts in place.
+func applySchemaV6(ctx context.Context, tx *sql.Tx) error {
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE agent_tool_calls ADD COLUMN thought_signature TEXT NOT NULL DEFAULT ''`); err != nil {
+		return fmt.Errorf("agent store: apply schema v6: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE message_parts ADD COLUMN thought_signature TEXT NOT NULL DEFAULT ''`); err != nil {
+		return fmt.Errorf("agent store: apply schema v6: %w", err)
+	}
+	return nil
 }

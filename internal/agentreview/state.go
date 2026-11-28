@@ -69,6 +69,71 @@ func (r *Registry) PutWhole(session, path string, kind Kind, renamedFrom string)
 	return fr, nil
 }
 
+// RestoreStates replaces the states of a review after verifying that they
+// describe the current hunk set. It is intended for restoring persisted local
+// review state; it never applies or reverts file contents.
+func (r *Registry) RestoreStates(session, path string, states map[string]State) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	fr := r.files[session][path]
+	if fr == nil || fr.Kind.Whole() {
+		return fmt.Errorf("agentreview: no hunk review for %s", path)
+	}
+	if len(states) != len(fr.Hunks) {
+		return fmt.Errorf("agentreview: persisted hunk set does not match %s", path)
+	}
+	restored := make([]State, len(fr.Hunks))
+	for i, h := range fr.Hunks {
+		state, ok := states[h.ID]
+		if !ok || state < Pending || state > Rejected {
+			return fmt.Errorf("agentreview: invalid persisted state for hunk %s", h.ID)
+		}
+		restored[i] = state
+	}
+	copy(fr.States, restored)
+	return nil
+}
+
+// RestoreSession installs reviews that were reconstructed and validated by a
+// background loader. It clones the prepared state and replaces the session in
+// one operation; it does not read files or compute diffs.
+func (r *Registry) RestoreSession(session string, reviews []*FileReview) error {
+	if session == "" {
+		return fmt.Errorf("agentreview: empty session")
+	}
+	prepared := make(map[string]*FileReview, len(reviews))
+	for _, review := range reviews {
+		if review == nil || review.Session != session || review.Path == "" {
+			return fmt.Errorf("agentreview: invalid restored review")
+		}
+		if _, exists := prepared[review.Path]; exists {
+			return fmt.Errorf("agentreview: duplicate restored path %s", review.Path)
+		}
+		if review.Kind.Whole() {
+			if len(review.Hunks) != 0 || len(review.States) != 0 || (review.Kind != Delete && review.Kind != Rename) {
+				return fmt.Errorf("agentreview: invalid whole-file review for %s", review.Path)
+			}
+		} else {
+			if len(review.States) != len(review.Hunks) {
+				return fmt.Errorf("agentreview: invalid restored hunk states for %s", review.Path)
+			}
+			for _, state := range review.States {
+				if state < Pending || state > Rejected {
+					return fmt.Errorf("agentreview: invalid restored hunk state for %s", review.Path)
+				}
+			}
+		}
+		copyReview := *review
+		copyReview.Hunks = append([]Hunk(nil), review.Hunks...)
+		copyReview.States = append([]State(nil), review.States...)
+		prepared[review.Path] = &copyReview
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.files[session] = prepared
+	return nil
+}
+
 // ResolveWhole marks a whole-file unit Accepted or Rejected while it is
 // pending. It never touches any file.
 func (r *Registry) ResolveWhole(session, path string, st State) error {

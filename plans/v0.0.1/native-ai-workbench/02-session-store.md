@@ -94,7 +94,7 @@ CREATE TABLE tool_activity (
 
 ## Phase 2: Persist local session state
 
-- [x] Create an own-code session ID and insert the session before sending its first inference request. The panel can create a local session before the not-yet-implemented inference step.
+- [x] Create an own-code session ID and insert the session before sending its first inference request. The panel validates the selected model and key, then writes the local session and prompt before starting the provider request.
 - [x] Save user and assistant messages in display order. Save tool calls/results only after own-code validates the call and applies the permission decision. Evidence: `TestApprovedExecutionPersistsApprovalBeforeDispatch`, `TestDenialPersistedAndNotRun`.
 - [x] Persist enough run state to distinguish queued, active, completed, failed, and interrupted turns after restart. Do not treat a process-local stream position as a durable remote checkpoint. Evidence: `RecoverInterrupted`; `TestTurnRoundTripWithToolCallsAndRecovery`.
 - [x] Make session creation and initial user-message insertion idempotent so retries do not duplicate a prompt. Evidence: `TestIdempotentRetriesDoNotDuplicate`.

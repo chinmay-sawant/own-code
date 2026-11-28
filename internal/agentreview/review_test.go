@@ -182,6 +182,27 @@ func TestReviewStateTransitions(t *testing.T) {
 	}
 }
 
+func TestRestoreStatesRequiresExactHunkIDsAndIsAtomic(t *testing.T) {
+	base := lines("a", "b", "c", "d", "e", "f", "g", "h", "i")
+	proposed := lines("A", "b", "c", "d", "e", "f", "g", "h", "I")
+	r := NewRegistry()
+	fr := r.Put("s", "x", base, proposed)
+	states := map[string]State{fr.Hunks[0].ID: Accepted, "unknown": Rejected}
+	if err := r.RestoreStates("s", "x", states); err == nil {
+		t.Fatal("RestoreStates accepted an unknown hunk ID")
+	}
+	if got := r.Get("s", "x").States; got[0] != Pending || got[1] != Pending {
+		t.Fatalf("failed restore partially changed state: %v", got)
+	}
+	valid := map[string]State{fr.Hunks[0].ID: Accepted, fr.Hunks[1].ID: Rejected}
+	if err := r.RestoreStates("s", "x", valid); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Get("s", "x").States; got[0] != Accepted || got[1] != Rejected {
+		t.Fatalf("restored states = %v", got)
+	}
+}
+
 func TestReviewUnifiedOmitsDecidedHunks(t *testing.T) {
 	base := lines("a", "b", "c", "d", "e", "f", "g", "h", "i")
 	r := NewRegistry()
